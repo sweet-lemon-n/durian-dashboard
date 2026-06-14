@@ -183,6 +183,11 @@ app.get('/admin', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'admin.html'));
 });
 
+// /login 路由 → login.html
+app.get('/login', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'login.html'));
+});
+
 // CORS（如果前端部署在不同端口）
 app.use((req, res, next) => {
   res.header('Access-Control-Allow-Origin', '*');
