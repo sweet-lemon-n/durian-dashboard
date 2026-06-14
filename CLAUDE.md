@@ -6,7 +6,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 榴莲运输温度监控看板 — A data management dashboard for durian fruit shipping. The backend reads/writes data via WeChat Work (企业微信) Smart Sheet API, serving two frontends: a real-time monitoring dashboard and an admin panel.
 
-**Tech stack:** Node.js + Express (backend), vanilla HTML/CSS/JS (frontend), deployed on Tencent Cloud Ubuntu Lighthouse server.
+**Tech stack:** Node.js + Express (backend), vanilla HTML/CSS/JS (frontend), SQLite (auth DB), deployed on Tencent Cloud Ubuntu Lighthouse server.
+
+**Auth system:** JWT-based login with httpOnly cookies. `lib/db.js` (SQLite via better-sqlite3) and `lib/auth.js` (JWT + middleware). Two roles: `admin` (full access) and `viewer` (dashboard only). All `/api/*` routes require authentication; write/manage routes additionally require `admin` role. Login page at `/login`.
 
 The smart sheet document (`DOCID` in `.env`) contains three sheets:
 - **订单主表** (exh5Ik) — order master data
@@ -20,6 +22,11 @@ The smart sheet document (`DOCID` in `.env`) contains three sheets:
 npm install                    # install dependencies
 node server.js                 # start server (http://localhost:3000)
 
+# First-time auth setup (after initial deploy):
+node scripts/init-db.js        # create admin account interactively
+# Then in .env, replace JWT_SECRET with:
+# node -e "console.log(require('crypto').randomBytes(64).toString('hex'))"
+
 # Deploy (git-based)
 ./deploy.sh "commit message"   # git add/commit/push to GitHub
 
@@ -32,8 +39,21 @@ pm2 status                     # check service status
 pm2 restart durian-dashboard   # restart
 pm2 logs durian-dashboard      # view logs
 
-# Quick API test (from any machine)
+# Quick API test (from any machine — requires auth now)
 curl -s http://124.221.92.98:3000/api/dashboard?hours=168 | python3 -m json.tool
+```
+
+### First-time server setup (auth)
+
+After initial clone, run once on the server:
+```bash
+# better-sqlite3 needs build tools
+sudo apt install build-essential python3
+npm install
+# Generate a random JWT secret and add it to .env
+echo "JWT_SECRET=$(node -e "console.log(require('crypto').randomBytes(64).toString('hex'))")" >> .env
+# Create the first admin user
+node scripts/init-db.js
 ```
 
 ## Server info
@@ -63,14 +83,18 @@ WeChat Work Smart Sheet API
 ├── deploy.sh              # git add/commit/push helper
 ├── lib/
 │   ├── wecom.js           # WeChat Work API wrapper (token, CRUD, views, groups)
-│   └── crypto.js          # Callback crypto (SHA1 verify, AES-256-CBC encrypt/decrypt)
+│   ├── crypto.js          # Callback crypto (SHA1 verify, AES-256-CBC encrypt/decrypt)
+│   ├── db.js              # SQLite database (users table, user CRUD functions)
+│   └── auth.js            # JWT auth (generate/verify token, requireAuth/requireRole middleware)
 ├── public/                # Frontend static files
 │   ├── index.html         # Dashboard (gantt heatmap, stats, alerts, data table)
 │   ├── admin.html         # Admin panel (record CRUD, field mgmt, JSON/table toggle)
-│   ├── app.js             # Dashboard logic (gantt heatmap, auto-polling, settings)
-│   └── style.css          # Dark-theme styles
-├── data/                  # Data files (backup, not runtime)
-├── scripts/               # Utility scripts
+│   ├── login.html         # Login page (dark theme, remember-me, JWT cookie auth)
+│   ├── app.js             # Dashboard logic (gantt heatmap, auto-polling, settings, auth)
+│   └── style.css          # Dark-theme styles (dashboard + login page)
+├── data/                  # Data files (auth.db SQLite database + backups)
+├── scripts/
+│   └── init-db.js         # Interactive first-time admin user creation
 └── docs/                  # Documentation
 ```
 
@@ -117,7 +141,12 @@ Transparent retry on token expiry (errcode 40014/42001). All API calls require t
 
 **`crypto.js`** — WeChat Work callback crypto: SHA1 signature verification, AES-256-CBC encrypt/decrypt with PKCS7 padding.
 
+**`db.js`** — SQLite database layer (better-sqlite3, synchronous API). Creates/opens `data/auth.db`, maintains `users` and `audit_logs` tables. Exports: `initDatabase`, `getDb`, `getUserByUsername`, `getUserById`, `createUser` (async — bcrypt hashing), `updateUser`, `listUsers`, `incrementTokenVersion`, `countUsers`. Role CHECK constraint: `admin` or `viewer`.
+
+**`auth.js`** — JWT authentication and Express middleware. Uses `jsonwebtoken` (HS256) and httpOnly cookies (`cookie-parser`). Exports: `generateToken` (7d remember-me / 24h default), `verifyToken`, `setAuthCookie`/`clearAuthCookie`, `requireAuth` (validates JWT + checks `token_version` for forced logout), `requireRole(...roles)` (factory middleware). JWT payload: `{ userId, username, role, tokenVersion }`.
+
 ### Frontend (`public/`)
+- **`login.html`** — Dark-theme login page, checks `/api/auth/me` on load (auto-redirect if already logged in), submit to `POST /api/auth/login`, supports `?redirect=` param for post-login navigation. "记住登录状态（7天）" checkbox maps to JWT 7d expiry.
 
 - **`index.html` + `style.css`** — Dark-theme dashboard with stats cards, alert banner, gantt heatmap (container × date grid, color-coded from blue/cold to red/hot), and records data table (12 columns). Settings panel, auto-refresh polling. Cache-busted with `?v=` query param.
 - **`admin.html`** — Full admin panel: system status, one-click smart sheet creation, table structure viewer, dashboard data viewer (both with JSON/table toggle), record CRUD (modal with all 11 fields, table view for any sheet), field/view/group management, document rename/delete.

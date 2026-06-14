@@ -34,6 +34,29 @@ function saveSetting(key, value) {
   localStorage.setItem(`dashboard_${key}`, JSON.stringify(value));
 }
 
+// === 认证工具 ===
+
+/**
+ * 带认证的 fetch 包装
+ * 401 → 跳转登录页
+ * 403 → 提示权限不足
+ */
+async function apiFetch(url, options = {}) {
+  const resp = await fetch(url, options);
+
+  if (resp.status === 401) {
+    window.location.href = '/login?redirect=' + encodeURIComponent(window.location.pathname);
+    throw new Error('Unauthorized');
+  }
+
+  if (resp.status === 403) {
+    alert('权限不足');
+    throw new Error('Forbidden');
+  }
+
+  return resp;
+}
+
 // === 状态 ===
 let refreshTimer = null;
 let allRecords = [];
@@ -46,6 +69,8 @@ const dom = {
   lastUpdate: $('#lastUpdate'),
   btnRefresh: $('#btnRefresh'),
   btnSettings: $('#btnSettings'),
+  btnLogout: $('#btnLogout'),
+  userInfo: $('#userInfo'),
   statContainers: $('#statContainers'),
   statTotal: $('#statTotal'),
   statAvgTemp: $('#statAvgTemp'),
@@ -78,7 +103,7 @@ async function fetchDashboard() {
   if (container) url += `&container=${encodeURIComponent(container)}`;
 
   try {
-    const resp = await fetch(url);
+    const resp = await apiFetch(url);
     const json = await resp.json();
 
     if (!json.success) {
@@ -397,6 +422,7 @@ if (dom.containerFilter) dom.containerFilter.addEventListener('change', () => fe
 dom.tempTypeFilter.addEventListener('change', () => updateGantt(allRecords));
 dom.btnSettings.addEventListener('click', openSettings);
 dom.btnSettingsClose.addEventListener('click', closeSettings);
+if (dom.btnLogout) dom.btnLogout.addEventListener('click', logout);
 dom.settingsOverlay.addEventListener('click', (e) => {
   if (e.target === dom.settingsOverlay) closeSettings();
 });
@@ -438,10 +464,38 @@ function escHtml(str) {
   return div.innerHTML;
 }
 
+// === 用户信息 ===
+
+async function loadUserInfo() {
+  try {
+    const resp = await apiFetch('/api/auth/me');
+    const json = await resp.json();
+    if (json.success && json.data) {
+      if (dom.userInfo) {
+        dom.userInfo.innerHTML = '👤 ' + escHtml(json.data.displayName || json.data.username);
+      }
+    }
+  } catch (_) {
+    // apiFetch 已处理 401 跳转
+  }
+}
+
+// === 退出登录 ===
+
+async function logout() {
+  try {
+    await apiFetch('/api/auth/logout', { method: 'POST' });
+  } catch (_) {
+    // 忽略错误，无论如何都跳转
+  }
+  window.location.href = '/login';
+}
+
 // === 启动 ===
 
 async function init() {
   console.log('[app] 榴莲温度看板启动');
+  await loadUserInfo();
   await fetchDashboard();
   startRefreshTimer();
 }

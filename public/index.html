@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>🍈 榴莲运输温度监控看板</title>
-  <link rel="stylesheet" href="style.css?v=4">
+  <link rel="stylesheet" href="style.css?v=5">
 </head>
 <body>
   <div class="app">
@@ -14,10 +14,12 @@
         <h1>🍈 榴莲运输温度监控看板</h1>
         <span class="header-badge">LIVE</span>
       </div>
+      <div class="header-center" id="userInfo"></div>
       <div class="header-right">
         <span class="last-update" id="lastUpdate">--</span>
         <button class="btn-refresh" id="btnRefresh" title="手动刷新">⟳ 刷新</button>
         <button class="btn-settings" id="btnSettings">⚙</button>
+        <button class="btn-logout" id="btnLogout" title="退出登录">退出</button>
       </div>
     </header>
 
@@ -144,6 +146,6 @@
     </div>
   </div>
 
-  <script src="app.js?v=4"></script>
+  <script src="app.js?v=5"></script>
 </body>
 </html>

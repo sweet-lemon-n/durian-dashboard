@@ -8,12 +8,25 @@
 require('dotenv').config();
 const express = require('express');
 const path = require('path');
+const cookieParser = require('cookie-parser');
 const wecom = require('./lib/wecom');
 const wecomCrypto = require('./lib/crypto');
+const { initDatabase, getDb } = require('./lib/db');
+const {
+  generateToken,
+  setAuthCookie,
+  clearAuthCookie,
+  requireAuth,
+  requireRole,
+} = require('./lib/auth');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
 const DOCID = process.env.DOCID;
+
+// 初始化 SQLite 数据库
+const DB_PATH = path.join(__dirname, 'data', 'auth.db');
+initDatabase(DB_PATH);
 
 // ---- 缓存：表格结构（避免每次请求都查企微API） ----
 
@@ -162,6 +175,7 @@ function clearSchemaCache() {
 // ---- Express 中间件 ----
 
 app.use(express.json());
+app.use(cookieParser());
 app.use(express.static(path.join(__dirname, 'public')));
 
 // /admin 路由 → admin.html
@@ -218,6 +232,90 @@ app.post('/callback', (req, res) => {
   // 后续如需处理智能表格变更事件，可在此解析 XML + 解密
   console.log('[callback] 收到 POST 推送');
   res.send('success');
+});
+
+// ---- 认证路由（无需登录） ----
+
+/**
+ * POST /api/auth/login
+ * Body: { username, password, rememberMe? }
+ * 验证成功后设置 httpOnly JWT cookie
+ */
+app.post('/api/auth/login', async (req, res) => {
+  try {
+    const { username, password, rememberMe } = req.body || {};
+
+    if (!username || !password) {
+      return res.status(400).json({ success: false, error: '请输入用户名和密码' });
+    }
+
+    const db = getDb();
+    const user = db.prepare('SELECT * FROM users WHERE username = ?').get(username);
+
+    if (!user) {
+      return res.status(401).json({ success: false, error: '用户名或密码错误' });
+    }
+
+    if (!user.is_active) {
+      return res.status(401).json({ success: false, error: '账号已被禁用，请联系管理员' });
+    }
+
+    const bcrypt = require('bcryptjs');
+    const valid = await bcrypt.compare(password, user.password_hash);
+
+    if (!valid) {
+      return res.status(401).json({ success: false, error: '用户名或密码错误' });
+    }
+
+    const token = generateToken(user, !!rememberMe);
+    setAuthCookie(res, token, !!rememberMe);
+
+    console.log(`[auth/login] 用户「${user.username}」登录成功`);
+
+    res.json({
+      success: true,
+      data: {
+        username: user.username,
+        displayName: user.display_name,
+        role: user.role,
+      },
+    });
+  } catch (err) {
+    console.error('[auth/login] 错误:', err);
+    res.status(500).json({ success: false, error: '登录服务异常' });
+  }
+});
+
+/**
+ * POST /api/auth/logout
+ * 清除认证 cookie
+ */
+app.post('/api/auth/logout', (req, res) => {
+  clearAuthCookie(res);
+  res.json({ success: true, message: '已退出登录' });
+});
+
+// ---- 认证守卫（/api/* 除 /api/auth/* 外均需登录） ----
+
+app.use('/api', (req, res, next) => {
+  // 仅登录/登出不需要鉴权；/auth/me 需要走 requireAuth
+  if (req.path === '/auth/login' || req.path === '/auth/logout') return next();
+  requireAuth(req, res, next);
+});
+
+/**
+ * GET /api/auth/me
+ * 返回当前登录用户信息（依赖 requireAuth 中间件挂载的 req.user）
+ */
+app.get('/api/auth/me', (req, res) => {
+  res.json({
+    success: true,
+    data: {
+      username: req.user.username,
+      displayName: req.user.displayName,
+      role: req.user.role,
+    },
+  });
 });
 
 // ---- API 路由 ----
@@ -551,7 +649,7 @@ app.post('/api/schema/refresh', (req, res) => {
  * 当已有的智能表格不属于当前应用时，通过此接口创建新表格
  * 创建后自动更新 .env 文件中的 DOCID
  */
-app.post('/api/setup', async (req, res) => {
+app.post('/api/setup', requireRole('admin'), async (req, res) => {
   try {
     const docName = (req.body && req.body.docName) || '榴莲温度监控数据';
     const sheetTitle = (req.body && req.body.sheetTitle) || '温度记录';
@@ -631,7 +729,7 @@ app.post('/api/setup', async (req, res) => {
  * POST /api/doc/rename
  * Body: { docid?, newName }
  */
-app.post('/api/doc/rename', async (req, res) => {
+app.post('/api/doc/rename', requireRole('admin'), async (req, res) => {
   try {
     const { newName } = req.body || {};
     if (!newName) throw new Error('缺少 newName 参数');
@@ -647,7 +745,7 @@ app.post('/api/doc/rename', async (req, res) => {
  * POST /api/doc/delete
  * 删除当前文档（危险操作！）
  */
-app.post('/api/doc/delete', async (req, res) => {
+app.post('/api/doc/delete', requireRole('admin'), async (req, res) => {
   try {
     const result = await wecom.deleteDoc(DOCID);
     if (result.errcode !== 0) throw new Error(`[${result.errcode}] ${result.errmsg}`);
@@ -664,7 +762,7 @@ app.post('/api/doc/delete', async (req, res) => {
  * GET /api/doc/info
  * 获取当前文档基础信息
  */
-app.get('/api/doc/info', async (req, res) => {
+app.get('/api/doc/info', requireRole('admin'), async (req, res) => {
   try {
     const result = await wecom.getDocInfo(DOCID);
     if (result.errcode !== 0) throw new Error(`[${result.errcode}] ${result.errmsg}`);
@@ -680,7 +778,7 @@ app.get('/api/doc/info', async (req, res) => {
  * POST /api/smartsheet/sheet/delete
  * Body: { sheetId }
  */
-app.post('/api/smartsheet/sheet/delete', async (req, res) => {
+app.post('/api/smartsheet/sheet/delete', requireRole('admin'), async (req, res) => {
   try {
     const { sheetId } = req.body || {};
     if (!sheetId) throw new Error('缺少 sheetId 参数');
@@ -697,7 +795,7 @@ app.post('/api/smartsheet/sheet/delete', async (req, res) => {
  * POST /api/smartsheet/sheet/update
  * Body: { sheetId, title }
  */
-app.post('/api/smartsheet/sheet/update', async (req, res) => {
+app.post('/api/smartsheet/sheet/update', requireRole('admin'), async (req, res) => {
   try {
     const { sheetId, title } = req.body || {};
     if (!sheetId) throw new Error('缺少 sheetId 参数');
@@ -714,7 +812,7 @@ app.post('/api/smartsheet/sheet/update', async (req, res) => {
  * POST /api/smartsheet/sheet/add
  * Body: { title }
  */
-app.post('/api/smartsheet/sheet/add', async (req, res) => {
+app.post('/api/smartsheet/sheet/add', requireRole('admin'), async (req, res) => {
   try {
     const { title } = req.body || {};
     if (!title) throw new Error('缺少 title 参数');
@@ -774,7 +872,7 @@ app.get('/api/smartsheet/records', async (req, res) => {
  * POST /api/smartsheet/records/add
  * Body: { sheetId, records, keyType? }
  */
-app.post('/api/smartsheet/records/add', async (req, res) => {
+app.post('/api/smartsheet/records/add', requireRole('admin'), async (req, res) => {
   try {
     const { sheetId, records, keyType } = req.body || {};
     if (!sheetId) throw new Error('缺少 sheetId 参数');
@@ -791,7 +889,7 @@ app.post('/api/smartsheet/records/add', async (req, res) => {
  * POST /api/smartsheet/records/delete
  * Body: { sheetId, recordIds }
  */
-app.post('/api/smartsheet/records/delete', async (req, res) => {
+app.post('/api/smartsheet/records/delete', requireRole('admin'), async (req, res) => {
   try {
     const { sheetId, recordIds } = req.body || {};
     if (!sheetId) throw new Error('缺少 sheetId 参数');
@@ -808,7 +906,7 @@ app.post('/api/smartsheet/records/delete', async (req, res) => {
  * POST /api/smartsheet/records/update
  * Body: { sheetId, records, keyType? }
  */
-app.post('/api/smartsheet/records/update', async (req, res) => {
+app.post('/api/smartsheet/records/update', requireRole('admin'), async (req, res) => {
   try {
     const { sheetId, records, keyType } = req.body || {};
     if (!sheetId) throw new Error('缺少 sheetId 参数');
@@ -830,7 +928,7 @@ app.post('/api/smartsheet/records/update', async (req, res) => {
  * fields 数组按正常顺序传入即可，内部自动处理企微 API 的反序添加
  * 添加完成后自动删除默认的「智能表列」
  */
-app.post('/api/smartsheet/fields/add', async (req, res) => {
+app.post('/api/smartsheet/fields/add', requireRole('admin'), async (req, res) => {
   try {
     const { sheetId, fields } = req.body || {};
     if (!sheetId) throw new Error('缺少 sheetId 参数');
@@ -870,7 +968,7 @@ app.post('/api/smartsheet/fields/add', async (req, res) => {
  * POST /api/smartsheet/fields/delete
  * Body: { sheetId, fieldIds }
  */
-app.post('/api/smartsheet/fields/delete', async (req, res) => {
+app.post('/api/smartsheet/fields/delete', requireRole('admin'), async (req, res) => {
   try {
     const { sheetId, fieldIds } = req.body || {};
     if (!sheetId) throw new Error('缺少 sheetId 参数');
@@ -888,7 +986,7 @@ app.post('/api/smartsheet/fields/delete', async (req, res) => {
  * POST /api/smartsheet/fields/update
  * Body: { sheetId, fields }
  */
-app.post('/api/smartsheet/fields/update', async (req, res) => {
+app.post('/api/smartsheet/fields/update', requireRole('admin'), async (req, res) => {
   try {
     const { sheetId, fields } = req.body || {};
     if (!sheetId) throw new Error('缺少 sheetId 参数');
@@ -923,7 +1021,7 @@ app.get('/api/smartsheet/views', async (req, res) => {
  * POST /api/smartsheet/views/add
  * Body: { sheetId, viewTitle, viewType?, propertyGantt?, propertyCalendar? }
  */
-app.post('/api/smartsheet/views/add', async (req, res) => {
+app.post('/api/smartsheet/views/add', requireRole('admin'), async (req, res) => {
   try {
     const { sheetId, viewTitle, viewType, propertyGantt, propertyCalendar } = req.body || {};
     if (!sheetId || !viewTitle) throw new Error('缺少 sheetId 或 viewTitle 参数');
@@ -939,7 +1037,7 @@ app.post('/api/smartsheet/views/add', async (req, res) => {
  * POST /api/smartsheet/views/delete
  * Body: { sheetId, viewIds }
  */
-app.post('/api/smartsheet/views/delete', async (req, res) => {
+app.post('/api/smartsheet/views/delete', requireRole('admin'), async (req, res) => {
   try {
     const { sheetId, viewIds } = req.body || {};
     if (!sheetId || !viewIds) throw new Error('缺少 sheetId 或 viewIds 参数');
@@ -955,7 +1053,7 @@ app.post('/api/smartsheet/views/delete', async (req, res) => {
  * POST /api/smartsheet/views/update
  * Body: { sheetId, viewId, viewTitle?, property? }
  */
-app.post('/api/smartsheet/views/update', async (req, res) => {
+app.post('/api/smartsheet/views/update', requireRole('admin'), async (req, res) => {
   try {
     const { sheetId, viewId, viewTitle, property } = req.body || {};
     if (!sheetId || !viewId) throw new Error('缺少 sheetId 或 viewId 参数');
@@ -988,7 +1086,7 @@ app.get('/api/smartsheet/groups', async (req, res) => {
  * POST /api/smartsheet/groups/add
  * Body: { sheetId, name, children? }
  */
-app.post('/api/smartsheet/groups/add', async (req, res) => {
+app.post('/api/smartsheet/groups/add', requireRole('admin'), async (req, res) => {
   try {
     const { sheetId, name, children } = req.body || {};
     if (!sheetId || !name) throw new Error('缺少 sheetId 或 name 参数');
@@ -1004,7 +1102,7 @@ app.post('/api/smartsheet/groups/add', async (req, res) => {
  * POST /api/smartsheet/groups/delete
  * Body: { sheetId, fieldGroupId }
  */
-app.post('/api/smartsheet/groups/delete', async (req, res) => {
+app.post('/api/smartsheet/groups/delete', requireRole('admin'), async (req, res) => {
   try {
     const { sheetId, fieldGroupId } = req.body || {};
     if (!sheetId || !fieldGroupId) throw new Error('缺少 sheetId 或 fieldGroupId 参数');
@@ -1020,7 +1118,7 @@ app.post('/api/smartsheet/groups/delete', async (req, res) => {
  * POST /api/smartsheet/groups/update
  * Body: { sheetId, fieldGroupId, name?, children? }
  */
-app.post('/api/smartsheet/groups/update', async (req, res) => {
+app.post('/api/smartsheet/groups/update', requireRole('admin'), async (req, res) => {
   try {
     const { sheetId, fieldGroupId, name, children } = req.body || {};
     if (!sheetId || !fieldGroupId) throw new Error('缺少 sheetId 或 fieldGroupId 参数');

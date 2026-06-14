@@ -2,3 +2,6 @@ node_modules/
 .env
 .DS_Store
 .claude/
+data/auth.db
+data/auth.db-wal
+data/auth.db-shm

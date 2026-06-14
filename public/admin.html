@@ -161,7 +161,11 @@
   <div class="app">
     <div class="header">
       <h1>⚙ 管理后台</h1>
-      <a href="/">← 返回看板</a>
+      <div style="display:flex;align-items:center;gap:16px">
+        <span id="headerUser" style="color:var(--text-muted);font-size:0.85rem"></span>
+        <a href="/">← 返回看板</a>
+        <a href="#" id="btnLogout" style="color:var(--danger);text-decoration:none;font-size:0.8rem">退出登录</a>
+      </div>
     </div>
 
     <!-- 系统状态 -->
@@ -351,15 +355,81 @@
     let loadedRecords = [];
     let currentEditRecordId = null;
 
+    // ============ 认证工具 ============
+
+    /**
+     * 带认证的 fetch 包装
+     * 401 → 跳转登录页
+     * 403 → 提示权限不足
+     */
+    async function apiFetch(url, options = {}) {
+      const resp = await fetch(url, options);
+      if (resp.status === 401) {
+        window.location.href = '/login?redirect=' + encodeURIComponent(window.location.pathname);
+        throw new Error('Unauthorized');
+      }
+      if (resp.status === 403) {
+        alert('权限不足，需要管理员权限');
+        throw new Error('Forbidden');
+      }
+      return resp;
+    }
+
+    /**
+     * 检查管理员认证状态
+     * 未登录 → 跳转登录页
+     * 非 admin → 提示并跳转看板
+     */
+    async function checkAdminAuth() {
+      try {
+        const resp = await apiFetch('/api/auth/me');
+        const json = await resp.json();
+        if (!json.success || !json.data) {
+          window.location.href = '/login?redirect=/admin';
+          return false;
+        }
+        const userEl = document.getElementById('headerUser');
+        if (userEl) {
+          userEl.textContent = '👤 ' + (json.data.displayName || json.data.username);
+        }
+        if (json.data.role !== 'admin') {
+          alert('您没有管理权限，即将返回看板');
+          window.location.href = '/';
+          return false;
+        }
+        return true;
+      } catch (_) {
+        return false;
+      }
+    }
+
+    /**
+     * 退出登录
+     */
+    async function logout() {
+      try {
+        await apiFetch('/api/auth/logout', { method: 'POST' });
+      } catch (_) {}
+      window.location.href = '/login';
+    }
+
     // ============ 初始化 ============
     (async function init() {
+      const authed = await checkAdminAuth();
+      if (!authed) return;
       refreshStatus();
       await populateSheetSelects();
     })();
 
+    // 退出登录按钮
+    document.addEventListener('DOMContentLoaded', () => {
+      const btn = document.getElementById('btnLogout');
+      if (btn) btn.addEventListener('click', (e) => { e.preventDefault(); logout(); });
+    });
+
     async function refreshStatus() {
       try {
-        const resp = await fetch('/api/config/info');
+        const resp = await apiFetch('/api/config/info');
         const json = await resp.json();
         if (json.success && json.data) {
           document.getElementById('statusDocid').textContent = json.data.docid || '-';
@@ -382,7 +452,7 @@
     async function ensureSheetsLoaded() {
       if (cachedSheets.length > 0) return cachedSheets;
       try {
-        const resp = await fetch('/api/config/info');
+        const resp = await apiFetch('/api/config/info');
         const json = await resp.json();
         if (json.success && json.data) {
           cachedSheets = json.data.sheets || [];
@@ -428,7 +498,7 @@
       try {
         const docName = document.getElementById('docName').value || '榴莲温度监控数据';
         const sheetTitle = document.getElementById('sheetTitle').value || '温度记录';
-        const resp = await fetch('/api/setup', {
+        const resp = await apiFetch('/api/setup', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ docName, sheetTitle }),
@@ -472,7 +542,7 @@
       try {
         const opts = { method };
         if (method === 'POST') opts.headers = { 'Content-Type': 'application/json' };
-        const resp = await fetch(`/api/${path}`, opts);
+        const resp = await apiFetch(`/api/${path}`, opts);
         const json = await resp.json();
         showWithToggle(wrap, json);
       } catch (e) {
@@ -485,7 +555,7 @@
       wrap.style.display = 'block';
       wrap.innerHTML = `<div class="output">正在加载表格结构...</div>`;
       try {
-        const resp = await fetch('/api/config/info');
+        const resp = await apiFetch('/api/config/info');
         const json = await resp.json();
         if (!json.success) throw new Error(json.error);
         // 展开为 子表-字段 二维表
@@ -518,7 +588,7 @@
       wrap.style.display = 'block';
       wrap.innerHTML = `<div class="output">正在加载看板数据...</div>`;
       try {
-        const resp = await fetch('/api/dashboard?hours=720&limit=500');
+        const resp = await apiFetch('/api/dashboard?hours=720&limit=500');
         const json = await resp.json();
         if (!json.success) throw new Error(json.error);
         // 展平 records + stats
@@ -537,7 +607,7 @@
       const wrap = document.getElementById('actionOutputWrap');
       wrap.style.display = 'block';
       try {
-        const resp = await fetch('/callback?msg_signature=test&timestamp=1&nonce=2&echostr=hello');
+        const resp = await apiFetch('/callback?msg_signature=test&timestamp=1&nonce=2&echostr=hello');
         const text = await resp.text();
         wrap.innerHTML = `<div class="output">HTTP 状态: ${resp.status}\n响应内容: ${text}\n\n（签名验证失败是正常的，说明接口在正常工作）</div>`;
       } catch (e) {
@@ -746,7 +816,7 @@
 
         if (isTempSheet) {
           // 温度子表：用 dashboard 接口获得解析后的数据
-          const resp = await fetch('/api/dashboard?hours=720&limit=500');
+          const resp = await apiFetch('/api/dashboard?hours=720&limit=500');
           const json = await resp.json();
           if (!json.success) throw new Error(json.error);
           records = json.data.records || [];
@@ -760,7 +830,7 @@
           tableLabels = COL_MAP.map(c => c[1]);
         } else {
           // 通用子表：用通用接口
-          const resp = await fetch(`/api/smartsheet/records?sheetId=${sheetId}&limit=500`);
+          const resp = await apiFetch(`/api/smartsheet/records?sheetId=${sheetId}&limit=500`);
           const json = await resp.json();
           if (!json.success) throw new Error(json.error);
           records = json.data.records || [];
@@ -950,13 +1020,13 @@
       try {
         let resp, json;
         if (isEdit) {
-          resp = await fetch('/api/smartsheet/records/update', {
+          resp = await apiFetch('/api/smartsheet/records/update', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ sheetId, records: [{ record_id: currentEditRecordId, values }] }),
           });
         } else {
-          resp = await fetch('/api/smartsheet/records/add', {
+          resp = await apiFetch('/api/smartsheet/records/add', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ sheetId, records: [{ values }] }),
@@ -980,7 +1050,7 @@
       if (!sheetId) { alert('请选择目标子表'); return; }
       if (!confirm('确定要删除该记录吗？')) return;
       try {
-        const resp = await fetch('/api/smartsheet/records/delete', {
+        const resp = await apiFetch('/api/smartsheet/records/delete', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ sheetId, recordIds: [recordId] }),
@@ -1003,7 +1073,7 @@
 
       const recordIds = Array.from(checks).map(c => c.value);
       try {
-        const resp = await fetch('/api/smartsheet/records/delete', {
+        const resp = await apiFetch('/api/smartsheet/records/delete', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ sheetId, recordIds }),
@@ -1065,7 +1135,7 @@
       out.className = 'output';
       out.textContent = '正在加载字段...\n';
       try {
-        const resp = await fetch('/api/config/info');
+        const resp = await apiFetch('/api/config/info');
         const json = await resp.json();
         if (!json.success) throw new Error(json.error);
         const sheet = json.data.sheets.find(s => s.sheet_id === sheetId);
@@ -1107,7 +1177,7 @@
       out.className = 'output';
       out.textContent = '正在更新字段...\n';
       try {
-        const resp = await fetch('/api/smartsheet/fields/update', {
+        const resp = await apiFetch('/api/smartsheet/fields/update', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ sheetId, fields: [{ field_id: fieldId, field_title: newTitle }] }),
@@ -1130,7 +1200,7 @@
       out.className = 'output';
       out.textContent = '正在删除字段...\n';
       try {
-        const resp = await fetch('/api/smartsheet/fields/delete', {
+        const resp = await apiFetch('/api/smartsheet/fields/delete', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ sheetId, fieldIds: [fieldId] }),
@@ -1155,7 +1225,7 @@
       out.className = 'output';
       out.textContent = '正在加载视图...\n';
       try {
-        const resp = await fetch(`/api/smartsheet/views?sheetId=${sheetId}`);
+        const resp = await apiFetch(`/api/smartsheet/views?sheetId=${sheetId}`);
         const json = await resp.json();
         if (!json.success) throw new Error(json.error);
         const views = json.data || [];
@@ -1197,7 +1267,7 @@
       out.className = 'output';
       out.textContent = '正在添加视图...\n';
       try {
-        const resp = await fetch('/api/smartsheet/views/add', {
+        const resp = await apiFetch('/api/smartsheet/views/add', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ sheetId, viewTitle, viewType }),
@@ -1220,7 +1290,7 @@
       out.className = 'output';
       out.textContent = '正在删除视图...\n';
       try {
-        const resp = await fetch('/api/smartsheet/views/delete', {
+        const resp = await apiFetch('/api/smartsheet/views/delete', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ sheetId, viewIds: [viewId] }),
@@ -1245,7 +1315,7 @@
       out.className = 'output';
       out.textContent = '正在加载编组...\n';
       try {
-        const resp = await fetch(`/api/smartsheet/groups?sheetId=${sheetId}`);
+        const resp = await apiFetch(`/api/smartsheet/groups?sheetId=${sheetId}`);
         const json = await resp.json();
         if (!json.success) throw new Error(json.error);
         const groups = json.data || [];
@@ -1287,7 +1357,7 @@
       out.className = 'output';
       out.textContent = '正在添加编组...\n';
       try {
-        const resp = await fetch('/api/smartsheet/groups/add', {
+        const resp = await apiFetch('/api/smartsheet/groups/add', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ sheetId, name }),
@@ -1311,7 +1381,7 @@
       out.className = 'output';
       out.textContent = '正在更新编组...\n';
       try {
-        const resp = await fetch('/api/smartsheet/groups/update', {
+        const resp = await apiFetch('/api/smartsheet/groups/update', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ sheetId, fieldGroupId: groupId, name: newName }),
@@ -1334,7 +1404,7 @@
       out.className = 'output';
       out.textContent = '正在删除编组...\n';
       try {
-        const resp = await fetch('/api/smartsheet/groups/delete', {
+        const resp = await apiFetch('/api/smartsheet/groups/delete', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ sheetId, fieldGroupId: groupId }),
@@ -1362,7 +1432,7 @@
       out.className = 'output';
       out.textContent = '正在重命名文档...\n';
       try {
-        const resp = await fetch('/api/doc/rename', {
+        const resp = await apiFetch('/api/doc/rename', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ newName }),
@@ -1382,7 +1452,7 @@
       out.className = 'output';
       out.textContent = '正在获取文档信息...\n';
       try {
-        const resp = await fetch('/api/doc/info');
+        const resp = await apiFetch('/api/doc/info');
         const json = await resp.json();
         out.className = json.success ? 'output success' : 'output error';
         out.textContent = json.success ? JSON.stringify(json.data, null, 2) : `❌ ${json.error}`;
@@ -1400,7 +1470,7 @@
       out.className = 'output';
       out.textContent = '正在删除文档...\n';
       try {
-        const resp = await fetch('/api/doc/delete', { method: 'POST' });
+        const resp = await apiFetch('/api/doc/delete', { method: 'POST' });
         const json = await resp.json();
         out.className = json.success ? 'output success' : 'output error';
         out.textContent = json.success ? `✅ ${json.message}` : `❌ ${json.error}`;
@@ -1438,7 +1508,7 @@
 
     async function clearCacheAndReload() {
       try {
-        await fetch('/api/schema/refresh', { method: 'POST' });
+        await apiFetch('/api/schema/refresh', { method: 'POST' });
         cachedSheets = [];
         await ensureSheetsLoaded();
         await populateSheetSelects();
