@@ -737,17 +737,50 @@
       wrap.innerHTML = '<div class="output">正在加载记录...</div>';
 
       try {
-        const resp = await fetch('/api/dashboard?hours=720&limit=500');
-        const json = await resp.json();
-        if (!json.success) throw new Error(json.error);
+        // 判断是否是温度子表（标题含「温度」）
+        const sheets = await ensureSheetsLoaded();
+        const selSheet = sheets.find(s => s.sheet_id === sheetId);
+        const isTempSheet = selSheet && /温度|temp/i.test(selSheet.title);
 
-        loadedRecords = json.data.records || [];
+        let records, tableCols, tableLabels;
+
+        if (isTempSheet) {
+          // 温度子表：用 dashboard 接口获得解析后的数据
+          const resp = await fetch('/api/dashboard?hours=720&limit=500');
+          const json = await resp.json();
+          if (!json.success) throw new Error(json.error);
+          records = json.data.records || [];
+          // 英文字段 → 中文列头映射
+          const COL_MAP = [
+            ['containerNo','柜号'], ['brand','品牌'], ['placementTime','放柜时间'],
+            ['setTempDisplay','设定温度'], ['supplyTempDisplay','送风温度'], ['returnTempDisplay','回风温度'],
+            ['vent','风口设定'], ['location','当前位置'], ['aroma','味道'], ['port','关口'], ['updateTime','更新时间'],
+          ];
+          tableCols = COL_MAP.map(c => c[0]);
+          tableLabels = COL_MAP.map(c => c[1]);
+        } else {
+          // 通用子表：用通用接口
+          const resp = await fetch(`/api/smartsheet/records?sheetId=${sheetId}&limit=500`);
+          const json = await resp.json();
+          if (!json.success) throw new Error(json.error);
+          records = json.data.records || [];
+          // 通用记录的 key 已经是中文（企微字段标题），去掉下划线开头的内部字段
+          if (records.length > 0) {
+            const allKeys = Object.keys(records[0]);
+            tableCols = allKeys.filter(k => !k.startsWith('_') && k !== 'recordId');
+            tableLabels = tableCols; // 已经是中文
+          } else {
+            tableCols = [];
+            tableLabels = [];
+          }
+        }
+
+        loadedRecords = records;
         countSpan.textContent = `共 ${loadedRecords.length} 条`;
-        document.getElementById('btnDelRecords').disabled = loadedRecords.length === 0;
+        document.getElementById('btnDelRecords').disabled = loadedRecords.length === 0 || !isTempSheet;
 
-        // 用于表格展示的列
-        const cols = ['containerNo','brand','placementTime','setTempDisplay','supplyTempDisplay','returnTempDisplay','vent','location','aroma','port','updateTime'];
-        const colLabels = ['柜号','品牌','放柜时间','设定温度','送风温度','回风温度','风口设定','当前位置','味道','关口','更新时间'];
+        // 存储当前是否温度子表，供添加/编辑按钮判断
+        window._isTempSheet = isTempSheet;
 
         // 构建 JSON + 表格切换
         const idBase = 'rec_' + Date.now().toString(36);
@@ -756,33 +789,38 @@
         let tableHtml = `<div class="view-bar">
           <button class="btn-toggle active" id="${idBase}_btnTable" onclick="switchView('${idBase}','table')">📋 表格</button>
           <button class="btn-toggle" id="${idBase}_btnJson" onclick="switchView('${idBase}','json')">{ } JSON</button>
+          ${!isTempSheet ? `<span style="color:var(--warning);font-size:0.75rem">⚠ 非温度子表，仅可查看/删除</span>` : ''}
         </div>`;
 
         tableHtml += `<div id="${idBase}_table">`;
         if (loadedRecords.length === 0) {
           tableHtml += '<p class="empty-hint">暂无记录</p>';
         } else {
-          const maxH = loadedRecords.length > 20 ? 'max-height:500px;' : '';
+          const maxH = loadedRecords.length > 15 ? 'max-height:500px;' : '';
           tableHtml += `<div class="data-table-wrap" style="${maxH}"><table class="data-table"><thead><tr>
             <th style="width:32px"><input type="checkbox" id="recCheckAll" onchange="toggleCheckAll(this)"></th>`;
-          colLabels.forEach(l => { tableHtml += `<th>${l}</th>`; });
+          tableLabels.forEach(l => { tableHtml += `<th>${l}</th>`; });
           tableHtml += '<th>操作</th></tr></thead><tbody>';
 
           loadedRecords.forEach((r, i) => {
+            const recId = r.recordId || r.record_id;
             const isAbnormal = r.isAbnormal ? 'style="border-left:3px solid var(--danger)"' : '';
             tableHtml += `<tr ${isAbnormal}>
-              <td><input type="checkbox" class="recCheck" value="${r.recordId}" data-idx="${i}"></td>`;
-            cols.forEach(c => {
+              <td><input type="checkbox" class="recCheck" value="${recId}" data-idx="${i}"></td>`;
+            tableCols.forEach(c => {
               let v = r[c];
-              if (c === 'updateTime' || c === 'placementTime') {
+              if (c === 'updateTime' || c === 'placementTime' || c === '更新时间' || c === '放柜时间') {
                 v = formatTime(v);
               }
-              tableHtml += `<td>${escHtml(String(v ?? '-'))}</td>`;
+              if (v === null || v === undefined || v === '') v = '-';
+              tableHtml += `<td>${escHtml(String(v))}</td>`;
             });
-            tableHtml += `<td>
-              <button class="btn btn-sm" onclick="openEditModal('${r.recordId}')">✏</button>
-              <button class="btn btn-sm btn-danger" onclick="deleteOneRecord('${r.recordId}')">🗑</button>
-            </td></tr>`;
+            // 只有温度子表才有编辑按钮（字段映射匹配）
+            tableHtml += '<td>';
+            if (isTempSheet) {
+              tableHtml += `<button class="btn btn-sm" onclick="openEditModal('${recId}')">✏</button> `;
+            }
+            tableHtml += `<button class="btn btn-sm btn-danger" onclick="deleteOneRecord('${recId}')">🗑</button></td></tr>`;
           });
 
           tableHtml += '</tbody></table></div>';
@@ -791,10 +829,7 @@
         tableHtml += `<div class="output" id="${idBase}_json" style="display:none">${escHtml(jsonStr)}</div>`;
 
         wrap.innerHTML = tableHtml;
-        // 存储 idBase 用于切换
         wrap._recIdBase = idBase;
-
-        // 全选按钮逻辑
         window._recCheckAll = document.getElementById('recCheckAll');
       } catch (e) {
         wrap.innerHTML = `<div class="output error">❌ ${e.message}</div>`;
@@ -806,16 +841,46 @@
     }
 
     // ============ 模态框：添加/编辑记录 ============
-    function openAddModal() {
+    async function isTempSheetSelected() {
+      const sheetId = document.getElementById('recSheetId').value;
+      if (!sheetId) return false;
+      const sheets = await ensureSheetsLoaded();
+      const sel = sheets.find(s => s.sheet_id === sheetId);
+      return sel && /温度|temp/i.test(sel.title);
+    }
+
+    async function openAddModal() {
+      if (!(await isTempSheetSelected())) {
+        alert('仅「温度记录」子表支持添加记录。其他子表请在企微客户端中编辑。');
+        return;
+      }
       currentEditRecordId = null;
       showModal('➕ 添加温度记录', buildRecordForm({}), submitRecordForm);
     }
 
-    function openEditModal(recordId) {
-      const r = loadedRecords.find(x => x.recordId === recordId);
+    async function openEditModal(recordId) {
+      if (!(await isTempSheetSelected())) {
+        alert('仅「温度记录」子表支持编辑。其他子表请在企微客户端中编辑。');
+        return;
+      }
+      const r = loadedRecords.find(x => (x.recordId || x.record_id) === recordId);
       if (!r) { alert('未找到该记录'); return; }
       currentEditRecordId = recordId;
-      showModal('✏ 编辑温度记录', buildRecordForm(r), submitRecordForm);
+      // 将 dashboard 解析字段映射回表单字段
+      const formData = {
+        containerNo: r.containerNo || '',
+        brand: r.brand || '',
+        placementTime: r.placementTime || '',
+        setTemp: r.setTemp ?? '',
+        supplyTemp: r.supplyTemp ?? '',
+        returnTemp: r.returnTemp ?? '',
+        vent: (r.vent || '').replace('%', ''),
+        location: r.location || '',
+        aroma: r.aroma || '',
+        port: r.port || '',
+        updateTime: r.updateTime || '',
+      };
+      showModal('✏ 编辑温度记录', buildRecordForm(formData), submitRecordForm);
     }
 
     function buildRecordForm(data) {

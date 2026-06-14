@@ -730,6 +730,47 @@ app.post('/api/smartsheet/sheet/add', async (req, res) => {
 // ---- 记录管理 API ----
 
 /**
+ * GET /api/smartsheet/records?sheetId=xxx&limit=200&offset=0
+ * 通用记录查询 — 可查询任意子表，返回已解析的记录（扁平化值）
+ */
+app.get('/api/smartsheet/records', async (req, res) => {
+  try {
+    const { sheetId, limit = '200', offset } = req.query;
+    if (!sheetId) throw new Error('缺少 sheetId 参数');
+    const queryLimit = Math.min(parseInt(limit) || 200, 1000);
+    const opts = { limit: queryLimit };
+    if (offset) opts.offset = parseInt(offset);
+
+    // 获取该子表的字段定义
+    const fieldsResult = await wecom.getFields(DOCID, sheetId);
+    const fieldMap = {}; // field_title → { field_id, field_type }
+    if (fieldsResult.errcode === 0) {
+      (fieldsResult.fields || []).forEach(f => {
+        fieldMap[f.field_title] = { field_id: f.field_id, field_type: f.field_type };
+      });
+    }
+
+    // 获取原始记录
+    const rawRecords = await wecom.getAllRecords(DOCID, sheetId, opts);
+
+    // 解析：用 getRecordValue 提取每个字段的扁平值
+    const records = rawRecords.map(r => {
+      const flat = { recordId: r.record_id };
+      Object.entries(fieldMap).forEach(([title, meta]) => {
+        flat[title] = wecom.getRecordValue(r, title);
+      });
+      flat._creator = r.creator_name || '';
+      flat._updater = r.updater_name || '';
+      return flat;
+    });
+
+    res.json({ success: true, data: { records, total: records.length, fields: Object.keys(fieldMap) } });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+/**
  * POST /api/smartsheet/records/add
  * Body: { sheetId, records, keyType? }
  */
