@@ -71,7 +71,7 @@ const dom = {
 // === 核心：数据加载 ===
 
 async function fetchDashboard() {
-  const container = dom.containerFilter.value;
+  const container = dom.containerFilter ? dom.containerFilter.value : '';
 
   // 甘特图固定拉取 7 天数据
   let url = `/api/dashboard?hours=168&limit=500`;
@@ -150,6 +150,7 @@ function updateAlerts(alerts) {
 // === 更新柜号筛选下拉 ===
 
 function updateContainerFilter() {
+  if (!dom.containerFilter) return;
   const currentVal = dom.containerFilter.value;
   const containers = allContainers.map(c => c.containerNo);
 
@@ -392,7 +393,7 @@ function resetRefreshTimer() {
 // === 事件绑定 ===
 
 dom.btnRefresh.addEventListener('click', () => fetchDashboard());
-dom.containerFilter.addEventListener('change', () => fetchDashboard());
+if (dom.containerFilter) dom.containerFilter.addEventListener('change', () => fetchDashboard());
 dom.tempTypeFilter.addEventListener('change', () => updateGantt(allRecords));
 dom.btnSettings.addEventListener('click', openSettings);
 dom.btnSettingsClose.addEventListener('click', closeSettings);
