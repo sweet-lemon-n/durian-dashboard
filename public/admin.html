@@ -1,0 +1,1011 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>管理后台 - 榴莲温度看板</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --bg: #0f1923; --bg-card: #1a2d3d; --border: #2a4055;
+      --text: #e8edf2; --text-muted: #8ba4bc; --accent: #4caf50;
+      --danger: #f44336; --warning: #ff9800; --info: #2196f3;
+      --radius: 10px; --radius-sm: 6px;
+    }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", sans-serif;
+      background: var(--bg); color: var(--text); min-height: 100vh;
+    }
+    .app { max-width: 900px; margin: 0 auto; padding: 24px; }
+
+    /* Header */
+    .header {
+      display: flex; justify-content: space-between; align-items: center;
+      padding: 16px 0; border-bottom: 1px solid var(--border); margin-bottom: 24px;
+    }
+    .header h1 { font-size: 1.4rem; }
+    .header a { color: var(--text-muted); text-decoration: none; font-size: 0.85rem; }
+    .header a:hover { color: var(--accent); }
+
+    /* Cards */
+    .card {
+      background: var(--bg-card); border: 1px solid var(--border);
+      border-radius: var(--radius); padding: 20px; margin-bottom: 20px;
+    }
+    .card h2 {
+      font-size: 1rem; margin-bottom: 16px; padding-bottom: 8px;
+      border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 8px;
+    }
+
+    /* Status grid */
+    .status-grid {
+      display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px;
+    }
+    .status-item {
+      background: rgba(255,255,255,0.03); border-radius: var(--radius-sm); padding: 16px; text-align: center;
+    }
+    .status-item .label { font-size: 0.8rem; color: var(--text-muted); margin-bottom: 6px; }
+    .status-item .value { font-size: 1.1rem; font-weight: 600; word-break: break-all; }
+    .status-ok { color: var(--accent); }
+    .status-err { color: var(--danger); }
+    .status-warn { color: var(--warning); }
+
+    /* Buttons */
+    .btn {
+      padding: 10px 20px; border: 1px solid var(--border); border-radius: var(--radius-sm);
+      background: var(--bg-card); color: var(--text); cursor: pointer; font-size: 0.9rem;
+      transition: all 0.2s; margin-right: 8px; margin-bottom: 8px;
+    }
+    .btn:hover { border-color: var(--accent); background: #1f3548; }
+    .btn-primary { background: var(--accent); color: #000; border-color: var(--accent); font-weight: 600; }
+    .btn-primary:hover { filter: brightness(1.1); }
+    .btn-danger { border-color: var(--danger); color: var(--danger); }
+    .btn-danger:hover { background: var(--danger); color: #fff; }
+    .btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+    /* Output box */
+    .output {
+      background: #0a0f14; border: 1px solid var(--border); border-radius: var(--radius-sm);
+      padding: 14px; margin-top: 12px; font-family: monospace; font-size: 0.82rem;
+      white-space: pre-wrap; max-height: 400px; overflow-y: auto; color: var(--text-muted);
+    }
+    .output.success { color: var(--accent); }
+    .output.error { color: var(--danger); }
+
+    /* Form */
+    .form-row { display: flex; gap: 10px; align-items: flex-end; flex-wrap: wrap; margin-bottom: 12px; }
+    .form-group { display: flex; flex-direction: column; gap: 4px; }
+    .form-group label { font-size: 0.8rem; color: var(--text-muted); }
+    .form-input {
+      padding: 8px 12px; border: 1px solid var(--border); border-radius: var(--radius-sm);
+      background: var(--bg); color: var(--text); font-size: 0.9rem; outline: none;
+    }
+    .form-input:focus { border-color: var(--accent); }
+
+    .log-line { padding: 2px 0; border-bottom: 1px solid rgba(255,255,255,0.03); }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <div class="header">
+      <h1>⚙ 管理后台</h1>
+      <a href="/">← 返回看板</a>
+    </div>
+
+    <!-- 系统状态 -->
+    <div class="card">
+      <h2>📊 系统状态</h2>
+      <div class="status-grid" id="statusGrid">
+        <div class="status-item">
+          <div class="label">服务状态</div>
+          <div class="value status-ok">运行中</div>
+        </div>
+        <div class="status-item">
+          <div class="label">DOCID</div>
+          <div class="value" id="statusDocid">-</div>
+        </div>
+        <div class="status-item">
+          <div class="label">API 连通</div>
+          <div class="value" id="statusApi">检查中...</div>
+        </div>
+        <div class="status-item">
+          <div class="label">子表数量</div>
+          <div class="value" id="statusSheets">-</div>
+        </div>
+      </div>
+      <button class="btn" onclick="refreshStatus()" style="margin-top:12px">🔄 刷新状态</button>
+    </div>
+
+    <!-- 一键初始化 -->
+    <div class="card">
+      <h2>🛠 创建智能表格</h2>
+      <p style="font-size:0.85rem;color:var(--text-muted);margin-bottom:12px">
+        通过 API 创建属于此应用的新表格，自动生成「温度记录」子表和字段。
+      </p>
+      <div class="form-row">
+        <div class="form-group">
+          <label>文档名称</label>
+          <input class="form-input" id="docName" value="榴莲温度监控数据" style="width:240px">
+        </div>
+        <div class="form-group">
+          <label>子表名称</label>
+          <input class="form-input" id="sheetTitle" value="温度记录" style="width:160px">
+        </div>
+      </div>
+      <button class="btn btn-primary" id="btnSetup" onclick="runSetup()">🚀 一键创建</button>
+      <button class="btn btn-danger" id="btnStopSetup" onclick="stopSetup()" style="display:none">取消</button>
+      <div class="output" id="setupOutput" style="display:none"></div>
+    </div>
+
+    <!-- 其他操作 -->
+    <div class="card">
+      <h2>🔧 快捷操作</h2>
+      <div style="display:flex;flex-wrap:wrap;gap:8px">
+        <button class="btn" onclick="doAction('schema/refresh', 'POST')">清除缓存</button>
+        <button class="btn" onclick="doAction('config/info', 'GET')">查看表格结构</button>
+        <button class="btn" onclick="doAction('dashboard', 'GET')">查看看板数据</button>
+        <button class="btn" onclick="testCallback()">测试回调接口</button>
+      </div>
+      <div class="output" id="actionOutput" style="display:none"></div>
+    </div>
+
+    <!-- 记录管理 -->
+    <div class="card">
+      <h2>📋 记录管理</h2>
+      <p style="font-size:0.85rem;color:var(--text-muted);margin-bottom:12px">
+        添加、更新或删除温度记录
+      </p>
+      <div class="form-row">
+        <div class="form-group">
+          <label>目标子表</label>
+          <select id="recSheetId" class="form-input" style="width:200px" onchange="onSheetChange('rec')"></select>
+        </div>
+      </div>
+      <!-- 添加记录 -->
+      <div class="form-row">
+        <div class="form-group">
+          <label>柜号</label>
+          <input class="form-input" id="recContainer" placeholder="如 C001" style="width:120px">
+        </div>
+        <div class="form-group">
+          <label>温度 (°C)</label>
+          <input class="form-input" id="recTemp" type="number" step="0.1" placeholder="4.5" style="width:100px">
+        </div>
+        <div class="form-group">
+          <label>位置信息</label>
+          <input class="form-input" id="recLocation" placeholder="如 广州" style="width:140px">
+        </div>
+        <div class="form-group">
+          <label>香味</label>
+          <input class="form-input" id="recAroma" placeholder="如 正常" style="width:100px">
+        </div>
+      </div>
+      <div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:12px">
+        <button class="btn btn-primary" onclick="addRecord()">➕ 添加记录</button>
+        <button class="btn" onclick="loadRecordsForEdit()">📥 加载记录（用于更新/删除）</button>
+        <button class="btn btn-danger" onclick="deleteSelectedRecords()" id="btnDelRecords" disabled>🗑 删除选中记录</button>
+      </div>
+      <div class="output" id="recordOutput" style="display:none"></div>
+      <div id="recordEditList" style="max-height:300px;overflow-y:auto;margin-top:8px"></div>
+    </div>
+
+    <!-- 字段管理 -->
+    <div class="card">
+      <h2>🏷 字段管理</h2>
+      <p style="font-size:0.85rem;color:var(--text-muted);margin-bottom:12px">
+        查看字段信息、重命名字段标题
+      </p>
+      <div class="form-row">
+        <div class="form-group">
+          <label>目标子表</label>
+          <select id="fldSheetId" class="form-input" style="width:200px" onchange="loadFields()"></select>
+        </div>
+      </div>
+      <button class="btn" onclick="loadFields()">🔄 加载字段列表</button>
+      <div class="output" id="fieldOutput" style="display:none"></div>
+      <div id="fieldList" style="margin-top:8px"></div>
+    </div>
+
+    <!-- 视图管理 -->
+    <div class="card">
+      <h2>👁 视图管理</h2>
+      <p style="font-size:0.85rem;color:var(--text-muted);margin-bottom:12px">
+        查看、添加和删除表格视图
+      </p>
+      <div class="form-row">
+        <div class="form-group">
+          <label>目标子表</label>
+          <select id="viewSheetId" class="form-input" style="width:200px" onchange="loadViews()"></select>
+        </div>
+        <div class="form-group">
+          <label>新视图标题</label>
+          <input class="form-input" id="viewTitle" placeholder="如：表格视图" style="width:160px">
+        </div>
+        <div class="form-group">
+          <label>视图类型</label>
+          <select id="viewType" class="form-input">
+            <option value="VIEW_TYPE_GRID">表格视图</option>
+            <option value="VIEW_TYPE_KANBAN">看板视图</option>
+            <option value="VIEW_TYPE_GALLERY">画册视图</option>
+            <option value="VIEW_TYPE_GANTT">甘特视图</option>
+            <option value="VIEW_TYPE_CALENDAR">日历视图</option>
+          </select>
+        </div>
+      </div>
+      <div style="display:flex;flex-wrap:wrap;gap:8px">
+        <button class="btn btn-primary" onclick="addView()">➕ 添加视图</button>
+        <button class="btn" onclick="loadViews()">🔄 加载视图列表</button>
+      </div>
+      <div class="output" id="viewOutput" style="display:none"></div>
+      <div id="viewList" style="margin-top:8px"></div>
+    </div>
+
+    <!-- 编组管理 -->
+    <div class="card">
+      <h2>📁 字段编组</h2>
+      <p style="font-size:0.85rem;color:var(--text-muted);margin-bottom:12px">
+        管理字段编组（折叠分组）
+      </p>
+      <div class="form-row">
+        <div class="form-group">
+          <label>目标子表</label>
+          <select id="grpSheetId" class="form-input" style="width:200px" onchange="loadGroups()"></select>
+        </div>
+        <div class="form-group">
+          <label>编组名称</label>
+          <input class="form-input" id="grpName" placeholder="如：温度信息" style="width:160px">
+        </div>
+      </div>
+      <div style="display:flex;flex-wrap:wrap;gap:8px">
+        <button class="btn btn-primary" onclick="addGroup()">➕ 添加编组</button>
+        <button class="btn" onclick="loadGroups()">🔄 加载编组列表</button>
+      </div>
+      <div class="output" id="groupOutput" style="display:none"></div>
+      <div id="groupList" style="margin-top:8px"></div>
+    </div>
+
+    <!-- 文档操作 -->
+    <div class="card">
+      <h2>📄 文档操作</h2>
+      <p style="font-size:0.85rem;color:var(--text-muted);margin-bottom:12px">
+        当前文档管理操作
+      </p>
+      <div class="form-row">
+        <div class="form-group">
+          <label>新文档名称</label>
+          <input class="form-input" id="newDocName" placeholder="重命名文档" style="width:240px">
+        </div>
+      </div>
+      <div style="display:flex;flex-wrap:wrap;gap:8px">
+        <button class="btn btn-primary" onclick="renameDocument()">✏ 重命名文档</button>
+        <button class="btn" onclick="getDocumentInfo()">ℹ 查看文档信息</button>
+        <button class="btn btn-danger" onclick="deleteDocument()">⚠ 删除当前文档</button>
+      </div>
+      <div class="output" id="docOutput" style="display:none"></div>
+    </div>
+  </div>
+
+  <script>
+    // === 页面加载时初始化 ===
+    (async function init() {
+      refreshStatus();
+      await populateSheetSelects();
+    })();
+
+    async function refreshStatus() {
+      // DOCID
+      try {
+        const resp = await fetch('/api/config/info');
+        const json = await resp.json();
+        if (json.success && json.data) {
+          document.getElementById('statusDocid').textContent = json.data.docid || '-';
+          document.getElementById('statusSheets').textContent = json.data.sheets ? json.data.sheets.length : '0';
+          document.getElementById('statusApi').textContent = '已连接';
+          document.getElementById('statusApi').className = 'value status-ok';
+        } else {
+          document.getElementById('statusApi').textContent = '连接失败';
+          document.getElementById('statusApi').className = 'value status-err';
+          document.getElementById('statusDocid').textContent = '-';
+          document.getElementById('statusSheets').textContent = '-';
+        }
+      } catch (e) {
+        document.getElementById('statusApi').textContent = '连接失败';
+        document.getElementById('statusApi').className = 'value status-err';
+      }
+    }
+
+    async function runSetup() {
+      const btn = document.getElementById('btnSetup');
+      const out = document.getElementById('setupOutput');
+      btn.disabled = true;
+      btn.textContent = '⏳ 创建中...';
+      out.style.display = 'block';
+      out.className = 'output';
+      out.textContent = '正在创建智能表格文档，请稍候...\n';
+
+      try {
+        const docName = document.getElementById('docName').value || '榴莲温度监控数据';
+        const sheetTitle = document.getElementById('sheetTitle').value || '温度记录';
+
+        const resp = await fetch('/api/setup', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ docName, sheetTitle }),
+        });
+        const json = await resp.json();
+
+        if (json.success) {
+          out.className = 'output success';
+          out.textContent = [
+            '✅ 创建成功！',
+            '',
+            `📄 文档ID: ${json.data.docid}`,
+            `🔗 文档链接: ${json.data.url}`,
+            `📋 子表ID: ${json.data.sheetId}`,
+            `📝 子表名: ${json.data.sheetTitle}`,
+            '',
+            '字段列表:',
+            ...json.data.fields.map(f => `  • ${f.field_title} (${f.field_type}) - ${f.field_id}`),
+            '',
+            json.data.message,
+          ].join('\n');
+          refreshStatus();
+        } else {
+          out.className = 'output error';
+          out.textContent = '❌ 创建失败: ' + (json.error || '未知错误');
+        }
+      } catch (e) {
+        out.className = 'output error';
+        out.textContent = '❌ 请求异常: ' + e.message;
+      } finally {
+        btn.disabled = false;
+        btn.textContent = '🚀 一键创建';
+      }
+    }
+
+    function stopSetup() {
+      // placeholder
+    }
+
+    async function doAction(path, method) {
+      const out = document.getElementById('actionOutput');
+      out.style.display = 'block';
+      out.className = 'output';
+      out.textContent = `正在请求 ${method} /api/${path} ...\n`;
+
+      try {
+        const opts = { method };
+        if (method === 'POST') opts.headers = { 'Content-Type': 'application/json' };
+        const resp = await fetch(`/api/${path}`, opts);
+        const json = await resp.json();
+        out.className = json.success ? 'output success' : 'output error';
+        out.textContent = JSON.stringify(json, null, 2);
+      } catch (e) {
+        out.className = 'output error';
+        out.textContent = '❌ 请求异常: ' + e.message;
+      }
+    }
+
+    async function testCallback() {
+      const out = document.getElementById('actionOutput');
+      out.style.display = 'block';
+      out.className = 'output';
+      out.textContent = '发送测试请求到 /callback ...\n';
+      try {
+        const resp = await fetch('/callback?msg_signature=test&timestamp=1&nonce=2&echostr=hello');
+        const text = await resp.text();
+        out.className = 'output';
+        out.textContent = `HTTP 状态: ${resp.status}\n响应内容: ${text}\n\n（签名验证失败是正常的，说明接口在正常工作）`;
+      } catch (e) {
+        out.className = 'output error';
+        out.textContent = '❌ 请求异常: ' + e.message;
+      }
+    }
+
+    // ==== 初始化：加载子表下拉列表 ====
+    let cachedSheets = [];
+    let cachedFields = [];
+
+    async function ensureSheetsLoaded() {
+      if (cachedSheets.length > 0) return cachedSheets;
+      try {
+        const resp = await fetch('/api/config/info');
+        const json = await resp.json();
+        if (json.success && json.data) {
+          cachedSheets = json.data.sheets || [];
+          cachedFields = [];
+          // flatten fields
+          cachedSheets.forEach(s => {
+            (s.fields || []).forEach(f => { cachedFields.push(f); });
+          });
+        }
+      } catch (e) { console.error(e); }
+      return cachedSheets;
+    }
+
+    async function populateSheetSelects() {
+      const sheets = await ensureSheetsLoaded();
+      ['recSheetId', 'fldSheetId', 'viewSheetId', 'grpSheetId'].forEach(selId => {
+        const sel = document.getElementById(selId);
+        if (!sel || sel.options.length > 1) return;
+        sel.innerHTML = '<option value="">-- 选择子表 --</option>';
+        sheets.forEach(s => {
+          sel.innerHTML += `<option value="${s.sheet_id}">${s.title} (${s.sheet_id})</option>`;
+        });
+        if (sheets.length === 1 && sel.options.length === 2) {
+          sel.value = sheets[0].sheet_id;
+          // trigger onchange
+          sel.dispatchEvent(new Event('change'));
+        }
+      });
+    }
+
+    function onSheetChange(prefix) {
+      if (prefix === 'fld') loadFields();
+      else if (prefix === 'view') loadViews();
+      else if (prefix === 'grp') loadGroups();
+    }
+
+    document.addEventListener('DOMContentLoaded', () => {
+      refreshStatus();
+      populateSheetSelects();
+    });
+
+    // ==== 记录管理 ====
+
+    async function addRecord() {
+      const sheetId = document.getElementById('recSheetId').value;
+      const out = document.getElementById('recordOutput');
+      out.style.display = 'block';
+      out.className = 'output';
+
+      if (!sheetId) {
+        out.className = 'output error';
+        out.textContent = '❌ 请选择目标子表';
+        return;
+      }
+
+      const container = document.getElementById('recContainer').value.trim();
+      const temp = document.getElementById('recTemp').value;
+      const location = document.getElementById('recLocation').value.trim();
+      const aroma = document.getElementById('recAroma').value.trim();
+
+      const values = {};
+      if (container) values['柜号'] = [{ type: 'text', text: container }];
+      if (temp !== '') values['温度'] = parseFloat(temp);
+      if (location) values['位置信息'] = [{ type: 'text', text: location }];
+      if (aroma) values['香味'] = [{ type: 'text', text: aroma }];
+      values['更新时间'] = Date.now();
+
+      out.textContent = '正在添加记录...\n';
+      try {
+        const resp = await fetch('/api/smartsheet/records/add', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ sheetId, records: [{ values }] }),
+        });
+        const json = await resp.json();
+        out.className = json.success ? 'output success' : 'output error';
+        out.textContent = json.success
+          ? `✅ 记录添加成功！\n${JSON.stringify(json.data, null, 2)}`
+          : `❌ 添加失败: ${json.error}`;
+        if (json.success) {
+          document.getElementById('recContainer').value = '';
+          document.getElementById('recTemp').value = '';
+          document.getElementById('recLocation').value = '';
+          document.getElementById('recAroma').value = '';
+        }
+      } catch (e) {
+        out.className = 'output error';
+        out.textContent = '❌ 请求异常: ' + e.message;
+      }
+    }
+
+    let loadedRecords = [];
+
+    async function loadRecordsForEdit() {
+      const sheetId = document.getElementById('recSheetId').value;
+      const out = document.getElementById('recordOutput');
+      const list = document.getElementById('recordEditList');
+      out.style.display = 'block';
+      out.className = 'output';
+
+      if (!sheetId) {
+        out.className = 'output error';
+        out.textContent = '❌ 请选择目标子表';
+        return;
+      }
+
+      out.textContent = '正在加载记录...\n';
+      try {
+        const resp = await fetch('/api/dashboard?limit=500');
+        const json = await resp.json();
+        if (!json.success) throw new Error(json.error);
+
+        loadedRecords = json.data.records || [];
+        list.innerHTML = loadedRecords.length === 0
+          ? '<p style="color:var(--text-muted);font-size:0.85rem">暂无记录</p>'
+          : loadedRecords.map((r, i) => `
+            <div class="log-line" style="display:flex;align-items:center;gap:8px;padding:4px 0">
+              <input type="checkbox" class="recCheck" value="${r.recordId}" id="rec_${i}">
+              <label for="rec_${i}" style="flex:1;font-size:0.82rem;cursor:pointer">
+                <b>${r.containerNo}</b> ${r.temperatureDisplay} ${r.location} ${r.aroma} <span style="color:var(--text-muted)">${r.updateTime || '-'}</span>
+              </label>
+              <button class="btn" style="padding:2px 8px;font-size:0.75rem" onclick="quickUpdateRecord('${r.recordId}')">✏ 快速更新</button>
+            </div>
+          `).join('');
+
+        document.getElementById('btnDelRecords').disabled = loadedRecords.length === 0;
+        out.className = 'output success';
+        out.textContent = `✅ 已加载 ${loadedRecords.length} 条记录。勾选后点击删除，或点击「快速更新」修改单条记录。`;
+      } catch (e) {
+        out.className = 'output error';
+        out.textContent = '❌ ' + e.message;
+      }
+    }
+
+    async function deleteSelectedRecords() {
+      const sheetId = document.getElementById('recSheetId').value;
+      const out = document.getElementById('recordOutput');
+      const checks = document.querySelectorAll('.recCheck:checked');
+      if (checks.length === 0) {
+        out.className = 'output error';
+        out.textContent = '❌ 请至少勾选一条记录';
+        out.style.display = 'block';
+        return;
+      }
+      if (!confirm(`确定要删除 ${checks.length} 条记录吗？此操作不可撤销！`)) return;
+
+      const recordIds = Array.from(checks).map(c => c.value);
+      out.style.display = 'block';
+      out.className = 'output';
+      out.textContent = `正在删除 ${recordIds.length} 条记录...\n`;
+      try {
+        const resp = await fetch('/api/smartsheet/records/delete', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ sheetId, recordIds }),
+        });
+        const json = await resp.json();
+        out.className = json.success ? 'output success' : 'output error';
+        out.textContent = json.success ? `✅ ${json.message}` : `❌ ${json.error}`;
+        if (json.success) loadRecordsForEdit();
+      } catch (e) {
+        out.className = 'output error';
+        out.textContent = '❌ 请求异常: ' + e.message;
+      }
+    }
+
+    async function quickUpdateRecord(recordId) {
+      const sheetId = document.getElementById('recSheetId').value;
+      const out = document.getElementById('recordOutput');
+      out.style.display = 'block';
+
+      const newTemp = prompt('请输入新温度 (°C)：');
+      if (newTemp === null) return;
+      const newLocation = prompt('请输入新位置（留空不变）：');
+      if (newLocation === null) return;
+      const newAroma = prompt('请输入新香味（留空不变）：');
+      if (newAroma === null) return;
+
+      const values = {};
+      const tempVal = parseFloat(newTemp);
+      if (!isNaN(tempVal)) values['温度'] = tempVal;
+      if (newLocation.trim()) values['位置信息'] = [{ type: 'text', text: newLocation.trim() }];
+      if (newAroma.trim()) values['香味'] = [{ type: 'text', text: newAroma.trim() }];
+      values['更新时间'] = Date.now();
+
+      out.className = 'output';
+      out.textContent = '正在更新记录...\n';
+      try {
+        const resp = await fetch('/api/smartsheet/records/update', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ sheetId, records: [{ record_id: recordId, values }] }),
+        });
+        const json = await resp.json();
+        out.className = json.success ? 'output success' : 'output error';
+        out.textContent = json.success ? `✅ 记录已更新` : `❌ ${json.error}`;
+        if (json.success) loadRecordsForEdit();
+      } catch (e) {
+        out.className = 'output error';
+        out.textContent = '❌ 请求异常: ' + e.message;
+      }
+    }
+
+    // ==== 字段管理 ====
+
+    async function loadFields() {
+      const sheetId = document.getElementById('fldSheetId').value;
+      const out = document.getElementById('fieldOutput');
+      const list = document.getElementById('fieldList');
+      if (!sheetId) {
+        list.innerHTML = '';
+        return;
+      }
+
+      out.style.display = 'block';
+      out.className = 'output';
+      out.textContent = '正在加载字段...\n';
+      try {
+        const resp = await fetch('/api/config/info');
+        const json = await resp.json();
+        if (!json.success) throw new Error(json.error);
+        const sheet = json.data.sheets.find(s => s.sheet_id === sheetId);
+        if (!sheet) throw new Error('未找到该子表');
+
+        const fields = sheet.fields || [];
+        list.innerHTML = fields.length === 0
+          ? '<p style="color:var(--text-muted);font-size:0.85rem">无字段</p>'
+          : `<table style="width:100%;font-size:0.82rem;border-collapse:collapse">
+            <thead><tr style="color:var(--text-muted);text-align:left">
+              <th>字段ID</th><th>标题</th><th>类型</th><th>属性</th><th>操作</th>
+            </tr></thead>
+            <tbody>${fields.map(f => `
+              <tr style="border-top:1px solid var(--border)">
+                <td style="padding:4px;font-family:monospace;font-size:0.75rem">${f.field_id}</td>
+                <td>${f.field_title}</td>
+                <td style="font-size:0.75rem">${f.field_type}</td>
+                <td style="font-size:0.75rem">${JSON.stringify(f.property_number || f.property_date_time || '-')}</td>
+                <td>
+                  <button class="btn" style="padding:2px 8px;font-size:0.7rem" onclick="renameField('${f.field_id}','${f.field_title.replace(/'/g, "\\'")}')">重命名</button>
+                  <button class="btn btn-danger" style="padding:2px 8px;font-size:0.7rem" onclick="deleteField('${f.field_id}','${f.field_title.replace(/'/g, "\\'")}')">删除</button>
+                </td>
+              </tr>
+            `).join('')}</tbody></table>`;
+        out.className = 'output success';
+        out.textContent = `✅ 已加载 ${fields.length} 个字段`;
+      } catch (e) {
+        out.className = 'output error';
+        out.textContent = '❌ ' + e.message;
+      }
+    }
+
+    async function renameField(fieldId, oldTitle) {
+      const sheetId = document.getElementById('fldSheetId').value;
+      const newTitle = prompt(`重命名字段「${oldTitle}」为：`, oldTitle);
+      if (!newTitle || newTitle === oldTitle) return;
+
+      const out = document.getElementById('fieldOutput');
+      out.style.display = 'block';
+      out.className = 'output';
+      out.textContent = '正在更新字段...\n';
+      try {
+        const resp = await fetch('/api/smartsheet/fields/update', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ sheetId, fields: [{ field_id: fieldId, field_title: newTitle }] }),
+        });
+        const json = await resp.json();
+        out.className = json.success ? 'output success' : 'output error';
+        out.textContent = json.success ? `✅ 字段已重命名为「${newTitle}」` : `❌ ${json.error}`;
+        if (json.success) { clearCacheAndReload(); loadFields(); }
+      } catch (e) {
+        out.className = 'output error';
+        out.textContent = '❌ 请求异常: ' + e.message;
+      }
+    }
+
+    async function deleteField(fieldId, fieldTitle) {
+      const sheetId = document.getElementById('fldSheetId').value;
+      if (!confirm(`确定要删除字段「${fieldTitle}」吗？此操作不可撤销！`)) return;
+
+      const out = document.getElementById('fieldOutput');
+      out.style.display = 'block';
+      out.className = 'output';
+      out.textContent = '正在删除字段...\n';
+      try {
+        const resp = await fetch('/api/smartsheet/fields/delete', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ sheetId, fieldIds: [fieldId] }),
+        });
+        const json = await resp.json();
+        out.className = json.success ? 'output success' : 'output error';
+        out.textContent = json.success ? `✅ ${json.message}` : `❌ ${json.error}`;
+        if (json.success) { clearCacheAndReload(); loadFields(); }
+      } catch (e) {
+        out.className = 'output error';
+        out.textContent = '❌ 请求异常: ' + e.message;
+      }
+    }
+
+    // ==== 视图管理 ====
+
+    async function loadViews() {
+      const sheetId = document.getElementById('viewSheetId').value;
+      const out = document.getElementById('viewOutput');
+      const list = document.getElementById('viewList');
+      if (!sheetId) { list.innerHTML = ''; return; }
+
+      out.style.display = 'block';
+      out.className = 'output';
+      out.textContent = '正在加载视图...\n';
+      try {
+        const resp = await fetch(`/api/smartsheet/views?sheetId=${sheetId}`);
+        const json = await resp.json();
+        if (!json.success) throw new Error(json.error);
+
+        const views = json.data || [];
+        list.innerHTML = views.length === 0
+          ? '<p style="color:var(--text-muted);font-size:0.85rem">无视图</p>'
+          : `<table style="width:100%;font-size:0.82rem;border-collapse:collapse">
+            <thead><tr style="color:var(--text-muted);text-align:left">
+              <th>视图ID</th><th>标题</th><th>类型</th><th>操作</th>
+            </tr></thead>
+            <tbody>${views.map(v => `
+              <tr style="border-top:1px solid var(--border)">
+                <td style="padding:4px;font-family:monospace;font-size:0.75rem">${v.view_id}</td>
+                <td>${v.view_title || '-'}</td>
+                <td style="font-size:0.75rem">${v.view_type || '-'}</td>
+                <td>
+                  <button class="btn btn-danger" style="padding:2px 8px;font-size:0.7rem" onclick="deleteViewById('${v.view_id}')">删除</button>
+                </td>
+              </tr>
+            `).join('')}</tbody></table>`;
+        out.className = 'output success';
+        out.textContent = `✅ 已加载 ${views.length} 个视图`;
+      } catch (e) {
+        out.className = 'output error';
+        out.textContent = '❌ ' + e.message;
+      }
+    }
+
+    async function addView() {
+      const sheetId = document.getElementById('viewSheetId').value;
+      const viewTitle = document.getElementById('viewTitle').value.trim();
+      const viewType = document.getElementById('viewType').value;
+      const out = document.getElementById('viewOutput');
+      out.style.display = 'block';
+
+      if (!sheetId || !viewTitle) {
+        out.className = 'output error';
+        out.textContent = '❌ 请选择子表并输入视图标题';
+        return;
+      }
+
+      out.className = 'output';
+      out.textContent = '正在添加视图...\n';
+      try {
+        const resp = await fetch('/api/smartsheet/views/add', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ sheetId, viewTitle, viewType }),
+        });
+        const json = await resp.json();
+        out.className = json.success ? 'output success' : 'output error';
+        out.textContent = json.success
+          ? `✅ 视图已添加: ${JSON.stringify(json.data, null, 2)}`
+          : `❌ ${json.error}`;
+        if (json.success) { document.getElementById('viewTitle').value = ''; loadViews(); }
+      } catch (e) {
+        out.className = 'output error';
+        out.textContent = '❌ 请求异常: ' + e.message;
+      }
+    }
+
+    async function deleteViewById(viewId) {
+      const sheetId = document.getElementById('viewSheetId').value;
+      if (!confirm(`确定要删除视图 ${viewId} 吗？`)) return;
+
+      const out = document.getElementById('viewOutput');
+      out.style.display = 'block';
+      out.className = 'output';
+      out.textContent = '正在删除视图...\n';
+      try {
+        const resp = await fetch('/api/smartsheet/views/delete', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ sheetId, viewIds: [viewId] }),
+        });
+        const json = await resp.json();
+        out.className = json.success ? 'output success' : 'output error';
+        out.textContent = json.success ? `✅ ${json.message}` : `❌ ${json.error}`;
+        if (json.success) loadViews();
+      } catch (e) {
+        out.className = 'output error';
+        out.textContent = '❌ 请求异常: ' + e.message;
+      }
+    }
+
+    // ==== 编组管理 ====
+
+    async function loadGroups() {
+      const sheetId = document.getElementById('grpSheetId').value;
+      const out = document.getElementById('groupOutput');
+      const list = document.getElementById('groupList');
+      if (!sheetId) { list.innerHTML = ''; return; }
+
+      out.style.display = 'block';
+      out.className = 'output';
+      out.textContent = '正在加载编组...\n';
+      try {
+        const resp = await fetch(`/api/smartsheet/groups?sheetId=${sheetId}`);
+        const json = await resp.json();
+        if (!json.success) throw new Error(json.error);
+
+        const groups = json.data || [];
+        list.innerHTML = groups.length === 0
+          ? '<p style="color:var(--text-muted);font-size:0.85rem">无编组</p>'
+          : `<table style="width:100%;font-size:0.82rem;border-collapse:collapse">
+            <thead><tr style="color:var(--text-muted);text-align:left">
+              <th>编组ID</th><th>名称</th><th>包含字段数</th><th>操作</th>
+            </tr></thead>
+            <tbody>${groups.map(g => `
+              <tr style="border-top:1px solid var(--border)">
+                <td style="padding:4px;font-family:monospace;font-size:0.75rem">${g.field_group_id}</td>
+                <td>${g.name || '-'}</td>
+                <td>${(g.children || []).length}</td>
+                <td>
+                  <button class="btn" style="padding:2px 8px;font-size:0.7rem" onclick="renameGroup('${g.field_group_id}','${(g.name || '').replace(/'/g, "\\'")}')">重命名</button>
+                  <button class="btn btn-danger" style="padding:2px 8px;font-size:0.7rem" onclick="deleteGroupById('${g.field_group_id}')">删除</button>
+                </td>
+              </tr>
+            `).join('')}</tbody></table>`;
+        out.className = 'output success';
+        out.textContent = `✅ 已加载 ${groups.length} 个编组`;
+      } catch (e) {
+        out.className = 'output error';
+        out.textContent = '❌ ' + e.message;
+      }
+    }
+
+    async function addGroup() {
+      const sheetId = document.getElementById('grpSheetId').value;
+      const name = document.getElementById('grpName').value.trim();
+      const out = document.getElementById('groupOutput');
+      out.style.display = 'block';
+
+      if (!sheetId || !name) {
+        out.className = 'output error';
+        out.textContent = '❌ 请选择子表并输入编组名称';
+        return;
+      }
+
+      out.className = 'output';
+      out.textContent = '正在添加编组...\n';
+      try {
+        const resp = await fetch('/api/smartsheet/groups/add', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ sheetId, name }),
+        });
+        const json = await resp.json();
+        out.className = json.success ? 'output success' : 'output error';
+        out.textContent = json.success
+          ? `✅ 编组已添加: ${JSON.stringify(json.data, null, 2)}`
+          : `❌ ${json.error}`;
+        if (json.success) { document.getElementById('grpName').value = ''; loadGroups(); }
+      } catch (e) {
+        out.className = 'output error';
+        out.textContent = '❌ 请求异常: ' + e.message;
+      }
+    }
+
+    async function renameGroup(groupId, oldName) {
+      const sheetId = document.getElementById('grpSheetId').value;
+      const newName = prompt(`重命名编组「${oldName}」为：`, oldName);
+      if (!newName || newName === oldName) return;
+
+      const out = document.getElementById('groupOutput');
+      out.style.display = 'block';
+      out.className = 'output';
+      out.textContent = '正在更新编组...\n';
+      try {
+        const resp = await fetch('/api/smartsheet/groups/update', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ sheetId, fieldGroupId: groupId, name: newName }),
+        });
+        const json = await resp.json();
+        out.className = json.success ? 'output success' : 'output error';
+        out.textContent = json.success ? `✅ 编组已重命名` : `❌ ${json.error}`;
+        if (json.success) loadGroups();
+      } catch (e) {
+        out.className = 'output error';
+        out.textContent = '❌ 请求异常: ' + e.message;
+      }
+    }
+
+    async function deleteGroupById(groupId) {
+      const sheetId = document.getElementById('grpSheetId').value;
+      if (!confirm(`确定要删除编组 ${groupId} 吗？`)) return;
+
+      const out = document.getElementById('groupOutput');
+      out.style.display = 'block';
+      out.className = 'output';
+      out.textContent = '正在删除编组...\n';
+      try {
+        const resp = await fetch('/api/smartsheet/groups/delete', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ sheetId, fieldGroupId: groupId }),
+        });
+        const json = await resp.json();
+        out.className = json.success ? 'output success' : 'output error';
+        out.textContent = json.success ? `✅ ${json.message}` : `❌ ${json.error}`;
+        if (json.success) loadGroups();
+      } catch (e) {
+        out.className = 'output error';
+        out.textContent = '❌ 请求异常: ' + e.message;
+      }
+    }
+
+    // ==== 文档操作 ====
+
+    async function renameDocument() {
+      const newName = document.getElementById('newDocName').value.trim();
+      const out = document.getElementById('docOutput');
+      out.style.display = 'block';
+
+      if (!newName) {
+        out.className = 'output error';
+        out.textContent = '❌ 请输入新文档名称';
+        return;
+      }
+
+      out.className = 'output';
+      out.textContent = '正在重命名文档...\n';
+      try {
+        const resp = await fetch('/api/doc/rename', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ newName }),
+        });
+        const json = await resp.json();
+        out.className = json.success ? 'output success' : 'output error';
+        out.textContent = json.success ? `✅ 文档已重命名为「${newName}」` : `❌ ${json.error}`;
+      } catch (e) {
+        out.className = 'output error';
+        out.textContent = '❌ 请求异常: ' + e.message;
+      }
+    }
+
+    async function getDocumentInfo() {
+      const out = document.getElementById('docOutput');
+      out.style.display = 'block';
+      out.className = 'output';
+      out.textContent = '正在获取文档信息...\n';
+      try {
+        const resp = await fetch('/api/doc/info');
+        const json = await resp.json();
+        out.className = json.success ? 'output success' : 'output error';
+        out.textContent = json.success
+          ? JSON.stringify(json.data, null, 2)
+          : `❌ ${json.error}`;
+      } catch (e) {
+        out.className = 'output error';
+        out.textContent = '❌ 请求异常: ' + e.message;
+      }
+    }
+
+    async function deleteDocument() {
+      if (!confirm('⚠️ 确定要删除当前文档吗？\n\n这将永久删除该智能表格文档及其所有数据！\n建议先备份重要数据。')) return;
+      if (!confirm('再次确认：真的要删除吗？')) return;
+
+      const out = document.getElementById('docOutput');
+      out.style.display = 'block';
+      out.className = 'output';
+      out.textContent = '正在删除文档...\n';
+      try {
+        const resp = await fetch('/api/doc/delete', { method: 'POST' });
+        const json = await resp.json();
+        out.className = json.success ? 'output success' : 'output error';
+        out.textContent = json.success ? `✅ ${json.message}` : `❌ ${json.error}`;
+        if (json.success) refreshStatus();
+      } catch (e) {
+        out.className = 'output error';
+        out.textContent = '❌ 请求异常: ' + e.message;
+      }
+    }
+
+    async function clearCacheAndReload() {
+      try {
+        await fetch('/api/schema/refresh', { method: 'POST' });
+        await ensureSheetsLoaded();
+        await populateSheetSelects();
+      } catch (e) { /* ignore */ }
+    }
+  </script>
+</body>
+</html>

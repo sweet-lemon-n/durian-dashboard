@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>🍈 榴莲运输温度监控看板</title>
+  <link rel="stylesheet" href="style.css">
+  <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+</head>
+<body>
+  <div class="app">
+    <!-- 顶部导航 -->
+    <header class="header">
+      <div class="header-left">
+        <h1>🍈 榴莲运输温度监控看板</h1>
+        <span class="header-badge">LIVE</span>
+      </div>
+      <div class="header-right">
+        <span class="last-update" id="lastUpdate">--</span>
+        <button class="btn-refresh" id="btnRefresh" title="手动刷新">⟳ 刷新</button>
+        <button class="btn-settings" id="btnSettings">⚙</button>
+      </div>
+    </header>
+
+    <!-- 统计卡片行 -->
+    <section class="stats-row" id="statsRow">
+      <div class="stat-card">
+        <div class="stat-label">在途批次</div>
+        <div class="stat-value" id="statContainers">--</div>
+        <div class="stat-unit">柜</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">温度记录</div>
+        <div class="stat-value" id="statTotal">--</div>
+        <div class="stat-unit">条</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">平均温度</div>
+        <div class="stat-value" id="statAvgTemp">--</div>
+        <div class="stat-unit">°C</div>
+      </div>
+      <div class="stat-card warning" id="statAlertsCard">
+        <div class="stat-label">温度异常</div>
+        <div class="stat-value" id="statAbnormal">--</div>
+        <div class="stat-unit">条</div>
+      </div>
+    </section>
+
+    <!-- 告警横幅（有异常时显示） -->
+    <section class="alert-banner" id="alertBanner" style="display:none">
+      <div class="alert-banner-header">
+        <span>⚠️ 温度告警</span>
+        <span class="alert-count" id="alertCount">0</span>
+      </div>
+      <div class="alert-list" id="alertList"></div>
+    </section>
+
+    <!-- 图表区域 -->
+    <section class="chart-section">
+      <div class="chart-header">
+        <h2>📈 温度趋势</h2>
+        <div class="chart-controls">
+          <select id="containerFilter" class="filter-select">
+            <option value="">全部柜号</option>
+          </select>
+          <select id="hoursFilter" class="filter-select">
+            <option value="1">最近 1 小时</option>
+            <option value="6">最近 6 小时</option>
+            <option value="24" selected>最近 24 小时</option>
+            <option value="72">最近 3 天</option>
+            <option value="168">最近 7 天</option>
+          </select>
+        </div>
+      </div>
+      <div class="chart-container">
+        <canvas id="tempChart"></canvas>
+      </div>
+      <div class="chart-empty" id="chartEmpty" style="display:none">
+        <p>暂无温度数据</p>
+      </div>
+    </section>
+
+    <!-- 数据明细 -->
+    <section class="table-section">
+      <div class="table-header">
+        <h2>📋 温度记录明细</h2>
+        <div class="table-info">
+          <span id="tableRecordCount">0 条记录</span>
+        </div>
+      </div>
+      <div class="table-wrap">
+        <table id="recordsTable">
+          <thead>
+            <tr>
+              <th>柜号</th>
+              <th>温度</th>
+              <th>位置</th>
+              <th>香味</th>
+              <th>更新时间</th>
+              <th>状态</th>
+            </tr>
+          </thead>
+          <tbody id="recordsBody">
+            <tr class="empty-row">
+              <td colspan="6">加载中...</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- 底部 -->
+    <footer class="footer">
+      <span>数据源：企业微信智能表格</span>
+      <span>自动刷新间隔：<span id="refreshIntervalDisplay">30</span> 秒</span>
+    </footer>
+  </div>
+
+  <!-- 设置面板 -->
+  <div class="settings-overlay" id="settingsOverlay" style="display:none">
+    <div class="settings-panel">
+      <div class="settings-header">
+        <h3>⚙ 看板设置</h3>
+        <button class="btn-close" id="btnSettingsClose">✕</button>
+      </div>
+      <div class="settings-body">
+        <div class="setting-item">
+          <label>温度正常范围</label>
+          <div class="setting-range">
+            <input type="number" id="settingTempMin" class="setting-input" step="0.5"> °C
+            <span>~</span>
+            <input type="number" id="settingTempMax" class="setting-input" step="0.5"> °C
+          </div>
+        </div>
+        <div class="setting-item">
+          <label>刷新间隔（秒）</label>
+          <input type="number" id="settingRefresh" class="setting-input" min="5" max="300" step="5">
+        </div>
+        <button class="btn-primary" id="btnSaveSettings">保存设置</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>

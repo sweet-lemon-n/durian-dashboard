@@ -1,0 +1,919 @@
+/**
+ * 榴莲运输温度监控看板 — 后端服务
+ *
+ * 启动: node server.js
+ * 依赖: .env 文件中配置 CORPID, CORPSECRET, DOCID
+ */
+
+require('dotenv').config();
+const express = require('express');
+const path = require('path');
+const wecom = require('./lib/wecom');
+const wecomCrypto = require('./lib/crypto');
+
+const app = express();
+const PORT = process.env.PORT || 3000;
+const DOCID = process.env.DOCID;
+
+// ---- 缓存：表格结构（避免每次请求都查企微API） ----
+
+let schemaCache = {
+  data: null,         // { sheets: [...], detected: { tempSheet, infoSheet } }
+  expiresAt: 0,
+};
+
+const SCHEMA_CACHE_TTL = 5 * 60 * 1000; // 5 分钟
+
+/**
+ * 获取文档结构（带缓存），自动识别温度子表和基础信息子表
+ *
+ * 识别策略：
+ *   - 温度子表：字段标题含「温度」「temp」等关键词
+ *   - 信息子表：第一个非温度子表的 smartsheet
+ *   - 如果只有一个子表，则兼作温度子表
+ */
+async function getDocumentSchema() {
+  const now = Date.now();
+  if (schemaCache.data && schemaCache.expiresAt > now) {
+    return schemaCache.data;
+  }
+
+  if (!DOCID) {
+    throw new Error('缺少 DOCID 环境变量配置');
+  }
+
+  console.log('[schema] 开始获取文档结构...');
+
+  // 1. 获取所有子表
+  const sheetResp = await wecom.getSheets(DOCID);
+  if (sheetResp.errcode !== 0) {
+    throw new Error(`获取子表失败: [${sheetResp.errcode}] ${sheetResp.errmsg}`);
+  }
+
+  const sheets = sheetResp.sheet_list || [];
+  console.log(`[schema] 找到 ${sheets.length} 个子表:`, sheets.map(s => s.title).join(', '));
+
+  // 2. 获取每个智能表的字段
+  const sheetDetails = [];
+  const tempKeywords = ['温度', 'temp', '℃', '柜号', '位置', '香味'];
+  const infoKeywords = ['订单', '柜号', '客户', '目的地', '出发地', '批次'];
+
+  for (const sheet of sheets) {
+    if (sheet.type !== 'smartsheet') continue;
+
+    try {
+      const fieldsResp = await wecom.getFields(DOCID, sheet.sheet_id);
+      if (fieldsResp.errcode !== 0) {
+        console.warn(`[schema] 获取子表「${sheet.title}」字段失败: ${fieldsResp.errmsg}`);
+        continue;
+      }
+
+      const fields = fieldsResp.fields || [];
+      const fieldTitles = fields.map(f => f.field_title);
+      const fieldMap = {};
+      fields.forEach(f => { fieldMap[f.field_title] = f; });
+
+      sheetDetails.push({
+        ...sheet,
+        fields,
+        fieldTitles,
+        fieldMap,
+      });
+
+      console.log(`[schema] 子表「${sheet.title}」字段:`, fieldTitles.join(', '));
+    } catch (err) {
+      console.warn(`[schema] 获取子表「${sheet.title}」字段异常:`, err.message);
+    }
+  }
+
+  // 3. 自动识别温度子表与信息子表
+  let tempSheet = null;
+  let infoSheet = null;
+
+  // 优先按关键词匹配
+  for (const sheet of sheetDetails) {
+    const titles = sheet.fieldTitles.join(' ');
+    const lowerTitles = titles.toLowerCase();
+
+    const tempScore = tempKeywords.filter(k => lowerTitles.includes(k.toLowerCase())).length;
+    const infoScore = infoKeywords.filter(k => lowerTitles.includes(k.toLowerCase())).length;
+
+    if (tempScore > 0 && !tempSheet) {
+      tempSheet = sheet;
+    } else if (tempScore > 0 && tempSheet) {
+      // 如果已有一个温度子表，新来的按 infoScore 判断
+      if (!infoSheet) infoSheet = sheet;
+    } else if (!infoSheet) {
+      infoSheet = sheet;
+    }
+  }
+
+  // 如果只有一个子表，它既是信息表也是温度表
+  if (sheetDetails.length === 1) {
+    tempSheet = sheetDetails[0];
+    infoSheet = sheetDetails[0];
+  }
+  // 如果没识别到温度子表，用第一个
+  if (!tempSheet && sheetDetails.length > 0) {
+    tempSheet = sheetDetails[0];
+  }
+  // 如果没识别到信息子表，用第一个
+  if (!infoSheet && sheetDetails.length > 0) {
+    infoSheet = sheetDetails[0];
+  }
+
+  const result = {
+    sheets: sheetDetails,
+    detected: { tempSheet, infoSheet },
+  };
+
+  schemaCache.data = result;
+  schemaCache.expiresAt = now + SCHEMA_CACHE_TTL;
+
+  console.log(`[schema] 识别结果 — 温度子表: 「${tempSheet?.title || '无'}」, 信息子表: 「${infoSheet?.title || '无'}」`);
+
+  return result;
+}
+
+/**
+ * 清除 schema 缓存
+ */
+function clearSchemaCache() {
+  schemaCache.data = null;
+  schemaCache.expiresAt = 0;
+}
+
+// ---- Express 中间件 ----
+
+app.use(express.json());
+app.use(express.static(path.join(__dirname, 'public')));
+
+// /admin 路由 → admin.html
+app.get('/admin', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'admin.html'));
+});
+
+// CORS（如果前端部署在不同端口）
+app.use((req, res, next) => {
+  res.header('Access-Control-Allow-Origin', '*');
+  res.header('Access-Control-Allow-Headers', 'Content-Type');
+  next();
+});
+
+// 回调 URL 路由需要原始 body（XML 格式）
+app.use('/callback', express.raw({ type: 'application/xml' }));
+app.use('/callback', express.text({ type: 'text/xml' }));
+
+// ---- 企业微信回调 URL 验证（用于配置可信IP前置条件） ----
+
+/**
+ * GET /callback — 企微回调 URL 有效性验证
+ *
+ * 企微后台保存回调配置时，会向该 URL 发 GET 请求验证
+ * 需要在 1 秒内返回解密后的 echostr 明文
+ */
+app.get('/callback', (req, res) => {
+  const token = process.env.WECOM_TOKEN;
+  const encodingAESKey = process.env.WECOM_ENCODING_AES_KEY;
+
+  if (!token || !encodingAESKey) {
+    console.error('[callback] 缺少 WECOM_TOKEN 或 WECOM_ENCODING_AES_KEY 环境变量');
+    return res.status(500).send('server config error');
+  }
+
+  const result = wecomCrypto.handleVerifyUrl(req.query, token, encodingAESKey);
+
+  if (!result.success) {
+    console.error('[callback] URL 验证失败:', result.error);
+    return res.status(403).send(result.error);
+  }
+
+  console.log('[callback] URL 验证成功');
+  // 直接返回明文，不能加引号、BOM、换行
+  res.set('Content-Type', 'text/plain');
+  res.send(result.echo);
+});
+
+/**
+ * POST /callback — 接收企微推送的消息/事件（预留）
+ */
+app.post('/callback', (req, res) => {
+  // 企微服务器 5 秒内收不到响应会重试，所以先回空包
+  // 后续如需处理智能表格变更事件，可在此解析 XML + 解密
+  console.log('[callback] 收到 POST 推送');
+  res.send('success');
+});
+
+// ---- API 路由 ----
+
+/**
+ * GET /api/config/info
+ * 返回文档结构信息（子表列表、字段定义、识别结果）
+ */
+app.get('/api/config/info', async (req, res) => {
+  try {
+    const schema = await getDocumentSchema();
+    res.json({
+      success: true,
+      data: {
+        docid: DOCID,
+        sheets: schema.sheets.map(s => ({
+          sheet_id: s.sheet_id,
+          title: s.title,
+          type: s.type,
+          fields: s.fields,
+        })),
+        detected: {
+          tempSheet: schema.detected.tempSheet ? {
+            sheet_id: schema.detected.tempSheet.sheet_id,
+            title: schema.detected.tempSheet.title,
+          } : null,
+          infoSheet: schema.detected.infoSheet ? {
+            sheet_id: schema.detected.infoSheet.sheet_id,
+            title: schema.detected.infoSheet.title,
+          } : null,
+        },
+      },
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+/**
+ * GET /api/dashboard
+ * 返回看板聚合数据（温度记录 + 统计信息 + 告警）
+ *
+ * Query params:
+ *   container  - 筛选指定柜号
+ *   limit      - 返回记录数上限，默认 200
+ *   hours      - 时间范围（小时），默认 24
+ */
+app.get('/api/dashboard', async (req, res) => {
+  try {
+    const schema = await getDocumentSchema();
+    const { tempSheet, infoSheet } = schema.detected;
+
+    if (!tempSheet) {
+      return res.json({
+        success: true,
+        data: {
+          records: [],
+          stats: { total: 0, abnormal: 0, avgTemp: 0, containerCount: 0 },
+          containers: [],
+          alerts: [],
+          message: '未找到温度数据子表，请先在智能表格文档中创建温度记录子表',
+        },
+      });
+    }
+
+    const { container, limit = '200', hours = '24' } = req.query;
+    const recordLimit = Math.min(parseInt(limit) || 200, 1000);
+    const hoursNum = parseInt(hours) || 24;
+
+    // 识别关键字段
+    const fieldMap = {};
+    tempSheet.fields.forEach(f => {
+      fieldMap[f.field_title] = f;
+    });
+
+    // 自动匹配字段名
+    const tempField = findField(tempSheet.fieldTitles, ['温度', 'temp', '℃']);
+    const containerField = findField(tempSheet.fieldTitles, ['柜号', '柜编号', 'container', '箱号']);
+    const locationField = findField(tempSheet.fieldTitles, ['位置', '地点', 'location', 'gps', '坐标']);
+    const aromaField = findField(tempSheet.fieldTitles, ['香味', '气味', 'aroma', 'smell']);
+    const timeField = findField(tempSheet.fieldTitles, ['时间', '更新时间', '记录时间', 'date', 'time', '创建时间']);
+
+    // 排序：按时间倒序
+    const sort = [];
+    if (timeField) {
+      sort.push({ field_title: timeField, desc: true });
+    }
+
+    // 构建查询选项
+    const queryOpts = { sort, limit: recordLimit };
+
+    // 按柜号筛选
+    if (container) {
+      const cField = containerField;
+      if (cField) {
+        queryOpts.filterSpec = {
+          conjunction: 'CONJUNCTION_AND',
+          conditions: [{
+            field_id: fieldMap[cField]?.field_id,
+            field_type: 'FIELD_TYPE_TEXT',
+            operator: 'OPERATOR_CONTAINS',
+            string_value: { value: [container] },
+          }],
+        };
+      }
+    }
+
+    // 查询温度记录
+    const records = await wecom.getAllRecords(DOCID, tempSheet.sheet_id, queryOpts);
+
+    // 解析记录
+    const tempMin = parseFloat(process.env.TEMP_MIN || 2);
+    const tempMax = parseFloat(process.env.TEMP_MAX || 8);
+
+    const parsedRecords = records.map(r => {
+      const tempRaw = wecom.getRecordValue(r, tempField);
+      const temp = tempRaw !== null ? parseFloat(tempRaw) : null;
+      const isAbnormal = temp !== null && (temp < tempMin || temp > tempMax);
+
+      return {
+        recordId: r.record_id,
+        containerNo: wecom.getRecordValue(r, containerField) || '-',
+        temperature: temp,
+        temperatureDisplay: temp !== null ? `${temp}°C` : '-',
+        location: wecom.getRecordValue(r, locationField) || '-',
+        aroma: wecom.getRecordValue(r, aromaField) || '-',
+        updateTime: parseTimeValue(r, timeField),
+        isAbnormal,
+        creator: r.creator_name || '',
+        updater: r.updater_name || '',
+      };
+    });
+
+    // 过滤掉过旧的数据
+    const cutoffTime = new Date(Date.now() - hoursNum * 3600 * 1000);
+    const recentRecords = parsedRecords.filter(r => {
+      if (!r.updateTime) return true; // 没时间的不过滤
+      return new Date(r.updateTime) >= cutoffTime;
+    });
+
+    // 统计
+    const validTemps = recentRecords.filter(r => r.temperature !== null);
+    const abnormalRecords = recentRecords.filter(r => r.isAbnormal);
+    const avgTemp = validTemps.length > 0
+      ? validTemps.reduce((s, r) => s + r.temperature, 0) / validTemps.length
+      : 0;
+
+    const containerSet = new Set(recentRecords.map(r => r.containerNo).filter(c => c !== '-'));
+    const containerCount = containerSet.size;
+
+    // 统计数据
+    const stats = {
+      total: recentRecords.length,
+      containerCount,
+      abnormalCount: abnormalRecords.length,
+      avgTemp: Math.round(avgTemp * 10) / 10,
+      tempMin,
+      tempMax,
+    };
+
+    // 告警列表
+    const alerts = abnormalRecords.slice(0, 10).map(r => ({
+      containerNo: r.containerNo,
+      temperature: r.temperature,
+      reason: r.temperature < tempMin ? `温度偏低 (${r.temperature}°C < ${tempMin}°C)` : `温度偏高 (${r.temperature}°C > ${tempMax}°C)`,
+      time: r.updateTime,
+      location: r.location,
+    }));
+
+    // 柜列表（用于筛选下拉）
+    const containers = Array.from(containerSet).map(c => ({ containerNo: c }));
+
+    // 可用字段信息（告知前端可展示哪些列）
+    const availableFields = {
+      temperature: tempField,
+      containerNo: containerField,
+      location: locationField,
+      aroma: aromaField,
+      time: timeField,
+    };
+
+    res.json({
+      success: true,
+      data: {
+        records: recentRecords,
+        stats,
+        containers,
+        alerts,
+        availableFields,
+        sheets: {
+          temp: { sheet_id: tempSheet.sheet_id, title: tempSheet.title },
+          info: infoSheet ? { sheet_id: infoSheet.sheet_id, title: infoSheet.title } : null,
+        },
+      },
+    });
+  } catch (err) {
+    console.error('[dashboard] 错误:', err);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+/**
+ * GET /api/temperature/history
+ * 温度历史数据（用于图表）
+ *
+ * Query params:
+ *   container - 筛选指定柜号（必填？不填则返回所有）
+ *   hours     - 时间范围（小时），默认 24
+ */
+app.get('/api/temperature/history', async (req, res) => {
+  try {
+    const schema = await getDocumentSchema();
+    const { tempSheet } = schema.detected;
+
+    if (!tempSheet) {
+      return res.json({ success: true, data: [] });
+    }
+
+    const { container, hours = '168' } = req.query;
+    const hoursNum = parseInt(hours) || 168;
+
+    const tempField = findField(tempSheet.fieldTitles, ['温度', 'temp', '℃']);
+    const containerField = findField(tempSheet.fieldTitles, ['柜号', '柜编号', 'container']);
+    const timeField = findField(tempSheet.fieldTitles, ['时间', '更新时间', '记录时间', 'date', 'time', '创建时间']);
+
+    const sort = timeField ? [{ field_title: timeField, desc: false }] : [];
+
+    const queryOpts = { sort, limit: 1000 };
+
+    // 如果有柜号筛选
+    if (container && containerField) {
+      const fieldMap = {};
+      tempSheet.fields.forEach(f => { fieldMap[f.field_title] = f; });
+      queryOpts.filterSpec = {
+        conjunction: 'CONJUNCTION_AND',
+        conditions: [{
+          field_id: fieldMap[containerField]?.field_id,
+          field_type: 'FIELD_TYPE_TEXT',
+          operator: 'OPERATOR_CONTAINS',
+          string_value: { value: [container] },
+        }],
+      };
+    }
+
+    const records = await wecom.getAllRecords(DOCID, tempSheet.sheet_id, queryOpts);
+
+    const cutoffTime = new Date(Date.now() - hoursNum * 3600 * 1000);
+    const parsed = records
+      .map(r => ({
+        time: parseTimeValue(r, timeField),
+        temperature: parseFloat(wecom.getRecordValue(r, tempField)),
+        containerNo: wecom.getRecordValue(r, containerField),
+      }))
+      .filter(r => r.temperature && !isNaN(r.temperature))
+      .filter(r => {
+        if (!r.time) return true;
+        return new Date(r.time) >= cutoffTime;
+      });
+
+    res.json({ success: true, data: parsed });
+  } catch (err) {
+    console.error('[history] 错误:', err);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+/**
+ * POST /api/schema/refresh
+ * 手动刷新 schema 缓存
+ */
+app.post('/api/schema/refresh', (req, res) => {
+  clearSchemaCache();
+  res.json({ success: true, message: 'Schema 缓存已清除，下次请求将重新获取' });
+});
+
+/**
+ * POST /api/setup — 一键初始化：创建智 能表格文档 + 建立温度记录子表 + 添加字段
+ *
+ * 当已有的智能表格不属于当前应用时，通过此接口创建新表格
+ * 创建后自动更新 .env 文件中的 DOCID
+ */
+app.post('/api/setup', async (req, res) => {
+  try {
+    const docName = (req.body && req.body.docName) || '榴莲温度监控数据';
+    const sheetTitle = (req.body && req.body.sheetTitle) || '温度记录';
+
+    console.log(`[setup] 开始创建智能表格「${docName}」...`);
+
+    // 1. 创建智能表格文档
+    const createResp = await wecom.createDoc({ docType: 10, docName });
+    if (createResp.errcode !== 0) {
+      throw new Error(`创建文档失败: [${createResp.errcode}] ${createResp.errmsg}`);
+    }
+    const newDocid = createResp.docid;
+    const docUrl = createResp.url;
+    console.log(`[setup] 文档已创建: ${newDocid} (${docUrl})`);
+
+    // 2. 添加「温度记录」子表
+    const sheetResp = await wecom.addSheet(newDocid, { title: sheetTitle });
+    if (sheetResp.errcode !== 0) {
+      throw new Error(`添加子表失败: [${sheetResp.errcode}] ${sheetResp.errmsg}`);
+    }
+    const newSheetId = sheetResp.properties.sheet_id;
+    console.log(`[setup] 子表已创建: ${newSheetId}`);
+
+    // 3. 添加字段
+    const fields = [
+      { field_title: '柜号', field_type: 'FIELD_TYPE_TEXT' },
+      { field_title: '温度', field_type: 'FIELD_TYPE_NUMBER', property_number: { decimal_places: 1 } },
+      { field_title: '位置信息', field_type: 'FIELD_TYPE_TEXT' },
+      { field_title: '香味', field_type: 'FIELD_TYPE_TEXT' },
+      { field_title: '更新时间', field_type: 'FIELD_TYPE_DATE_TIME', property_date_time: { format: 'yyyy-mm-dd hh:mm', auto_fill: false } },
+    ];
+
+    const fieldsResp = await wecom.addFields(newDocid, newSheetId, fields);
+    if (fieldsResp.errcode !== 0) {
+      throw new Error(`添加字段失败: [${fieldsResp.errcode}] ${fieldsResp.errmsg}`);
+    }
+    console.log(`[setup] 已添加 ${fieldsResp.fields.length} 个字段`);
+
+    // 4. 更新 .env 文件中的 DOCID
+    const fs = require('fs');
+    const envPath = require('path').join(__dirname, '.env');
+    let envContent = fs.readFileSync(envPath, 'utf8');
+
+    // 替换或追加 DOCID
+    if (envContent.match(/^DOCID=/m)) {
+      envContent = envContent.replace(/^DOCID=.*/m, `DOCID=${newDocid}`);
+    } else {
+      envContent += `\nDOCID=${newDocid}\n`;
+    }
+    fs.writeFileSync(envPath, envContent);
+
+    // 更新运行时变量
+    process.env.DOCID = newDocid;
+    clearSchemaCache();
+
+    res.json({
+      success: true,
+      data: {
+        docid: newDocid,
+        url: docUrl,
+        sheetId: newSheetId,
+        sheetTitle,
+        fields: fieldsResp.fields.map(f => ({ field_id: f.field_id, field_title: f.field_title, field_type: f.field_type })),
+        message: '智能表格创建成功！已自动更新 DOCID 配置',
+      },
+    });
+  } catch (err) {
+    console.error('[setup] 错误:', err);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// ---- 文档管理 API ----
+
+/**
+ * POST /api/doc/rename
+ * Body: { docid?, newName }
+ */
+app.post('/api/doc/rename', async (req, res) => {
+  try {
+    const { newName } = req.body || {};
+    if (!newName) throw new Error('缺少 newName 参数');
+    const result = await wecom.renameDoc(DOCID, newName);
+    if (result.errcode !== 0) throw new Error(`[${result.errcode}] ${result.errmsg}`);
+    res.json({ success: true, data: result });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+/**
+ * POST /api/doc/delete
+ * 删除当前文档（危险操作！）
+ */
+app.post('/api/doc/delete', async (req, res) => {
+  try {
+    const result = await wecom.deleteDoc(DOCID);
+    if (result.errcode !== 0) throw new Error(`[${result.errcode}] ${result.errmsg}`);
+    // 清除 DOCID
+    process.env.DOCID = '';
+    clearSchemaCache();
+    res.json({ success: true, message: '文档已删除，DOCID 已清除' });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+/**
+ * GET /api/doc/info
+ * 获取当前文档基础信息
+ */
+app.get('/api/doc/info', async (req, res) => {
+  try {
+    const result = await wecom.getDocInfo(DOCID);
+    if (result.errcode !== 0) throw new Error(`[${result.errcode}] ${result.errmsg}`);
+    res.json({ success: true, data: result.doc_base_info });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// ---- 子表管理 API ----
+
+/**
+ * POST /api/smartsheet/sheet/delete
+ * Body: { sheetId }
+ */
+app.post('/api/smartsheet/sheet/delete', async (req, res) => {
+  try {
+    const { sheetId } = req.body || {};
+    if (!sheetId) throw new Error('缺少 sheetId 参数');
+    const result = await wecom.deleteSheet(DOCID, sheetId);
+    if (result.errcode !== 0) throw new Error(`[${result.errcode}] ${result.errmsg}`);
+    clearSchemaCache();
+    res.json({ success: true, message: '子表已删除' });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+/**
+ * POST /api/smartsheet/sheet/update
+ * Body: { sheetId, title }
+ */
+app.post('/api/smartsheet/sheet/update', async (req, res) => {
+  try {
+    const { sheetId, title } = req.body || {};
+    if (!sheetId) throw new Error('缺少 sheetId 参数');
+    const result = await wecom.updateSheet(DOCID, { sheet_id: sheetId, title });
+    if (result.errcode !== 0) throw new Error(`[${result.errcode}] ${result.errmsg}`);
+    clearSchemaCache();
+    res.json({ success: true, message: '子表已更新' });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// ---- 记录管理 API ----
+
+/**
+ * POST /api/smartsheet/records/add
+ * Body: { sheetId, records, keyType? }
+ */
+app.post('/api/smartsheet/records/add', async (req, res) => {
+  try {
+    const { sheetId, records, keyType } = req.body || {};
+    if (!sheetId) throw new Error('缺少 sheetId 参数');
+    if (!records || !Array.isArray(records)) throw new Error('records 必须是数组');
+    const result = await wecom.addRecords(DOCID, sheetId, records, keyType);
+    if (result.errcode !== 0) throw new Error(`[${result.errcode}] ${result.errmsg}`);
+    res.json({ success: true, data: result });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+/**
+ * POST /api/smartsheet/records/delete
+ * Body: { sheetId, recordIds }
+ */
+app.post('/api/smartsheet/records/delete', async (req, res) => {
+  try {
+    const { sheetId, recordIds } = req.body || {};
+    if (!sheetId) throw new Error('缺少 sheetId 参数');
+    if (!recordIds || !Array.isArray(recordIds)) throw new Error('recordIds 必须是数组');
+    const result = await wecom.deleteRecords(DOCID, sheetId, recordIds);
+    if (result.errcode !== 0) throw new Error(`[${result.errcode}] ${result.errmsg}`);
+    res.json({ success: true, message: `已删除 ${recordIds.length} 条记录` });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+/**
+ * POST /api/smartsheet/records/update
+ * Body: { sheetId, records, keyType? }
+ */
+app.post('/api/smartsheet/records/update', async (req, res) => {
+  try {
+    const { sheetId, records, keyType } = req.body || {};
+    if (!sheetId) throw new Error('缺少 sheetId 参数');
+    if (!records || !Array.isArray(records)) throw new Error('records 必须是数组');
+    const result = await wecom.updateRecords(DOCID, sheetId, records, keyType);
+    if (result.errcode !== 0) throw new Error(`[${result.errcode}] ${result.errmsg}`);
+    res.json({ success: true, data: result });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// ---- 字段管理 API ----
+
+/**
+ * POST /api/smartsheet/fields/delete
+ * Body: { sheetId, fieldIds }
+ */
+app.post('/api/smartsheet/fields/delete', async (req, res) => {
+  try {
+    const { sheetId, fieldIds } = req.body || {};
+    if (!sheetId) throw new Error('缺少 sheetId 参数');
+    if (!fieldIds || !Array.isArray(fieldIds)) throw new Error('fieldIds 必须是数组');
+    const result = await wecom.deleteFields(DOCID, sheetId, fieldIds);
+    if (result.errcode !== 0) throw new Error(`[${result.errcode}] ${result.errmsg}`);
+    clearSchemaCache();
+    res.json({ success: true, message: `已删除 ${fieldIds.length} 个字段` });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+/**
+ * POST /api/smartsheet/fields/update
+ * Body: { sheetId, fields }
+ */
+app.post('/api/smartsheet/fields/update', async (req, res) => {
+  try {
+    const { sheetId, fields } = req.body || {};
+    if (!sheetId) throw new Error('缺少 sheetId 参数');
+    if (!fields || !Array.isArray(fields)) throw new Error('fields 必须是数组');
+    const result = await wecom.updateFields(DOCID, sheetId, fields);
+    if (result.errcode !== 0) throw new Error(`[${result.errcode}] ${result.errmsg}`);
+    clearSchemaCache();
+    res.json({ success: true, message: '字段已更新' });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// ---- 视图管理 API ----
+
+/**
+ * GET /api/smartsheet/views?sheetId=xxx
+ */
+app.get('/api/smartsheet/views', async (req, res) => {
+  try {
+    const sheetId = req.query.sheetId;
+    if (!sheetId) throw new Error('缺少 sheetId 参数');
+    const result = await wecom.getViews(DOCID, sheetId);
+    if (result.errcode !== 0) throw new Error(`[${result.errcode}] ${result.errmsg}`);
+    res.json({ success: true, data: result.views || [] });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+/**
+ * POST /api/smartsheet/views/add
+ * Body: { sheetId, viewTitle, viewType?, propertyGantt?, propertyCalendar? }
+ */
+app.post('/api/smartsheet/views/add', async (req, res) => {
+  try {
+    const { sheetId, viewTitle, viewType, propertyGantt, propertyCalendar } = req.body || {};
+    if (!sheetId || !viewTitle) throw new Error('缺少 sheetId 或 viewTitle 参数');
+    const result = await wecom.addView(DOCID, sheetId, { viewTitle, viewType, propertyGantt, propertyCalendar });
+    if (result.errcode !== 0) throw new Error(`[${result.errcode}] ${result.errmsg}`);
+    res.json({ success: true, data: result.view });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+/**
+ * POST /api/smartsheet/views/delete
+ * Body: { sheetId, viewIds }
+ */
+app.post('/api/smartsheet/views/delete', async (req, res) => {
+  try {
+    const { sheetId, viewIds } = req.body || {};
+    if (!sheetId || !viewIds) throw new Error('缺少 sheetId 或 viewIds 参数');
+    const result = await wecom.deleteView(DOCID, sheetId, viewIds);
+    if (result.errcode !== 0) throw new Error(`[${result.errcode}] ${result.errmsg}`);
+    res.json({ success: true, message: '视图已删除' });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+/**
+ * POST /api/smartsheet/views/update
+ * Body: { sheetId, viewId, viewTitle?, property? }
+ */
+app.post('/api/smartsheet/views/update', async (req, res) => {
+  try {
+    const { sheetId, viewId, viewTitle, property } = req.body || {};
+    if (!sheetId || !viewId) throw new Error('缺少 sheetId 或 viewId 参数');
+    const result = await wecom.updateView(DOCID, sheetId, viewId, { viewTitle, property });
+    if (result.errcode !== 0) throw new Error(`[${result.errcode}] ${result.errmsg}`);
+    res.json({ success: true, data: result.view });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// ---- 编组管理 API ----
+
+/**
+ * GET /api/smartsheet/groups?sheetId=xxx
+ */
+app.get('/api/smartsheet/groups', async (req, res) => {
+  try {
+    const sheetId = req.query.sheetId;
+    if (!sheetId) throw new Error('缺少 sheetId 参数');
+    const result = await wecom.getGroups(DOCID, sheetId);
+    if (result.errcode !== 0) throw new Error(`[${result.errcode}] ${result.errmsg}`);
+    res.json({ success: true, data: result.field_groups || [] });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+/**
+ * POST /api/smartsheet/groups/add
+ * Body: { sheetId, name, children? }
+ */
+app.post('/api/smartsheet/groups/add', async (req, res) => {
+  try {
+    const { sheetId, name, children } = req.body || {};
+    if (!sheetId || !name) throw new Error('缺少 sheetId 或 name 参数');
+    const result = await wecom.addGroup(DOCID, sheetId, name, children);
+    if (result.errcode !== 0) throw new Error(`[${result.errcode}] ${result.errmsg}`);
+    res.json({ success: true, data: result.field_group });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+/**
+ * POST /api/smartsheet/groups/delete
+ * Body: { sheetId, fieldGroupId }
+ */
+app.post('/api/smartsheet/groups/delete', async (req, res) => {
+  try {
+    const { sheetId, fieldGroupId } = req.body || {};
+    if (!sheetId || !fieldGroupId) throw new Error('缺少 sheetId 或 fieldGroupId 参数');
+    const result = await wecom.deleteGroup(DOCID, sheetId, fieldGroupId);
+    if (result.errcode !== 0) throw new Error(`[${result.errcode}] ${result.errmsg}`);
+    res.json({ success: true, message: '编组已删除' });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+/**
+ * POST /api/smartsheet/groups/update
+ * Body: { sheetId, fieldGroupId, name?, children? }
+ */
+app.post('/api/smartsheet/groups/update', async (req, res) => {
+  try {
+    const { sheetId, fieldGroupId, name, children } = req.body || {};
+    if (!sheetId || !fieldGroupId) throw new Error('缺少 sheetId 或 fieldGroupId 参数');
+    const result = await wecom.updateGroup(DOCID, sheetId, fieldGroupId, { name, children });
+    if (result.errcode !== 0) throw new Error(`[${result.errcode}] ${result.errmsg}`);
+    res.json({ success: true, data: result.field_group });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// ---- 辅助函数 ----
+
+/**
+ * 在字段标题列表中按关键词优先级查找匹配字段
+ */
+function findField(fieldTitles, keywords) {
+  for (const kw of keywords) {
+    const match = fieldTitles.find(t => t.toLowerCase().includes(kw.toLowerCase()));
+    if (match) return match;
+  }
+  // 兜底：返回第一个字段
+  return fieldTitles.length > 0 ? fieldTitles[0] : null;
+}
+
+/**
+ * 从记录中解析时间值
+ */
+function parseTimeValue(record, timeField) {
+  if (!timeField) {
+    // 优先用 update_time
+    if (record.update_time && record.update_time !== '0') {
+      return formatTimestamp(record.update_time);
+    }
+    return record.create_time ? formatTimestamp(record.create_time) : null;
+  }
+
+  const raw = wecom.getRecordValue(record, timeField);
+  if (!raw) return null;
+
+  // 可能是毫秒时间戳（数字/字符串）
+  const ts = parseInt(raw);
+  if (!isNaN(ts) && ts > 1000000000000) {
+    return formatTimestamp(ts);
+  }
+  return raw; // 直接返回原始字符串
+}
+
+function formatTimestamp(ts) {
+  const ms = typeof ts === 'string' ? parseInt(ts) : ts;
+  if (isNaN(ms)) return ts;
+  const d = new Date(ms);
+  return d.toISOString();
+}
+
+// ---- 启动 ----
+
+app.listen(PORT, () => {
+  console.log(`\n🍈  榴莲温度监控看板服务已启动`);
+  console.log(`   本地访问: http://localhost:${PORT}`);
+  console.log(`   DOCID: ${DOCID || '（未配置）'}`);
+  console.log(`   温度告警阈值: ${process.env.TEMP_MIN || 2}°C ~ ${process.env.TEMP_MAX || 8}°C\n`);
+});
+
+// 导出供测试
+module.exports = app;

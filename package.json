@@ -1,0 +1,14 @@
+{
+  "name": "durian-temp-dashboard",
+  "version": "1.0.0",
+  "description": "榴莲运输温度监控看板 - 数据源来自企业微信智能表格",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "axios": "^1.7.0",
+    "dotenv": "^16.4.0",
+    "express": "^4.21.0"
+  }
+}
