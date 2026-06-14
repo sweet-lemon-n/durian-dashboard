@@ -331,85 +331,125 @@ function updateChart(records) {
 
   const ctx = dom.tempChart.getContext('2d');
 
-  chart = new Chart(ctx, {
-    type: 'line',
-    data: { datasets: allDatasets },
-    options: {
-      responsive: true,
-      maintainAspectRatio: false,
-      interaction: {
-        mode: 'index',
-        intersect: false,
+  try {
+    chart = new Chart(ctx, {
+      type: 'line',
+      data: { datasets: allDatasets },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        interaction: {
+          mode: 'index',
+          intersect: false,
+        },
+        plugins: {
+          legend: {
+            labels: {
+              color: '#8ba4bc',
+              usePointStyle: true,
+              pointStyleWidth: 10,
+              padding: 20,
+              font: { size: 11 },
+              filter: (item) => {
+                return item.dataset.data.length > 0;
+              },
+            },
+          },
+          tooltip: {
+            callbacks: {
+              title: (items) => {
+                const item = items[0];
+                if (item.raw.x) {
+                  return formatTime(item.raw.x);
+                }
+                return '';
+              },
+              label: (ctx) => {
+                const d = ctx.raw;
+                const typeStr = d.type ? `[${d.type}]` : '';
+                if (d.containerNo) {
+                  return `${d.containerNo} ${typeStr}: ${d.y}°C`;
+                }
+                return `${ctx.dataset.label}: ${d.y}°C`;
+              },
+            },
+          },
+        },
+        scales: {
+          x: {
+            type: 'time',
+            time: {
+              tooltipFormat: 'MM-dd HH:mm',
+              displayFormats: {
+                minute: 'HH:mm',
+                hour: 'MM-dd HH:mm',
+                day: 'MM-dd',
+              },
+            },
+            ticks: {
+              color: '#5a7a94',
+              maxTicksLimit: 12,
+            },
+            grid: {
+              color: '#2a405540',
+            },
+          },
+          y: {
+            title: {
+              display: true,
+              text: '温度 (°C)',
+              color: '#8ba4bc',
+            },
+            ticks: {
+              color: '#5a7a94',
+              callback: (v) => v + '°C',
+            },
+            grid: {
+              color: '#2a405540',
+            },
+          },
+        },
       },
-      plugins: {
-        legend: {
-          labels: {
-            color: '#8ba4bc',
-            usePointStyle: true,
-            pointStyleWidth: 10,
-            padding: 20,
-            font: { size: 11 },
-            filter: (item) => {
-              return item.dataset.data.length > 0;
+    });
+    console.log('[chart] 图表已创建:', allDatasets.length, '条线,', records.length, '条记录');
+  } catch (e) {
+    console.error('[chart] 图表创建失败:', e);
+    // 如果时间适配器不可用，回退到 category 轴
+    try {
+      if (chart) { chart.destroy(); chart = null; }
+      const fallbackOpts = JSON.parse(JSON.stringify({
+        type: 'line',
+        data: { datasets: allDatasets },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: { labels: { color: '#8ba4bc', usePointStyle: true } },
+            tooltip: {
+              callbacks: {
+                label: (ctx) => `${ctx.dataset.label}: ${ctx.raw.y}°C`,
+              },
+            },
+          },
+          scales: {
+            x: {
+              type: 'linear',
+              ticks: { color: '#5a7a94' },
+            },
+            y: {
+              ticks: { color: '#5a7a94', callback: (v) => v + '°C' },
             },
           },
         },
-        tooltip: {
-          callbacks: {
-            title: (items) => {
-              const item = items[0];
-              if (item.raw.x) {
-                return formatTime(item.raw.x);
-              }
-              return '';
-            },
-            label: (ctx) => {
-              const d = ctx.raw;
-              const typeStr = d.type ? `[${d.type}]` : '';
-              if (d.containerNo) {
-                return `${d.containerNo} ${typeStr}: ${d.y}°C`;
-              }
-              return `${ctx.dataset.label}: ${d.y}°C`;
-            },
-          },
-        },
-      },
-      scales: {
-        x: {
-          type: 'time',
-          time: {
-            tooltipFormat: 'MM-dd HH:mm',
-            displayFormats: {
-              minute: 'HH:mm',
-              hour: 'MM-dd HH:mm',
-              day: 'MM-dd',
-            },
-          },
-          ticks: {
-            color: '#5a7a94',
-            maxTicksLimit: 12,
-          },
-          grid: {
-            color: '#2a405540',
-          },
-        },
-        y: {
-          title: {
-            display: true,
-            text: '温度 (°C)',
-            color: '#8ba4bc',
-          },
-          ticks: {
-            color: '#5a7a94',
-            callback: (v) => v + '°C',
-          },
-          grid: {
-            color: '#2a405540',
-          },
-        },
-      },
-    },
-  });
+      }));
+      chart = new Chart(ctx, fallbackOpts);
+      console.log('[chart] 已回退到线性轴');
+    } catch (e2) {
+      console.error('[chart] 回退也失败:', e2);
+      dom.tempChart.style.display = 'none';
+      dom.chartEmpty.style.display = 'flex';
+    }
+  }
 }
 
 // === 数据明细表格 ===
