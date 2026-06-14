@@ -224,14 +224,36 @@ function updateChart(records) {
       })),
       borderColor: color,
       backgroundColor: color + '30',
-      borderWidth: 2,
-      pointRadius: 2,
+      borderWidth: 2.5,
+      pointRadius: 3,
       pointHoverRadius: 5,
       tension: 0.3,
       fill: false,
     });
 
-    // 设定温度（虚线）—— 只有有设定温度的数据才画
+    // 送风温度（短虚线）
+    const supplyPoints = group.filter(r => r.supplyTemp !== null && r.supplyTemp !== undefined && !isNaN(r.supplyTemp));
+    if (supplyPoints.length > 0) {
+      datasets.push({
+        label: `${key} 送风`,
+        data: supplyPoints.map(r => ({
+          x: r.updateTime ? new Date(r.updateTime) : null,
+          y: r.supplyTemp,
+          containerNo: r.containerNo,
+          type: '送风',
+        })),
+        borderColor: color,
+        backgroundColor: 'transparent',
+        borderWidth: 1.5,
+        borderDash: [3, 4],
+        pointRadius: 2,
+        pointHoverRadius: 4,
+        tension: 0.3,
+        fill: false,
+      });
+    }
+
+    // 设定温度（长虚线）
     const setTempPoints = group.filter(r => r.setTemp !== null && r.setTemp !== undefined);
     if (setTempPoints.length > 0) {
       datasets.push({
@@ -244,8 +266,8 @@ function updateChart(records) {
         })),
         borderColor: color,
         backgroundColor: 'transparent',
-        borderWidth: 1.5,
-        borderDash: [5, 3],
+        borderWidth: 1,
+        borderDash: [8, 4],
         pointRadius: 1,
         pointHoverRadius: 4,
         tension: 0.3,
@@ -396,7 +418,7 @@ function updateTable(records) {
   dom.tableRecordCount.textContent = `${records.length} 条记录`;
 
   if (records.length === 0) {
-    dom.recordsBody.innerHTML = `<tr class="empty-row"><td colspan="7">暂无数据</td></tr>`;
+    dom.recordsBody.innerHTML = `<tr class="empty-row"><td colspan="12">暂无数据</td></tr>`;
     return;
   }
 
@@ -415,10 +437,15 @@ function updateTable(records) {
     return `
       <tr>
         <td>${escHtml(r.containerNo)}</td>
+        <td>${escHtml(r.brand)}</td>
+        <td>${formatTime(r.placementTime)}</td>
         <td>${r.setTempDisplay}</td>
+        <td>${r.supplyTempDisplay || '-'}</td>
         <td class="${returnTempClass}">${r.returnTempDisplay}${diffHtml}</td>
         <td>${escHtml(r.vent)}</td>
         <td>${escHtml(r.location)}</td>
+        <td>${escHtml(r.aroma)}</td>
+        <td>${escHtml(r.port)}</td>
         <td>${formatTime(r.updateTime)}</td>
         <td><span class="status-badge ${statusClass}">${statusText}</span></td>
       </tr>
@@ -436,7 +463,7 @@ function updateLastUpdate() {
 // === 错误提示 ===
 
 function showError(msg) {
-  dom.recordsBody.innerHTML = `<tr class="empty-row"><td colspan="7" style="color:var(--danger)">⚠ ${escHtml(msg)}</td></tr>`;
+  dom.recordsBody.innerHTML = `<tr class="empty-row"><td colspan="12" style="color:var(--danger)">⚠ ${escHtml(msg)}</td></tr>`;
 }
 
 // === 设置面板 ===

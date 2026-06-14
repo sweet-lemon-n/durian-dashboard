@@ -295,10 +295,15 @@ app.get('/api/dashboard', async (req, res) => {
 
     // 自动匹配字段名
     const setTempField = findField(tempSheet.fieldTitles, ['设定温度', 'set temp', '目标温度']);
+    const supplyTempField = findField(tempSheet.fieldTitles, ['送风温度', 'supply temp', '送风']);
     const returnTempField = findField(tempSheet.fieldTitles, ['回风温度', 'return temp', '温度', 'temp', '℃']);
     const containerField = findField(tempSheet.fieldTitles, ['柜号', '柜编号', 'container', '箱号']);
-    const ventField = findField(tempSheet.fieldTitles, ['风口', 'vent', '出风口']);
-    const locationField = findField(tempSheet.fieldTitles, ['当前地点', '地点', '位置', 'location', 'gps', '坐标']);
+    const brandField = findField(tempSheet.fieldTitles, ['品牌', 'brand']);
+    const placementTimeField = findField(tempSheet.fieldTitles, ['放柜时间', '放柜']);
+    const ventField = findField(tempSheet.fieldTitles, ['风口设定', '风口', 'vent', '出风口']);
+    const locationField = findField(tempSheet.fieldTitles, ['当前位置', '当前地点', '地点', '位置', 'location', 'gps', '坐标']);
+    const aromaField = findField(tempSheet.fieldTitles, ['味道', '香味', '气味', 'aroma', 'smell']);
+    const portField = findField(tempSheet.fieldTitles, ['关口', '口岸', 'port', 'gate']);
     const timeField = findField(tempSheet.fieldTitles, ['更新时间', '时间', '记录时间', 'date', 'time', '创建时间']);
 
     // 排序：按时间倒序
@@ -354,13 +359,19 @@ app.get('/api/dashboard', async (req, res) => {
       return {
         recordId: r.record_id,
         containerNo: wecom.getRecordValue(r, containerField) || '-',
+        brand: wecom.getRecordValue(r, brandField) || '-',
+        placementTime: parseTimeValue(r, placementTimeField),
         setTemp,
         setTempDisplay: setTemp !== null ? `${setTemp}°C` : '-',
+        supplyTemp: supplyTempField ? parseFloat(wecom.getRecordValue(r, supplyTempField)) : null,
+        supplyTempDisplay: supplyTempField && wecom.getRecordValue(r, supplyTempField) ? `${wecom.getRecordValue(r, supplyTempField)}°C` : '-',
         returnTemp,
         returnTempDisplay: returnTemp !== null ? `${returnTemp}°C` : '-',
         tempDiff: (setTemp !== null && returnTemp !== null) ? Math.round((returnTemp - setTemp) * 10) / 10 : null,
         vent: wecom.getRecordValue(r, ventField) || '-',
         location: wecom.getRecordValue(r, locationField) || '-',
+        aroma: wecom.getRecordValue(r, aromaField) || '-',
+        port: wecom.getRecordValue(r, portField) || '-',
         updateTime: parseTimeValue(r, timeField),
         isAbnormal,
         creator: r.creator_name || '',
@@ -424,10 +435,15 @@ app.get('/api/dashboard', async (req, res) => {
     // 可用字段信息（告知前端可展示哪些列）
     const availableFields = {
       setTemp: setTempField,
+      supplyTemp: supplyTempField,
       returnTemp: returnTempField,
       containerNo: containerField,
+      brand: brandField,
+      placementTime: placementTimeField,
       vent: ventField,
       location: locationField,
+      aroma: aromaField,
+      port: portField,
       time: timeField,
     };
 
@@ -472,6 +488,7 @@ app.get('/api/temperature/history', async (req, res) => {
     const hoursNum = parseInt(hours) || 168;
 
     const setTempField = findField(tempSheet.fieldTitles, ['设定温度', 'set temp', '目标温度']);
+    const supplyTempField = findField(tempSheet.fieldTitles, ['送风温度', 'supply temp', '送风']);
     const returnTempField = findField(tempSheet.fieldTitles, ['回风温度', 'return temp', '温度', 'temp', '℃']);
     const containerField = findField(tempSheet.fieldTitles, ['柜号', '柜编号', 'container']);
     const timeField = findField(tempSheet.fieldTitles, ['更新时间', '时间', '记录时间', 'date', 'time', '创建时间']);
@@ -502,6 +519,7 @@ app.get('/api/temperature/history', async (req, res) => {
       .map(r => ({
         time: parseTimeValue(r, timeField),
         setTemp: parseFloat(wecom.getRecordValue(r, setTempField)),
+        supplyTemp: parseFloat(wecom.getRecordValue(r, supplyTempField)),
         returnTemp: parseFloat(wecom.getRecordValue(r, returnTempField)),
         containerNo: wecom.getRecordValue(r, containerField),
       }))
