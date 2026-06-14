@@ -113,8 +113,8 @@ function updateStats(stats) {
 
   dom.statContainers.textContent = stats.containerCount ?? '--';
   dom.statTotal.textContent = stats.total ?? '--';
-  dom.statAvgTemp.textContent = stats.avgTemp !== null && stats.avgTemp !== undefined
-    ? stats.avgTemp.toFixed(1) : '--';
+  dom.statAvgTemp.textContent = stats.avgReturnTemp !== null && stats.avgReturnTemp !== undefined
+    ? stats.avgReturnTemp.toFixed(1) : '--';
 
   const abnormalCount = stats.abnormalCount ?? 0;
   dom.statAbnormal.textContent = abnormalCount;
@@ -141,7 +141,8 @@ function updateAlerts(alerts) {
   dom.alertList.innerHTML = alerts.slice(0, 10).map(a => `
     <div class="alert-item">
       <span class="alert-container">${escHtml(a.containerNo)}</span>
-      <span class="alert-temp">${a.temperature}°C</span>
+      ${a.setTemp !== null && a.setTemp !== undefined ? `<span class="alert-temp">设定${a.setTemp}°C</span>` : ''}
+      ${a.returnTemp !== null && a.returnTemp !== undefined ? `<span class="alert-temp">回风${a.returnTemp}°C</span>` : ''}
       <span class="alert-reason">${escHtml(a.reason)}</span>
       ${a.time ? `<span style="color:var(--text-muted);margin-left:auto">${formatTime(a.time)}</span>` : ''}
     </div>
@@ -174,10 +175,10 @@ function updateChart(records) {
   dom.tempChart.style.display = 'block';
   dom.chartEmpty.style.display = 'none';
 
-  // 按柜号分组
+  // 按柜号 + 温度类型分组
   const grouped = {};
   records.forEach(r => {
-    if (r.temperature === null || r.temperature === undefined) return;
+    if (r.returnTemp === null || r.returnTemp === undefined) return;
     const key = r.containerNo || '未知';
     if (!grouped[key]) grouped[key] = [];
     grouped[key].push(r);
@@ -192,7 +193,7 @@ function updateChart(records) {
     });
   });
 
-  // 构建数据集（每个柜号一条线）
+  // 构建数据集（每个柜号一条回风温度线 + 一条设定温度虚线）
   const colors = [
     '#4caf50', '#2196f3', '#ff9800', '#e91e63', '#9c27b0',
     '#00bcd4', '#ff5722', '#8bc34a', '#3f51b5', '#ffc107',
@@ -202,9 +203,9 @@ function updateChart(records) {
   let colorIdx = 0;
   const containerKeys = Object.keys(grouped);
 
-  // 如果太多柜号，只显示有数据的最多8条线
-  const displayKeys = containerKeys.length > 8
-    ? containerKeys.slice(0, 8)
+  // 如果太多柜号，只显示有数据的最多6条线
+  const displayKeys = containerKeys.length > 6
+    ? containerKeys.slice(0, 6)
     : containerKeys;
 
   displayKeys.forEach(key => {
@@ -212,12 +213,14 @@ function updateChart(records) {
     const color = colors[colorIdx % colors.length];
     colorIdx++;
 
+    // 回风温度（实线）
     datasets.push({
-      label: key,
+      label: `${key} 回风`,
       data: group.map(r => ({
         x: r.updateTime ? new Date(r.updateTime) : null,
-        y: r.temperature,
+        y: r.returnTemp,
         containerNo: r.containerNo,
+        type: '回风',
       })),
       borderColor: color,
       backgroundColor: color + '30',
@@ -227,6 +230,28 @@ function updateChart(records) {
       tension: 0.3,
       fill: false,
     });
+
+    // 设定温度（虚线）—— 只有有设定温度的数据才画
+    const setTempPoints = group.filter(r => r.setTemp !== null && r.setTemp !== undefined);
+    if (setTempPoints.length > 0) {
+      datasets.push({
+        label: `${key} 设定`,
+        data: setTempPoints.map(r => ({
+          x: r.updateTime ? new Date(r.updateTime) : null,
+          y: r.setTemp,
+          containerNo: r.containerNo,
+          type: '设定',
+        })),
+        borderColor: color,
+        backgroundColor: 'transparent',
+        borderWidth: 1.5,
+        borderDash: [5, 3],
+        pointRadius: 1,
+        pointHoverRadius: 4,
+        tension: 0.3,
+        fill: false,
+      });
+    }
   });
 
   // 温度阈值线
@@ -264,12 +289,10 @@ function updateChart(records) {
     const startTime = new Date(minTime - padding);
     const endTime = new Date(maxTime + padding);
 
-    // 上限线
     thresholdDatasets[0].data = [
       { x: startTime, y: config.tempMax },
       { x: endTime, y: config.tempMax },
     ];
-    // 下限线
     thresholdDatasets[1].data = [
       { x: startTime, y: config.tempMin },
       { x: endTime, y: config.tempMin },
@@ -305,7 +328,6 @@ function updateChart(records) {
             padding: 20,
             font: { size: 11 },
             filter: (item) => {
-              // 隐藏无数据的阈值图例
               return item.dataset.data.length > 0;
             },
           },
@@ -321,8 +343,9 @@ function updateChart(records) {
             },
             label: (ctx) => {
               const d = ctx.raw;
+              const typeStr = d.type ? `[${d.type}]` : '';
               if (d.containerNo) {
-                return `${d.containerNo}: ${d.y}°C`;
+                return `${d.containerNo} ${typeStr}: ${d.y}°C`;
               }
               return `${ctx.dataset.label}: ${d.y}°C`;
             },
@@ -373,21 +396,29 @@ function updateTable(records) {
   dom.tableRecordCount.textContent = `${records.length} 条记录`;
 
   if (records.length === 0) {
-    dom.recordsBody.innerHTML = `<tr class="empty-row"><td colspan="6">暂无数据</td></tr>`;
+    dom.recordsBody.innerHTML = `<tr class="empty-row"><td colspan="7">暂无数据</td></tr>`;
     return;
   }
 
   dom.recordsBody.innerHTML = records.slice(0, 200).map(r => {
-    const tempClass = r.isAbnormal ? 'temp-abnormal' : 'temp-normal';
+    const returnTempClass = r.isAbnormal ? 'temp-abnormal' : 'temp-normal';
     const statusClass = r.isAbnormal ? 'status-abnormal' : 'status-normal';
-    const statusText = r.isAbnormal ? '异常' : '正常';
+    const statusText = r.isAbnormal ? '⚠ 异常' : '正常';
+    // 温差显示
+    let diffHtml = '';
+    if (r.tempDiff !== null) {
+      const diffClass = r.tempDiff > 0 ? 'temp-diff-pos' : (r.tempDiff < 0 ? 'temp-diff-neg' : 'temp-diff-zero');
+      const diffSign = r.tempDiff > 0 ? '+' : '';
+      diffHtml = ` <span class="${diffClass}">(${diffSign}${r.tempDiff}°C)</span>`;
+    }
 
     return `
       <tr>
         <td>${escHtml(r.containerNo)}</td>
-        <td class="${tempClass}">${r.temperatureDisplay}</td>
+        <td>${r.setTempDisplay}</td>
+        <td class="${returnTempClass}">${r.returnTempDisplay}${diffHtml}</td>
+        <td>${escHtml(r.vent)}</td>
         <td>${escHtml(r.location)}</td>
-        <td>${escHtml(r.aroma)}</td>
         <td>${formatTime(r.updateTime)}</td>
         <td><span class="status-badge ${statusClass}">${statusText}</span></td>
       </tr>
@@ -405,7 +436,7 @@ function updateLastUpdate() {
 // === 错误提示 ===
 
 function showError(msg) {
-  dom.recordsBody.innerHTML = `<tr class="empty-row"><td colspan="6" style="color:var(--danger)">⚠ ${escHtml(msg)}</td></tr>`;
+  dom.recordsBody.innerHTML = `<tr class="empty-row"><td colspan="7" style="color:var(--danger)">⚠ ${escHtml(msg)}</td></tr>`;
 }
 
 // === 设置面板 ===

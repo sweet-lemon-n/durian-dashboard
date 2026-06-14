@@ -419,6 +419,19 @@ tbody tr.empty-row td {
   color: var(--danger);
 }
 
+/* 温差标识 */
+.temp-diff-pos {
+  color: var(--danger);
+  font-weight: 600;
+}
+.temp-diff-neg {
+  color: var(--info);
+  font-weight: 600;
+}
+.temp-diff-zero {
+  color: var(--text-muted);
+}
+
 /* === 底部 === */
 .footer {
   display: flex;

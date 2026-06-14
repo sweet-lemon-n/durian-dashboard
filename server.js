@@ -55,8 +55,8 @@ async function getDocumentSchema() {
 
   // 2. 获取每个智能表的字段
   const sheetDetails = [];
-  const tempKeywords = ['温度', 'temp', '℃', '柜号', '位置', '香味'];
-  const infoKeywords = ['订单', '柜号', '客户', '目的地', '出发地', '批次'];
+  const tempKeywords = ['温度', 'temp', '℃', '柜号', '回风', '设定温度', '风口'];
+  const infoKeywords = ['订单', '客户', '目的地', '出发地', '批次', '国家'];
 
   for (const sheet of sheets) {
     if (sheet.type !== 'smartsheet') continue;
@@ -90,22 +90,38 @@ async function getDocumentSchema() {
   let tempSheet = null;
   let infoSheet = null;
 
-  // 优先按关键词匹配
+  // 温度子表标题关键词（标题含「温度」优先判定为温度表）
+  const tempTitleKeywords = ['温度', 'temp'];
+
+  // 第一步：按子表标题识别温度子表（标题含「温度」优先判定为温度表）
   for (const sheet of sheetDetails) {
-    const titles = sheet.fieldTitles.join(' ');
-    const lowerTitles = titles.toLowerCase();
-
-    const tempScore = tempKeywords.filter(k => lowerTitles.includes(k.toLowerCase())).length;
-    const infoScore = infoKeywords.filter(k => lowerTitles.includes(k.toLowerCase())).length;
-
-    if (tempScore > 0 && !tempSheet) {
+    const lowerTitle = sheet.title.toLowerCase();
+    if (tempTitleKeywords.some(k => lowerTitle.includes(k.toLowerCase()))) {
       tempSheet = sheet;
-    } else if (tempScore > 0 && tempSheet) {
-      // 如果已有一个温度子表，新来的按 infoScore 判断
-      if (!infoSheet) infoSheet = sheet;
-    } else if (!infoSheet) {
-      infoSheet = sheet;
+      break;
     }
+  }
+
+  // 第二步：按字段关键词匹配（标题无法识别时兜底）
+  if (!tempSheet) {
+    for (const sheet of sheetDetails) {
+      if (sheet === tempSheet) continue;
+      const titles = sheet.fieldTitles.join(' ');
+      const lowerTitles = titles.toLowerCase();
+      const tempScore = tempKeywords.filter(k => lowerTitles.includes(k.toLowerCase())).length;
+
+      if (tempScore > 0) {
+        tempSheet = sheet;
+        break;
+      }
+    }
+  }
+
+  // 第三步：识别信息子表（第一个非温度子表的 smartsheet）
+  for (const sheet of sheetDetails) {
+    if (sheet === tempSheet) continue;
+    infoSheet = sheet;
+    break;
   }
 
   // 如果只有一个子表，它既是信息表也是温度表
@@ -113,11 +129,11 @@ async function getDocumentSchema() {
     tempSheet = sheetDetails[0];
     infoSheet = sheetDetails[0];
   }
-  // 如果没识别到温度子表，用第一个
+  // 如果没识别到温度子表，用第一个做兜底
   if (!tempSheet && sheetDetails.length > 0) {
     tempSheet = sheetDetails[0];
   }
-  // 如果没识别到信息子表，用第一个
+  // 如果没识别到信息子表，也用第一个做兜底
   if (!infoSheet && sheetDetails.length > 0) {
     infoSheet = sheetDetails[0];
   }
@@ -278,11 +294,12 @@ app.get('/api/dashboard', async (req, res) => {
     });
 
     // 自动匹配字段名
-    const tempField = findField(tempSheet.fieldTitles, ['温度', 'temp', '℃']);
+    const setTempField = findField(tempSheet.fieldTitles, ['设定温度', 'set temp', '目标温度']);
+    const returnTempField = findField(tempSheet.fieldTitles, ['回风温度', 'return temp', '温度', 'temp', '℃']);
     const containerField = findField(tempSheet.fieldTitles, ['柜号', '柜编号', 'container', '箱号']);
-    const locationField = findField(tempSheet.fieldTitles, ['位置', '地点', 'location', 'gps', '坐标']);
-    const aromaField = findField(tempSheet.fieldTitles, ['香味', '气味', 'aroma', 'smell']);
-    const timeField = findField(tempSheet.fieldTitles, ['时间', '更新时间', '记录时间', 'date', 'time', '创建时间']);
+    const ventField = findField(tempSheet.fieldTitles, ['风口', 'vent', '出风口']);
+    const locationField = findField(tempSheet.fieldTitles, ['当前地点', '地点', '位置', 'location', 'gps', '坐标']);
+    const timeField = findField(tempSheet.fieldTitles, ['更新时间', '时间', '记录时间', 'date', 'time', '创建时间']);
 
     // 排序：按时间倒序
     const sort = [];
@@ -315,19 +332,35 @@ app.get('/api/dashboard', async (req, res) => {
     // 解析记录
     const tempMin = parseFloat(process.env.TEMP_MIN || 2);
     const tempMax = parseFloat(process.env.TEMP_MAX || 8);
+    // 温差告警阈值：回风温度偏离设定温度超过此值则告警
+    const tempDiffWarning = parseFloat(process.env.TEMP_DIFF_WARNING || 3);
 
     const parsedRecords = records.map(r => {
-      const tempRaw = wecom.getRecordValue(r, tempField);
-      const temp = tempRaw !== null ? parseFloat(tempRaw) : null;
-      const isAbnormal = temp !== null && (temp < tempMin || temp > tempMax);
+      const setTempRaw = wecom.getRecordValue(r, setTempField);
+      const returnTempRaw = wecom.getRecordValue(r, returnTempField);
+      const setTemp = setTempRaw !== null ? parseFloat(setTempRaw) : null;
+      const returnTemp = returnTempRaw !== null ? parseFloat(returnTempRaw) : null;
+
+      // 异常判断：
+      // 1. 如果有设定温度和回风温度 → 按差值判断
+      // 2. 如果只有回风温度（旧数据） → 按 TEMP_MIN/TEMP_MAX 阈值判断
+      let isAbnormal = false;
+      if (setTemp !== null && returnTemp !== null && !isNaN(setTemp) && !isNaN(returnTemp)) {
+        isAbnormal = Math.abs(returnTemp - setTemp) > tempDiffWarning;
+      } else if (returnTemp !== null && !isNaN(returnTemp)) {
+        isAbnormal = returnTemp < tempMin || returnTemp > tempMax;
+      }
 
       return {
         recordId: r.record_id,
         containerNo: wecom.getRecordValue(r, containerField) || '-',
-        temperature: temp,
-        temperatureDisplay: temp !== null ? `${temp}°C` : '-',
+        setTemp,
+        setTempDisplay: setTemp !== null ? `${setTemp}°C` : '-',
+        returnTemp,
+        returnTempDisplay: returnTemp !== null ? `${returnTemp}°C` : '-',
+        tempDiff: (setTemp !== null && returnTemp !== null) ? Math.round((returnTemp - setTemp) * 10) / 10 : null,
+        vent: wecom.getRecordValue(r, ventField) || '-',
         location: wecom.getRecordValue(r, locationField) || '-',
-        aroma: wecom.getRecordValue(r, aromaField) || '-',
         updateTime: parseTimeValue(r, timeField),
         isAbnormal,
         creator: r.creator_name || '',
@@ -343,10 +376,10 @@ app.get('/api/dashboard', async (req, res) => {
     });
 
     // 统计
-    const validTemps = recentRecords.filter(r => r.temperature !== null);
+    const validReturnTemps = recentRecords.filter(r => r.returnTemp !== null);
     const abnormalRecords = recentRecords.filter(r => r.isAbnormal);
-    const avgTemp = validTemps.length > 0
-      ? validTemps.reduce((s, r) => s + r.temperature, 0) / validTemps.length
+    const avgReturnTemp = validReturnTemps.length > 0
+      ? validReturnTemps.reduce((s, r) => s + r.returnTemp, 0) / validReturnTemps.length
       : 0;
 
     const containerSet = new Set(recentRecords.map(r => r.containerNo).filter(c => c !== '-'));
@@ -357,29 +390,44 @@ app.get('/api/dashboard', async (req, res) => {
       total: recentRecords.length,
       containerCount,
       abnormalCount: abnormalRecords.length,
-      avgTemp: Math.round(avgTemp * 10) / 10,
+      avgReturnTemp: Math.round(avgReturnTemp * 10) / 10,
       tempMin,
       tempMax,
+      tempDiffWarning,
     };
 
     // 告警列表
-    const alerts = abnormalRecords.slice(0, 10).map(r => ({
-      containerNo: r.containerNo,
-      temperature: r.temperature,
-      reason: r.temperature < tempMin ? `温度偏低 (${r.temperature}°C < ${tempMin}°C)` : `温度偏高 (${r.temperature}°C > ${tempMax}°C)`,
-      time: r.updateTime,
-      location: r.location,
-    }));
+    const alerts = abnormalRecords.slice(0, 10).map(r => {
+      let reason = '';
+      if (r.tempDiff !== null) {
+        const direction = r.tempDiff > 0 ? '偏高' : '偏低';
+        reason = `回风温度${direction} | 设定${r.setTemp}°C → 回风${r.returnTemp}°C (差${Math.abs(r.tempDiff)}°C)`;
+      } else if (r.returnTemp !== null) {
+        reason = r.returnTemp < tempMin
+          ? `温度偏低 (${r.returnTemp}°C < ${tempMin}°C)`
+          : `温度偏高 (${r.returnTemp}°C > ${tempMax}°C)`;
+      }
+      return {
+        containerNo: r.containerNo,
+        setTemp: r.setTemp,
+        returnTemp: r.returnTemp,
+        tempDiff: r.tempDiff,
+        reason,
+        time: r.updateTime,
+        location: r.location,
+      };
+    });
 
     // 柜列表（用于筛选下拉）
     const containers = Array.from(containerSet).map(c => ({ containerNo: c }));
 
     // 可用字段信息（告知前端可展示哪些列）
     const availableFields = {
-      temperature: tempField,
+      setTemp: setTempField,
+      returnTemp: returnTempField,
       containerNo: containerField,
+      vent: ventField,
       location: locationField,
-      aroma: aromaField,
       time: timeField,
     };
 
@@ -423,9 +471,10 @@ app.get('/api/temperature/history', async (req, res) => {
     const { container, hours = '168' } = req.query;
     const hoursNum = parseInt(hours) || 168;
 
-    const tempField = findField(tempSheet.fieldTitles, ['温度', 'temp', '℃']);
+    const setTempField = findField(tempSheet.fieldTitles, ['设定温度', 'set temp', '目标温度']);
+    const returnTempField = findField(tempSheet.fieldTitles, ['回风温度', 'return temp', '温度', 'temp', '℃']);
     const containerField = findField(tempSheet.fieldTitles, ['柜号', '柜编号', 'container']);
-    const timeField = findField(tempSheet.fieldTitles, ['时间', '更新时间', '记录时间', 'date', 'time', '创建时间']);
+    const timeField = findField(tempSheet.fieldTitles, ['更新时间', '时间', '记录时间', 'date', 'time', '创建时间']);
 
     const sort = timeField ? [{ field_title: timeField, desc: false }] : [];
 
@@ -452,10 +501,11 @@ app.get('/api/temperature/history', async (req, res) => {
     const parsed = records
       .map(r => ({
         time: parseTimeValue(r, timeField),
-        temperature: parseFloat(wecom.getRecordValue(r, tempField)),
+        setTemp: parseFloat(wecom.getRecordValue(r, setTempField)),
+        returnTemp: parseFloat(wecom.getRecordValue(r, returnTempField)),
         containerNo: wecom.getRecordValue(r, containerField),
       }))
-      .filter(r => r.temperature && !isNaN(r.temperature))
+      .filter(r => (r.returnTemp && !isNaN(r.returnTemp)) || (r.setTemp && !isNaN(r.setTemp)))
       .filter(r => {
         if (!r.time) return true;
         return new Date(r.time) >= cutoffTime;
@@ -507,12 +557,13 @@ app.post('/api/setup', async (req, res) => {
     const newSheetId = sheetResp.properties.sheet_id;
     console.log(`[setup] 子表已创建: ${newSheetId}`);
 
-    // 3. 添加字段
+    // 3. 添加字段（注意：企微 addFields 反序添加，这里按期望的从左到右顺序，后面会 reverse）
     const fields = [
       { field_title: '柜号', field_type: 'FIELD_TYPE_TEXT' },
-      { field_title: '温度', field_type: 'FIELD_TYPE_NUMBER', property_number: { decimal_places: 1 } },
-      { field_title: '位置信息', field_type: 'FIELD_TYPE_TEXT' },
-      { field_title: '香味', field_type: 'FIELD_TYPE_TEXT' },
+      { field_title: '设定温度', field_type: 'FIELD_TYPE_NUMBER', property_number: { decimal_places: 1 } },
+      { field_title: '回风温度', field_type: 'FIELD_TYPE_NUMBER', property_number: { decimal_places: 1 } },
+      { field_title: '风口', field_type: 'FIELD_TYPE_TEXT' },
+      { field_title: '当前地点', field_type: 'FIELD_TYPE_TEXT' },
       { field_title: '更新时间', field_type: 'FIELD_TYPE_DATE_TIME', property_date_time: { format: 'yyyy-mm-dd hh:mm', auto_fill: false } },
     ];
 
@@ -641,6 +692,23 @@ app.post('/api/smartsheet/sheet/update', async (req, res) => {
   }
 });
 
+/**
+ * POST /api/smartsheet/sheet/add
+ * Body: { title }
+ */
+app.post('/api/smartsheet/sheet/add', async (req, res) => {
+  try {
+    const { title } = req.body || {};
+    if (!title) throw new Error('缺少 title 参数');
+    const result = await wecom.addSheet(DOCID, { title });
+    if (result.errcode !== 0) throw new Error(`[${result.errcode}] ${result.errmsg}`);
+    clearSchemaCache();
+    res.json({ success: true, data: { sheet_id: result.properties.sheet_id, title } });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
 // ---- 记录管理 API ----
 
 /**
@@ -695,6 +763,49 @@ app.post('/api/smartsheet/records/update', async (req, res) => {
 });
 
 // ---- 字段管理 API ----
+
+/**
+ * POST /api/smartsheet/fields/add
+ * Body: { sheetId, fields }
+ *
+ * fields 数组按正常顺序传入即可，内部自动处理企微 API 的反序添加
+ * 添加完成后自动删除默认的「智能表列」
+ */
+app.post('/api/smartsheet/fields/add', async (req, res) => {
+  try {
+    const { sheetId, fields } = req.body || {};
+    if (!sheetId) throw new Error('缺少 sheetId 参数');
+    if (!fields || !Array.isArray(fields) || fields.length === 0) throw new Error('fields 必须是数组');
+
+    // 企微 addFields 以反序添加，需要 reverse 才能得到期望的从左到右顺序
+    const reversedFields = [...fields].reverse();
+    const result = await wecom.addFields(DOCID, sheetId, reversedFields);
+    if (result.errcode !== 0) throw new Error(`[${result.errcode}] ${result.errmsg}`);
+
+    console.log(`[fields/add] 已添加 ${result.fields?.length || 0} 个字段`);
+
+    // 删除默认的「智能表列」
+    try {
+      const currentFields = await wecom.getFields(DOCID, sheetId);
+      if (currentFields.errcode === 0) {
+        const defaultCol = (currentFields.fields || []).find(f => f.field_title === '智能表列');
+        if (defaultCol) {
+          const delResult = await wecom.deleteFields(DOCID, sheetId, [defaultCol.field_id]);
+          if (delResult.errcode === 0) {
+            console.log('[fields/add] 已删除默认「智能表列」');
+          }
+        }
+      }
+    } catch (e) {
+      console.warn('[fields/add] 删除默认列失败（可忽略）:', e.message);
+    }
+
+    clearSchemaCache();
+    res.json({ success: true, data: result });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
 
 /**
  * POST /api/smartsheet/fields/delete
