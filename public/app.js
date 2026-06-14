@@ -35,7 +35,6 @@ function saveSetting(key, value) {
 }
 
 // === 状态 ===
-let chart = null;
 let refreshTimer = null;
 let allRecords = [];
 let allContainers = [];
@@ -56,12 +55,11 @@ const dom = {
   alertCount: $('#alertCount'),
   alertList: $('#alertList'),
   containerFilter: $('#containerFilter'),
-  hoursFilter: $('#hoursFilter'),
-  tempChart: $('#tempChart'),
-  chartEmpty: $('#chartEmpty'),
   recordsBody: $('#recordsBody'),
   tableRecordCount: $('#tableRecordCount'),
   refreshIntervalDisplay: $('#refreshIntervalDisplay'),
+  ganttContainer: $('#ganttContainer'),
+  tempTypeFilter: $('#tempTypeFilter'),
   settingsOverlay: $('#settingsOverlay'),
   settingTempMin: $('#settingTempMin'),
   settingTempMax: $('#settingTempMax'),
@@ -74,9 +72,9 @@ const dom = {
 
 async function fetchDashboard() {
   const container = dom.containerFilter.value;
-  const hours = dom.hoursFilter.value;
 
-  let url = `/api/dashboard?hours=${hours}&limit=500`;
+  // 甘特图固定拉取 7 天数据
+  let url = `/api/dashboard?hours=168&limit=500`;
   if (container) url += `&container=${encodeURIComponent(container)}`;
 
   try {
@@ -96,7 +94,7 @@ async function fetchDashboard() {
     updateStats(data.stats);
     updateAlerts(data.alerts);
     updateContainerFilter();
-    updateChart(data.records);
+    updateGantt(data.records);
     updateTable(data.records);
     updateLastUpdate();
 
@@ -165,291 +163,120 @@ function updateContainerFilter() {
 
 // === 图表 (Chart.js) ===
 
-function updateChart(records) {
+// === 甘特图 ===
+
+function updateGantt(records) {
   if (!records || records.length === 0) {
-    dom.tempChart.style.display = 'none';
-    dom.chartEmpty.style.display = 'flex';
+    dom.ganttContainer.innerHTML = '<p class="gantt-empty">暂无温度数据</p>';
     return;
   }
 
-  dom.tempChart.style.display = 'block';
-  dom.chartEmpty.style.display = 'none';
+  const tempType = dom.tempTypeFilter.value; // 'returnTemp' | 'setTemp' | 'supplyTemp'
+  const now = new Date();
 
-  // 按柜号 + 温度类型分组
-  const grouped = {};
+  // 生成最近 7 天的日期列表（从 6 天前到今天）
+  const days = [];
+  for (let i = 6; i >= 0; i--) {
+    const d = new Date(now);
+    d.setDate(d.getDate() - i);
+    days.push({
+      date: d,
+      label: `${d.getMonth() + 1}/${d.getDate()}`,
+      key: `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`,
+      dayOfWeek: ['日', '一', '二', '三', '四', '五', '六'][d.getDay()],
+    });
+  }
+
+  // 按柜号分组，每天取最后一条记录
+  const ganttData = {}; // { containerNo: { dateKey: tempValue } }
+  const containerSet = new Set();
+
   records.forEach(r => {
-    if (r.returnTemp === null || r.returnTemp === undefined) return;
-    const key = r.containerNo || '未知';
-    if (!grouped[key]) grouped[key] = [];
-    grouped[key].push(r);
-  });
+    const cNo = r.containerNo || '未知';
+    containerSet.add(cNo);
+    if (!ganttData[cNo]) ganttData[cNo] = {};
 
-  // 每组按时间排序（升序）
-  Object.values(grouped).forEach(group => {
-    group.sort((a, b) => {
-      const ta = a.updateTime ? new Date(a.updateTime).getTime() : 0;
-      const tb = b.updateTime ? new Date(b.updateTime).getTime() : 0;
-      return ta - tb;
-    });
-  });
+    const t = r.updateTime ? new Date(r.updateTime) : null;
+    if (!t || isNaN(t.getTime())) return;
+    const dateKey = `${t.getFullYear()}-${String(t.getMonth() + 1).padStart(2, '0')}-${String(t.getDate()).padStart(2, '0')}`;
 
-  // 构建数据集（每个柜号一条回风温度线 + 一条设定温度虚线）
-  const colors = [
-    '#4caf50', '#2196f3', '#ff9800', '#e91e63', '#9c27b0',
-    '#00bcd4', '#ff5722', '#8bc34a', '#3f51b5', '#ffc107',
-  ];
+    const val = r[tempType];
+    if (val === null || val === undefined || isNaN(val)) return;
 
-  const datasets = [];
-  let colorIdx = 0;
-  const containerKeys = Object.keys(grouped);
-
-  // 如果太多柜号，只显示有数据的最多6条线
-  const displayKeys = containerKeys.length > 6
-    ? containerKeys.slice(0, 6)
-    : containerKeys;
-
-  displayKeys.forEach(key => {
-    const group = grouped[key];
-    const color = colors[colorIdx % colors.length];
-    colorIdx++;
-
-    // 回风温度（实线）
-    datasets.push({
-      label: `${key} 回风`,
-      data: group.map(r => ({
-        x: r.updateTime ? new Date(r.updateTime) : null,
-        y: r.returnTemp,
-        containerNo: r.containerNo,
-        type: '回风',
-      })),
-      borderColor: color,
-      backgroundColor: color + '30',
-      borderWidth: 2.5,
-      pointRadius: 3,
-      pointHoverRadius: 5,
-      tension: 0.3,
-      fill: false,
-    });
-
-    // 送风温度（短虚线）
-    const supplyPoints = group.filter(r => r.supplyTemp !== null && r.supplyTemp !== undefined && !isNaN(r.supplyTemp));
-    if (supplyPoints.length > 0) {
-      datasets.push({
-        label: `${key} 送风`,
-        data: supplyPoints.map(r => ({
-          x: r.updateTime ? new Date(r.updateTime) : null,
-          y: r.supplyTemp,
-          containerNo: r.containerNo,
-          type: '送风',
-        })),
-        borderColor: color,
-        backgroundColor: 'transparent',
-        borderWidth: 1.5,
-        borderDash: [3, 4],
-        pointRadius: 2,
-        pointHoverRadius: 4,
-        tension: 0.3,
-        fill: false,
-      });
-    }
-
-    // 设定温度（长虚线）
-    const setTempPoints = group.filter(r => r.setTemp !== null && r.setTemp !== undefined);
-    if (setTempPoints.length > 0) {
-      datasets.push({
-        label: `${key} 设定`,
-        data: setTempPoints.map(r => ({
-          x: r.updateTime ? new Date(r.updateTime) : null,
-          y: r.setTemp,
-          containerNo: r.containerNo,
-          type: '设定',
-        })),
-        borderColor: color,
-        backgroundColor: 'transparent',
-        borderWidth: 1,
-        borderDash: [8, 4],
-        pointRadius: 1,
-        pointHoverRadius: 4,
-        tension: 0.3,
-        fill: false,
-      });
+    // 同一天多条记录：取时间更晚的
+    if (!ganttData[cNo][dateKey] || t.getTime() > ganttData[cNo][dateKey]._ts) {
+      ganttData[cNo][dateKey] = { value: Math.round(val * 10) / 10, _ts: t.getTime() };
     }
   });
 
-  // 温度阈值线
-  const thresholdDatasets = [
-    {
-      label: `上限 ${config.tempMax}°C`,
-      data: [],
-      borderColor: '#f44336',
-      borderWidth: 1,
-      borderDash: [6, 3],
-      pointRadius: 0,
-      fill: false,
-    },
-    {
-      label: `下限 ${config.tempMin}°C`,
-      data: [],
-      borderColor: '#ff9800',
-      borderWidth: 1,
-      borderDash: [6, 3],
-      pointRadius: 0,
-      fill: false,
-    },
-  ];
+  // 按柜号排序
+  const sortedContainers = Array.from(containerSet).sort();
 
-  // 为阈值线生成虚拟数据点（基于时间范围）
-  const allTimes = records
-    .filter(r => r.updateTime)
-    .map(r => new Date(r.updateTime).getTime());
+  if (sortedContainers.length === 0) {
+    dom.ganttContainer.innerHTML = '<p class="gantt-empty">暂无温度数据</p>';
+    return;
+  }
 
-  if (allTimes.length > 0) {
-    const minTime = Math.min(...allTimes);
-    const maxTime = Math.max(...allTimes);
-    const padding = (maxTime - minTime) * 0.1 || 60000;
-
-    const startTime = new Date(minTime - padding);
-    const endTime = new Date(maxTime + padding);
-
-    thresholdDatasets[0].data = [
-      { x: startTime, y: config.tempMax },
-      { x: endTime, y: config.tempMax },
+  // 温度→颜色映射
+  function tempColor(val) {
+    // 蓝(冷) → 绿(正常) → 黄 → 橙 → 红(热)
+    const stops = [
+      { t: 6, r: 21, g: 101, b: 192 },   // 蓝
+      { t: 10, r: 66, g: 165, b: 245 },   // 浅蓝
+      { t: 12, r: 102, g: 187, b: 106 },  // 绿
+      { t: 14, r: 255, g: 235, b: 59 },   // 黄
+      { t: 16, r: 255, g: 152, b: 0 },    // 橙
+      { t: 20, r: 244, g: 67, b: 54 },    // 红
     ];
-    thresholdDatasets[1].data = [
-      { x: startTime, y: config.tempMin },
-      { x: endTime, y: config.tempMin },
-    ];
-  }
 
-  const allDatasets = [...datasets, ...thresholdDatasets];
+    if (val <= stops[0].t) return `rgb(${stops[0].r},${stops[0].g},${stops[0].b})`;
+    if (val >= stops[stops.length - 1].t) return `rgb(${stops[stops.length - 1].r},${stops[stops.length - 1].g},${stops[stops.length - 1].b})`;
 
-  // 销毁旧图表
-  if (chart) {
-    chart.destroy();
-    chart = null;
-  }
-
-  const ctx = dom.tempChart.getContext('2d');
-
-  try {
-    chart = new Chart(ctx, {
-      type: 'line',
-      data: { datasets: allDatasets },
-      options: {
-        responsive: true,
-        maintainAspectRatio: false,
-        interaction: {
-          mode: 'index',
-          intersect: false,
-        },
-        plugins: {
-          legend: {
-            labels: {
-              color: '#8ba4bc',
-              usePointStyle: true,
-              pointStyleWidth: 10,
-              padding: 20,
-              font: { size: 11 },
-              filter: (item) => {
-                return item.dataset.data.length > 0;
-              },
-            },
-          },
-          tooltip: {
-            callbacks: {
-              title: (items) => {
-                const item = items[0];
-                if (item.raw.x) {
-                  return formatTime(item.raw.x);
-                }
-                return '';
-              },
-              label: (ctx) => {
-                const d = ctx.raw;
-                const typeStr = d.type ? `[${d.type}]` : '';
-                if (d.containerNo) {
-                  return `${d.containerNo} ${typeStr}: ${d.y}°C`;
-                }
-                return `${ctx.dataset.label}: ${d.y}°C`;
-              },
-            },
-          },
-        },
-        scales: {
-          x: {
-            type: 'time',
-            time: {
-              tooltipFormat: 'MM-dd HH:mm',
-              displayFormats: {
-                minute: 'HH:mm',
-                hour: 'MM-dd HH:mm',
-                day: 'MM-dd',
-              },
-            },
-            ticks: {
-              color: '#5a7a94',
-              maxTicksLimit: 12,
-            },
-            grid: {
-              color: '#2a405540',
-            },
-          },
-          y: {
-            title: {
-              display: true,
-              text: '温度 (°C)',
-              color: '#8ba4bc',
-            },
-            ticks: {
-              color: '#5a7a94',
-              callback: (v) => v + '°C',
-            },
-            grid: {
-              color: '#2a405540',
-            },
-          },
-        },
-      },
-    });
-    console.log('[chart] 图表已创建:', allDatasets.length, '条线,', records.length, '条记录');
-  } catch (e) {
-    console.error('[chart] 图表创建失败:', e);
-    // 如果时间适配器不可用，回退到 category 轴
-    try {
-      if (chart) { chart.destroy(); chart = null; }
-      const fallbackOpts = JSON.parse(JSON.stringify({
-        type: 'line',
-        data: { datasets: allDatasets },
-        options: {
-          responsive: true,
-          maintainAspectRatio: false,
-          plugins: {
-            legend: { labels: { color: '#8ba4bc', usePointStyle: true } },
-            tooltip: {
-              callbacks: {
-                label: (ctx) => `${ctx.dataset.label}: ${ctx.raw.y}°C`,
-              },
-            },
-          },
-          scales: {
-            x: {
-              type: 'linear',
-              ticks: { color: '#5a7a94' },
-            },
-            y: {
-              ticks: { color: '#5a7a94', callback: (v) => v + '°C' },
-            },
-          },
-        },
-      }));
-      chart = new Chart(ctx, fallbackOpts);
-      console.log('[chart] 已回退到线性轴');
-    } catch (e2) {
-      console.error('[chart] 回退也失败:', e2);
-      dom.tempChart.style.display = 'none';
-      dom.chartEmpty.style.display = 'flex';
+    // 线性插值
+    for (let i = 0; i < stops.length - 1; i++) {
+      if (val >= stops[i].t && val <= stops[i + 1].t) {
+        const ratio = (val - stops[i].t) / (stops[i + 1].t - stops[i].t);
+        const r = Math.round(stops[i].r + (stops[i + 1].r - stops[i].r) * ratio);
+        const g = Math.round(stops[i].g + (stops[i + 1].g - stops[i].g) * ratio);
+        const b = Math.round(stops[i].b + (stops[i + 1].b - stops[i].b) * ratio);
+        return `rgb(${r},${g},${b})`;
+      }
     }
+    return '#888';
   }
+
+  // 判断文字颜色（深色背景用白色，浅色背景用黑色）
+  function textColor(rgb) {
+    const m = rgb.match(/(\d+)/g);
+    if (!m) return '#fff';
+    const brightness = (parseInt(m[0]) * 299 + parseInt(m[1]) * 587 + parseInt(m[2]) * 114) / 1000;
+    return brightness > 150 ? '#111' : '#fff';
+  }
+
+  // 构建表格
+  let html = '<table><thead><tr><th class="gantt-row-label">柜号</th>';
+  days.forEach(d => {
+    html += `<th>${d.label}<br><small>周${d.dayOfWeek}</small></th>`;
+  });
+  html += '</tr></thead><tbody>';
+
+  sortedContainers.forEach(cNo => {
+    html += `<tr><td class="gantt-row-label">${escHtml(cNo)}</td>`;
+    days.forEach(d => {
+      const cell = ganttData[cNo]?.[d.key];
+      if (cell && cell.value !== undefined) {
+        const bg = tempColor(cell.value);
+        const fg = textColor(bg);
+        html += `<td style="background:${bg};color:${fg}">${cell.value}°</td>`;
+      } else {
+        html += `<td class="gantt-empty-cell">-</td>`;
+      }
+    });
+    html += '</tr>';
+  });
+
+  html += '</tbody></table>';
+  dom.ganttContainer.innerHTML = html;
 }
 
 // === 数据明细表格 ===
@@ -566,7 +393,7 @@ function resetRefreshTimer() {
 
 dom.btnRefresh.addEventListener('click', () => fetchDashboard());
 dom.containerFilter.addEventListener('change', () => fetchDashboard());
-dom.hoursFilter.addEventListener('change', () => fetchDashboard());
+dom.tempTypeFilter.addEventListener('change', () => updateGantt(allRecords));
 dom.btnSettings.addEventListener('click', openSettings);
 dom.btnSettingsClose.addEventListener('click', closeSettings);
 dom.settingsOverlay.addEventListener('click', (e) => {

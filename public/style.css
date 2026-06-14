@@ -274,7 +274,7 @@ html, body {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 16px;
+  margin-bottom: 12px;
   flex-wrap: wrap;
   gap: 12px;
 }
@@ -286,6 +286,7 @@ html, body {
 
 .chart-controls {
   display: flex;
+  align-items: center;
   gap: 10px;
 }
 
@@ -304,18 +305,98 @@ html, body {
   border-color: var(--accent);
 }
 
-.chart-container {
-  position: relative;
-  height: 350px;
-}
-
-.chart-empty {
-  height: 350px;
+/* 甘特图图例 */
+.gantt-legend {
   display: flex;
   align-items: center;
-  justify-content: center;
+  gap: 8px;
+  margin-bottom: 12px;
+  font-size: 0.75rem;
   color: var(--text-muted);
-  font-size: 1.1rem;
+  justify-content: flex-end;
+}
+
+.legend-bar {
+  width: 120px;
+  height: 12px;
+  border-radius: 6px;
+  background: linear-gradient(to right, #2979ff, #4caf50, #ffeb3b, #ff9800, #f44336);
+}
+
+/* 甘特图容器 */
+.gantt-wrap {
+  overflow-x: auto;
+}
+
+.gantt-wrap table {
+  border-collapse: collapse;
+  font-size: 0.85rem;
+  min-width: 100%;
+}
+
+.gantt-wrap thead th {
+  position: sticky;
+  top: 0;
+  background: var(--bg-card);
+  text-align: center;
+  padding: 8px 4px;
+  border-bottom: 2px solid var(--border);
+  color: var(--text-secondary);
+  font-weight: 600;
+  font-size: 0.75rem;
+  white-space: nowrap;
+  min-width: 70px;
+}
+
+.gantt-wrap thead th.gantt-row-label {
+  text-align: left;
+  min-width: 120px;
+  position: sticky;
+  left: 0;
+  z-index: 2;
+  background: var(--bg-card);
+}
+
+.gantt-wrap tbody td {
+  text-align: center;
+  padding: 6px 4px;
+  border: 2px solid var(--bg-primary);
+  font-weight: 600;
+  font-size: 0.82rem;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  transition: transform 0.15s;
+}
+
+.gantt-wrap tbody td:hover {
+  transform: scale(1.08);
+  z-index: 1;
+  box-shadow: 0 0 12px rgba(0,0,0,0.5);
+}
+
+.gantt-wrap tbody td.gantt-row-label {
+  text-align: left;
+  font-weight: 600;
+  color: var(--text-primary);
+  position: sticky;
+  left: 0;
+  background: var(--bg-card);
+  z-index: 1;
+  border-right: 2px solid var(--border);
+}
+
+.gantt-wrap tbody td.gantt-empty-cell {
+  color: var(--text-muted);
+  font-weight: 400;
+  font-size: 0.75rem;
+  background: transparent !important;
+}
+
+.gantt-empty {
+  text-align: center;
+  color: var(--text-muted);
+  padding: 40px;
+  font-size: 1rem;
 }
 
 /* === 数据表格 === */

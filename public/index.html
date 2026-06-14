@@ -4,9 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>🍈 榴莲运输温度监控看板</title>
-  <link rel="stylesheet" href="style.css?v=2">
-  <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  <link rel="stylesheet" href="style.css?v=3">
 </head>
 <body>
   <div class="app">
@@ -56,28 +54,26 @@
       <div class="alert-list" id="alertList"></div>
     </section>
 
-    <!-- 图表区域 -->
+    <!-- 甘特图区域 -->
     <section class="chart-section">
       <div class="chart-header">
-        <h2>📈 温度趋势</h2>
+        <h2>📅 温度甘特图（最近7天）</h2>
         <div class="chart-controls">
-          <select id="containerFilter" class="filter-select">
-            <option value="">全部柜号</option>
-          </select>
-          <select id="hoursFilter" class="filter-select">
-            <option value="1">最近 1 小时</option>
-            <option value="6">最近 6 小时</option>
-            <option value="24" selected>最近 24 小时</option>
-            <option value="72">最近 3 天</option>
-            <option value="168">最近 7 天</option>
+          <span style="color:var(--text-secondary);font-size:0.85rem">显示温度：</span>
+          <select id="tempTypeFilter" class="filter-select">
+            <option value="returnTemp">回风温度</option>
+            <option value="setTemp">设定温度</option>
+            <option value="supplyTemp">送风温度</option>
           </select>
         </div>
       </div>
-      <div class="chart-container">
-        <canvas id="tempChart"></canvas>
+      <div class="gantt-legend">
+        <span>冷</span>
+        <span class="legend-bar"></span>
+        <span>热</span>
       </div>
-      <div class="chart-empty" id="chartEmpty" style="display:none">
-        <p>暂无温度数据</p>
+      <div class="gantt-wrap" id="ganttContainer">
+        <p class="gantt-empty">加载中...</p>
       </div>
     </section>
 
@@ -148,6 +144,6 @@
     </div>
   </div>
 
-  <script src="app.js?v=2"></script>
+  <script src="app.js?v=3"></script>
 </body>
 </html>
