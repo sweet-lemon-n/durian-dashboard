@@ -39,8 +39,11 @@ pm2 status                     # check service status
 pm2 restart durian-dashboard   # restart
 pm2 logs durian-dashboard      # view logs
 
-# Quick API test (from any machine — requires auth now)
-curl -s http://124.221.92.98:3000/api/dashboard?hours=168 | python3 -m json.tool
+# Quick API test (with auth — login first, then use cookie)
+curl -s -X POST http://124.221.92.98:3000/api/auth/login \
+  -H 'Content-Type: application/json' \
+  -d '{"username":"admin","password":"YOUR_PASSWORD"}' -c /tmp/cookies.txt
+curl -s -b /tmp/cookies.txt http://124.221.92.98:3000/api/dashboard?hours=168 | python3 -m json.tool
 ```
 
 ### First-time server setup (auth)
@@ -68,11 +71,40 @@ node scripts/init-db.js
 ## Architecture
 
 ```
-Browser (看板 / 管理后台)
-    ↓ HTTP
+Browser (看板 / 管理后台 / 登录页)
+    ↓ HTTP (JWT in httpOnly cookie)
 Express server (server.js)
-    ↓ POST to qyapi.weixin.qq.com
-WeChat Work Smart Sheet API
+    ├── cookie-parser → 解析 token cookie
+    ├── Auth guard (/api/* 除 /api/auth/login|logout 外均需 requireAuth)
+    ├── requireRole('admin') on write/management routes
+    ├── lib/db.js → SQLite (data/auth.db, users/audit_logs tables)
+    └── lib/wecom.js → POST to qyapi.weixin.qq.com
+                              ↓
+                  WeChat Work Smart Sheet API
+```
+
+### Auth flow
+
+1. User visits any page → frontend JS calls `GET /api/auth/me`
+2. `401` → redirect to `/login?redirect=<original>`；`200` → show page
+3. Login: `POST /api/auth/login` with `{ username, password, rememberMe }` → server validates against bcrypt hash in SQLite → issues JWT (HS256, 7d if rememberMe, else 24h) → sets httpOnly cookie
+4. All subsequent API calls carry the cookie → `requireAuth` middleware verifies JWT + checks `token_version` (supports forced logout) → attaches `req.user`
+5. Admin-only routes additionally pass through `requireRole('admin')` → checks `req.user.role`
+6. Logout: `POST /api/auth/logout` → `clearCookie`
+
+### Middleware order in server.js (critical)
+
+```
+1. express.json()              — body parsing
+2. cookieParser()              — cookie parsing (must come before auth)
+3. express.static('public')    — static files (login.html, app.js, style.css)
+4. /login, /admin routes       — page serving
+5. CORS                        — permissive headers
+6. /callback raw body parsers  — XML for WeChat Work
+7. /api/auth/login, /api/auth/logout  — PUBLIC (before auth guard)
+8. app.use('/api', guard)      — skips /auth/login|logout, requireAuth for everything else
+9. /api/auth/me                — AUTHENTICATED (after guard)
+10. All other /api/* routes    — AUTHENTICATED + admin routes add requireRole('admin')
 ```
 
 ### Project structure
@@ -102,23 +134,28 @@ WeChat Work Smart Sheet API
 
 Express server with static file serving from `public/`. All API routes return JSON `{ success, data/error }`. Schema auto-detection with 5-minute cache.
 
-**Core routes:**
-| Route | Method | Purpose |
-|-------|--------|---------|
-| `/api/config/info` | GET | Document schema (sheets, fields, auto-detected temp/info sheet) |
-| `/api/dashboard` | GET | Aggregated data (records + stats + alerts + container list). Query params: `hours` (default 24), `limit` (default 200), `container` |
-| `/api/temperature/history` | GET | Historical temperature data for charts |
-| `/api/setup` | POST | Create new smart sheet doc with 温度记录 sheet + 11 default fields |
-| `/api/schema/refresh` | POST | Clear schema cache |
-| `/api/smartsheet/records` | GET | **Generic** record query for ANY sheet — returns parsed/flattened values. Query: `?sheetId=xxx&limit=500` |
-| `/callback` | GET/POST | WeChat Work callback URL verification + event receive |
+**Permission levels:** All `/api/*` routes require login (JWT cookie). Write/management routes additionally require `admin` role. Exceptions: `/callback` and auth login/logout are public.
 
-**Sheet management:** `POST /api/smartsheet/sheet/add`, `POST /api/smartsheet/sheet/delete`, `POST /api/smartsheet/sheet/update`
-**Record CRUD:** `POST /api/smartsheet/records/add`, `POST /api/smartsheet/records/delete`, `POST /api/smartsheet/records/update`
-**Field management:** `POST /api/smartsheet/fields/add` (auto-reverses array + deletes default "智能表列"), `POST /api/smartsheet/fields/delete`, `POST /api/smartsheet/fields/update`
-**Views:** `GET /api/smartsheet/views`, `POST .../views/add`, `POST .../views/delete`, `POST .../views/update`
-**Groups:** `GET /api/smartsheet/groups`, `POST .../groups/add`, `POST .../groups/delete`, `POST .../groups/update`
-**Document:** `GET /api/doc/info`, `POST /api/doc/rename`, `POST /api/doc/delete`
+**Core routes:**
+| Route | Method | Auth | Purpose |
+|-------|--------|------|---------|
+| `/api/auth/login` | POST | 无 | Login. Body: `{ username, password, rememberMe? }` → sets httpOnly JWT cookie |
+| `/api/auth/logout` | POST | 无 | Clears auth cookie |
+| `/api/auth/me` | GET | 登录 | Returns current user `{ username, displayName, role }` |
+| `/api/config/info` | GET | 登录 | Document schema (sheets, fields, auto-detected temp/info sheet) |
+| `/api/dashboard` | GET | 登录 | Aggregated data (records + stats + alerts + container list). Query: `hours`(default 24), `limit`(default 200), `container` |
+| `/api/temperature/history` | GET | 登录 | Historical temperature data for charts |
+| `/api/setup` | POST | admin | Create new smart sheet doc with 温度记录 sheet + 11 default fields |
+| `/api/schema/refresh` | POST | 登录 | Clear schema cache |
+| `/api/smartsheet/records` | GET | 登录 | **Generic** record query for ANY sheet. Query: `?sheetId=xxx&limit=500` |
+| `/callback` | GET/POST | 无 | WeChat Work callback URL verification + event receive |
+
+**Sheet management:** `POST /api/smartsheet/sheet/add`, `/delete`, `/update` — all require `admin`
+**Record CRUD:** `POST /api/smartsheet/records/add`, `/delete`, `/update` — all require `admin`
+**Field management:** `POST /api/smartsheet/fields/add` (auto-reverses array + deletes default "智能表列"), `/delete`, `/update` — all require `admin`
+**Views:** `GET /api/smartsheet/views` (login), `POST .../views/add`, `/delete`, `/update` (admin)
+**Groups:** `GET /api/smartsheet/groups` (login), `POST .../groups/add`, `/delete`, `/update` (admin)
+**Document:** `GET /api/doc/info`, `POST /api/doc/rename`, `POST /api/doc/delete` — all require `admin`
 
 **Schema detection strategy:** Title-based matching first (标题含「温度」→ tempSheet, 含「订单」→ infoSheet), then field-keyword fallback.
 
@@ -148,9 +185,9 @@ Transparent retry on token expiry (errcode 40014/42001). All API calls require t
 ### Frontend (`public/`)
 - **`login.html`** — Dark-theme login page, checks `/api/auth/me` on load (auto-redirect if already logged in), submit to `POST /api/auth/login`, supports `?redirect=` param for post-login navigation. "记住登录状态（7天）" checkbox maps to JWT 7d expiry.
 
-- **`index.html` + `style.css`** — Dark-theme dashboard with stats cards, alert banner, gantt heatmap (container × date grid, color-coded from blue/cold to red/hot), and records data table (12 columns). Settings panel, auto-refresh polling. Cache-busted with `?v=` query param.
-- **`admin.html`** — Full admin panel: system status, one-click smart sheet creation, table structure viewer, dashboard data viewer (both with JSON/table toggle), record CRUD (modal with all 11 fields, table view for any sheet), field/view/group management, document rename/delete.
-- **`app.js`** — Dashboard logic: gantt heatmap rendering (`updateGantt()`), temperature type filter (returnTemp/setTemp/supplyTemp), 6-point color interpolation (≤6°C blue → 12°C green → ≥20°C red), 7-day date range with last-record-per-day dedup, localStorage-backed settings, 30s auto-polling.
+- **`index.html` + `app.js`** — Dashboard. On load: `loadUserInfo()` → `fetchDashboard()`. `apiFetch()` wrapper handles 401→redirect to login, 403→alert. Header shows user name + logout button. Gantt heatmap (container × date grid, color-coded blue≤6°C→green→red≥20°C), 7-day range with last-record-per-day dedup. Settings panel (temp thresholds, refresh interval) persisted to localStorage. 30s auto-polling. Cache-busted with `?v=` query param.
+- **`admin.html`** — Admin panel. On load: `checkAdminAuth()` verifies role==='admin', else redirects. All `fetch` calls use `apiFetch()` wrapper. System status, smart sheet creation, table structure/dashboard data viewers (JSON/table toggle), record CRUD (modal with 11 fields, table view for any sheet, checkbox + batch delete), field/view/group management, document rename/delete. All write operations gated by server-side `requireRole('admin')`.
+- **`style.css`** — Dark-theme styles shared by dashboard and login page. Admin panel has its own inline `<style>` block with separate CSS variables (same color values).
 
 ## 温度记录 sub-table schema (w7xSwm, 11 fields)
 
@@ -190,6 +227,7 @@ Transparent retry on token expiry (errcode 40014/42001). All API calls require t
 | `TEMP_MIN` / `TEMP_MAX` | Temperature alert fallback thresholds (°C, used when no setTemp available) |
 | `TEMP_DIFF_WARNING` | Max allowed deviation between 回风 and 设定 temp before alert (default 3°C) |
 | `REFRESH_INTERVAL` | Frontend polling interval in seconds (default 30) |
+| `JWT_SECRET` | HMAC-SHA256 signing key for JWT tokens (generate via `crypto.randomBytes(64).toString('hex')`) |
 | `WECOM_TOKEN` | Callback URL verification token |
 | `WECOM_ENCODING_AES_KEY` | 43-char AES key for callback encryption |
 
