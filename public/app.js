@@ -76,9 +76,14 @@ const dom = {
   statAvgTemp: $('#statAvgTemp'),
   statAbnormal: $('#statAbnormal'),
   statAlertsCard: $('#statAlertsCard'),
+  statDetained: $('#statDetained'),
+  statDetentionCard: $('#statDetentionCard'),
   alertBanner: $('#alertBanner'),
   alertCount: $('#alertCount'),
   alertList: $('#alertList'),
+  detentionBanner: $('#detentionBanner'),
+  detentionCount: $('#detentionCount'),
+  detentionList: $('#detentionList'),
   containerFilter: $('#containerFilter'),
   recordsBody: $('#recordsBody'),
   tableRecordCount: $('#tableRecordCount'),
@@ -118,6 +123,7 @@ async function fetchDashboard() {
 
     updateStats(data.stats);
     updateAlerts(data.alerts);
+    updateDetention(data.detention);
     updateContainerFilter();
     updateGantt(data.records);
     updateTable(data.records);
@@ -147,6 +153,55 @@ function updateStats(stats) {
     dom.statAlertsCard.classList.add('active');
   } else {
     dom.statAlertsCard.classList.remove('active');
+  }
+}
+
+// === 更新滞留数据 ===
+
+function updateDetention(detention) {
+  if (!detention) {
+    if (dom.detentionBanner) dom.detentionBanner.style.display = 'none';
+    if (dom.statDetained) dom.statDetained.textContent = '--';
+    if (dom.statDetentionCard) dom.statDetentionCard.classList.remove('active');
+    return;
+  }
+
+  const { containers, detainedCount, avgDays } = detention;
+
+  // 滞留统计卡片
+  if (dom.statDetained) dom.statDetained.textContent = detainedCount;
+
+  // 滞留卡片高亮
+  if (dom.statDetentionCard) {
+    if (detainedCount > 0) {
+      dom.statDetentionCard.classList.add('active');
+    } else {
+      dom.statDetentionCard.classList.remove('active');
+    }
+  }
+
+  // 滞留横幅
+  if (!containers || containers.length === 0) {
+    if (dom.detentionBanner) dom.detentionBanner.style.display = 'none';
+    return;
+  }
+
+  if (dom.detentionBanner) dom.detentionBanner.style.display = 'block';
+  if (dom.detentionCount) dom.detentionCount.textContent = containers.length;
+
+  if (dom.detentionList) {
+    dom.detentionList.innerHTML = containers.slice(0, 10).map(c => {
+      const daysClass = c.days > 5 ? 'detention-severe' : (c.days > 2 ? 'detention-warn' : '');
+      const transportLabel = c.transportType === '海运' ? '🚢' : '🚛';
+      return `
+        <div class="alert-item">
+          <span class="alert-container">${transportLabel} ${escHtml(c.containerNo)}</span>
+          <span class="detention-port">📍 ${escHtml(c.port || '未知关口')}</span>
+          <span class="detention-days ${daysClass}">⏳ ${c.days} 天</span>
+          ${c.inspection && c.inspection !== '直放' ? `<span class="detention-inspect">🔍 ${escHtml(c.inspection)}</span>` : ''}
+        </div>
+      `;
+    }).join('');
   }
 }
 
@@ -311,7 +366,7 @@ function updateTable(records) {
   dom.tableRecordCount.textContent = `${records.length} 条记录`;
 
   if (records.length === 0) {
-    dom.recordsBody.innerHTML = `<tr class="empty-row"><td colspan="12">暂无数据</td></tr>`;
+    dom.recordsBody.innerHTML = `<tr class="empty-row"><td colspan="14">暂无数据</td></tr>`;
     return;
   }
 
@@ -327,6 +382,13 @@ function updateTable(records) {
       diffHtml = ` <span class="${diffClass}">(${diffSign}${r.tempDiff}°C)</span>`;
     }
 
+    // 滞留显示
+    let detentionHtml = '<td>-</td><td>-</td>';
+    if (r.detentionPort) {
+      const daysClass = r.detentionDays > 5 ? 'detention-severe' : (r.detentionDays > 2 ? 'detention-warn' : '');
+      detentionHtml = `<td>${escHtml(r.detentionPort)}</td><td class="${daysClass}">${r.detentionDays !== null ? r.detentionDays + ' 天' : '-'}</td>`;
+    }
+
     return `
       <tr>
         <td>${escHtml(r.containerNo)}</td>
@@ -339,6 +401,7 @@ function updateTable(records) {
         <td>${escHtml(r.location)}</td>
         <td>${escHtml(r.aroma)}</td>
         <td>${escHtml(r.port)}</td>
+        ${detentionHtml}
         <td>${formatTime(r.updateTime)}</td>
         <td><span class="status-badge ${statusClass}">${statusText}</span></td>
       </tr>
@@ -356,7 +419,7 @@ function updateLastUpdate() {
 // === 错误提示 ===
 
 function showError(msg) {
-  dom.recordsBody.innerHTML = `<tr class="empty-row"><td colspan="12" style="color:var(--danger)">⚠ ${escHtml(msg)}</td></tr>`;
+  dom.recordsBody.innerHTML = `<tr class="empty-row"><td colspan="14" style="color:var(--danger)">⚠ ${escHtml(msg)}</td></tr>`;
 }
 
 // === 设置面板 ===

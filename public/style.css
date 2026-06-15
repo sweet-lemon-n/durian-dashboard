@@ -189,6 +189,7 @@ html, body {
 .stat-card:nth-child(2)::before { background: var(--info); }
 .stat-card:nth-child(3)::before { background: var(--accent); }
 .stat-card:nth-child(4)::before { background: var(--warning); }
+.stat-card:nth-child(5)::before { background: #9c27b0; }
 
 .stat-card.warning::before {
   background: var(--danger);
@@ -197,6 +198,16 @@ html, body {
 .stat-card.warning.active {
   border-color: var(--danger);
   box-shadow: 0 0 20px var(--danger-glow);
+  animation: alert-flash 0.8s ease-in-out infinite;
+}
+
+.stat-card.detention::before {
+  background: #ff9800;
+}
+
+.stat-card.detention.active {
+  border-color: #ff9800;
+  box-shadow: 0 0 20px rgba(255, 152, 0, 0.3);
   animation: alert-flash 0.8s ease-in-out infinite;
 }
 
@@ -283,6 +294,53 @@ html, body {
 
 .alert-item .alert-reason {
   color: var(--text-secondary);
+}
+
+/* 滞留横幅 */
+.detention-banner {
+  border-color: #ff9800;
+  animation: detention-flash 1.5s ease-in-out infinite;
+}
+
+@keyframes detention-flash {
+  0%, 100% { box-shadow: 0 0 0 rgba(255, 152, 0, 0); }
+  50% { box-shadow: 0 0 12px rgba(255, 152, 0, 0.3); }
+}
+
+.detention-port {
+  color: var(--text-secondary);
+  font-size: 0.8rem;
+}
+
+.detention-days {
+  font-weight: 700;
+  font-size: 0.85rem;
+  color: var(--accent);
+}
+
+.detention-days.detention-warn {
+  color: #ff9800;
+}
+
+.detention-days.detention-severe {
+  color: var(--danger);
+  animation: blink 0.6s ease-in-out infinite;
+}
+
+.detention-inspect {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+}
+
+/* 数据表格滞留列 */
+td .detention-warn {
+  color: #ff9800;
+  font-weight: 700;
+}
+
+td .detention-severe {
+  color: var(--danger);
+  font-weight: 700;
 }
 
 /* === 图表区域 === */

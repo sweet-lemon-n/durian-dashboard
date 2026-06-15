@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>🍈 榴莲运输温度监控看板</title>
-  <link rel="stylesheet" href="style.css?v=5">
+  <link rel="stylesheet" href="style.css?v=6">
 </head>
 <body>
   <div class="app">
@@ -45,6 +45,20 @@
         <div class="stat-value" id="statAbnormal">--</div>
         <div class="stat-unit">条</div>
       </div>
+      <div class="stat-card detention" id="statDetentionCard">
+        <div class="stat-label">关口滞留</div>
+        <div class="stat-value" id="statDetained">--</div>
+        <div class="stat-unit">柜</div>
+      </div>
+    </section>
+
+    <!-- 滞留告警横幅（有关口滞留时显示） -->
+    <section class="alert-banner detention-banner" id="detentionBanner" style="display:none">
+      <div class="alert-banner-header">
+        <span>⏳ 关口滞留预警</span>
+        <span class="alert-count" id="detentionCount">0</span>
+      </div>
+      <div class="alert-list" id="detentionList"></div>
     </section>
 
     <!-- 告警横幅（有异常时显示） -->
@@ -101,13 +115,15 @@
               <th>当前位置</th>
               <th>味道</th>
               <th>关口</th>
+              <th>滞留关口</th>
+              <th>滞留天数</th>
               <th>更新时间</th>
               <th>状态</th>
             </tr>
           </thead>
           <tbody id="recordsBody">
             <tr class="empty-row">
-              <td colspan="12">加载中...</td>
+              <td colspan="14">加载中...</td>
             </tr>
           </tbody>
         </table>
@@ -146,6 +162,6 @@
     </div>
   </div>
 
-  <script src="app.js?v=5"></script>
+  <script src="app.js?v=6"></script>
 </body>
 </html>

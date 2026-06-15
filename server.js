@@ -532,6 +532,146 @@ app.get('/api/dashboard', async (req, res) => {
       };
     });
 
+    // === 物流数据：从陆运/海运明细表读取全流程追踪信息 ===
+    let detention = {
+      containers: [],
+      detainedCount: 0,
+      avgDays: 0,
+    };
+    const containerLogistics = {}; // containerNo → logistics info
+
+    try {
+      const allSheets = schema.sheets || [];
+      const landSheet = allSheets.find(s => s.title === '陆运明细');
+      const seaSheet = allSheets.find(s => s.title === '海运明细');
+
+      // 读取陆运明细
+      if (landSheet) {
+        console.log('[dashboard] 读取陆运明细...');
+        const landRecords = await wecom.getAllRecords(DOCID, landSheet.sheet_id, { limit: 500 });
+        landRecords.forEach(r => {
+          const cNo = wecom.getRecordValue(r, '柜号');
+          if (!cNo) return;
+          const entryTime = parseLogisticsTime(wecom.getRecordValue(r, '进卡时间'));
+          const exitTime = parseLogisticsTime(wecom.getRecordValue(r, '出口岸时间'));
+          const port = wecom.getRecordValue(r, '目的地') || '';
+          const status = wecom.getRecordValue(r, '当前状况') || '';
+          const inspection = wecom.getRecordValue(r, '是否中查验') || '';
+          const market = wecom.getRecordValue(r, '市场') || '';
+
+          // 计算滞留天数
+          let detentionDays = null;
+          let detentionPort = null;
+          if (entryTime) {
+            detentionPort = port;
+            const endTime = exitTime || new Date();
+            detentionDays = Math.round((endTime - entryTime) / (86400 * 1000) * 10) / 10;
+          }
+
+          containerLogistics[cNo] = {
+            transportType: '陆运',
+            port,
+            status,
+            inspection,
+            market,
+            entryTime: entryTime ? entryTime.toISOString() : null,
+            exitTime: exitTime ? exitTime.toISOString() : null,
+            detentionDays,
+            detentionPort,
+          };
+        });
+      }
+
+      // 读取海运明细
+      if (seaSheet) {
+        console.log('[dashboard] 读取海运明细...');
+        const seaRecords = await wecom.getAllRecords(DOCID, seaSheet.sheet_id, { limit: 500 });
+        seaRecords.forEach(r => {
+          const cNo = wecom.getRecordValue(r, '柜号');
+          if (!cNo) return;
+          const arrivalTime = parseLogisticsTime(wecom.getRecordValue(r, '实际到港时间'));
+          const releaseTime = parseLogisticsTime(wecom.getRecordValue(r, '放行时间'));
+          const port = wecom.getRecordValue(r, '目的港') || '';
+          const status = wecom.getRecordValue(r, '当前状态') || '';
+          const inspection = wecom.getRecordValue(r, '查验状态') || '';
+          const vessel = wecom.getRecordValue(r, '船名') || '';
+
+          let detentionDays = null;
+          let detentionPort = null;
+          if (arrivalTime) {
+            detentionPort = port;
+            const endTime = releaseTime || new Date();
+            detentionDays = Math.round((endTime - arrivalTime) / (86400 * 1000) * 10) / 10;
+          }
+
+          containerLogistics[cNo] = {
+            transportType: '海运',
+            port,
+            status,
+            inspection,
+            vessel,
+            entryTime: arrivalTime ? arrivalTime.toISOString() : null,
+            exitTime: releaseTime ? releaseTime.toISOString() : null,
+            detentionDays,
+            detentionPort,
+          };
+        });
+      }
+
+      // 将物流信息附加到温度记录
+      recentRecords.forEach(r => {
+        const logistics = containerLogistics[r.containerNo];
+        if (logistics) {
+          r.transportType = logistics.transportType;
+          r.detentionDays = logistics.detentionDays;
+          r.detentionPort = logistics.detentionPort;
+          r.inspection = logistics.inspection;
+          r.market = logistics.market;
+          r.logisticsStatus = logistics.status;
+        } else {
+          r.transportType = null;
+          r.detentionDays = null;
+          r.detentionPort = null;
+          r.inspection = null;
+          r.market = null;
+          r.logisticsStatus = null;
+        }
+      });
+
+      // 汇总滞留统计
+      const detainedList = [];
+      const seenContainers = new Set();
+      Object.entries(containerLogistics).forEach(([cNo, info]) => {
+        if (info.detentionDays !== null && info.detentionDays > 0 && !seenContainers.has(cNo)) {
+          seenContainers.add(cNo);
+          detainedList.push({
+            containerNo: cNo,
+            port: info.detentionPort,
+            days: info.detentionDays,
+            transportType: info.transportType,
+            inspection: info.inspection,
+            entryTime: info.entryTime,
+            status: info.status,
+          });
+        }
+      });
+      // 按滞留天数降序
+      detainedList.sort((a, b) => b.days - a.days);
+
+      detention = {
+        containers: detainedList,
+        detainedCount: detainedList.length,
+        avgDays: detainedList.length > 0
+          ? Math.round(detainedList.reduce((s, c) => s + c.days, 0) / detainedList.length * 10) / 10
+          : 0,
+      };
+
+      console.log(`[dashboard] 物流数据: ${Object.keys(containerLogistics).length} 个柜, 滞留 ${detention.detainedCount} 个`);
+    } catch (logisticsErr) {
+      console.warn('[dashboard] 物流数据读取失败（可能新子表尚未创建）:', logisticsErr.message);
+      // 容错：即使物流数据读取失败，温度数据仍正常返回
+    }
+
     // 柜列表（用于筛选下拉）
     const containers = Array.from(containerSet).map(c => ({ containerNo: c }));
 
@@ -557,6 +697,7 @@ app.get('/api/dashboard', async (req, res) => {
         stats,
         containers,
         alerts,
+        detention,
         availableFields,
         sheets: {
           temp: { sheet_id: tempSheet.sheet_id, title: tempSheet.title },
@@ -1177,6 +1318,23 @@ function formatTimestamp(ts) {
   if (isNaN(ms)) return ts;
   const d = new Date(ms);
   return d.toISOString();
+}
+
+/**
+ * 解析物流时间值（企微 DATE_TIME 字段返回毫秒时间戳字符串）
+ */
+function parseLogisticsTime(raw) {
+  if (!raw) return null;
+  // 尝试解析为数字时间戳
+  const ts = parseInt(raw);
+  if (!isNaN(ts) && ts > 1000000000000) {
+    const d = new Date(ts);
+    if (!isNaN(d.getTime())) return d;
+  }
+  // 尝试解析 ISO 字符串
+  const d = new Date(raw);
+  if (!isNaN(d.getTime())) return d;
+  return null;
 }
 
 // ---- 启动 ----
