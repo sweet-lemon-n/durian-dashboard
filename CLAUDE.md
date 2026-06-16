@@ -4,16 +4,21 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project overview
 
-榴莲运输温度监控看板 — A data management dashboard for durian fruit shipping. The backend reads/writes data via WeChat Work (企业微信) Smart Sheet API, serving two frontends: a real-time monitoring dashboard and an admin panel.
+榴莲运输温度监控看板 — A data management dashboard for durian fruit shipping. The backend reads/writes data via WeChat Work (企业微信) Smart Sheet API, serving two frontends: a TV-style delivery-overview dashboard and an admin panel.
 
-**Tech stack:** Node.js + Express (backend), vanilla HTML/CSS/JS (frontend), SQLite (auth DB), deployed on Tencent Cloud Ubuntu Lighthouse server.
+**Tech stack:** Node.js + Express (backend), vanilla HTML/CSS/JS (frontend), SQLite (auth DB), JSON file (editable board content), `xlsx` for one-off Excel imports. Deployed on Tencent Cloud Ubuntu Lighthouse server.
 
-**Auth system:** JWT-based login with httpOnly cookies. `lib/db.js` (SQLite via better-sqlite3) and `lib/auth.js` (JWT + middleware). Two roles: `admin` (full access) and `viewer` (dashboard only). All `/api/*` routes require authentication; write/manage routes additionally require `admin` role. Login page at `/login`.
+**Auth system:** JWT-based login with httpOnly cookies. `lib/db.js` (SQLite via better-sqlite3) and `lib/auth.js` (JWT + middleware). Two roles: `admin` (full access) and `viewer` (read-only). All `/api/*` routes require authentication; write/manage routes additionally require `admin` role. Login page at `/login`.
 
-The smart sheet document (`DOCID` in `.env`) contains three sheets:
-- **订单主表** (exh5Ik) — order master data
-- **分柜明细表** (APAxm1) — per-container shipment details
-- **温度记录** (w7xSwm, 11 fields) — per-container temperature readings, linked to 分柜明细表 via 柜号
+**Two data sources — keep them straight:**
+1. **企业微信 Smart Sheet** (`DOCID` in `.env`) — the *real* shipping/temperature data. Read via `lib/wecom.js`. Requires IP whitelist (see bottom).
+2. **`data/board-content.json`** (`lib/content-store.js`) — editable *placeholder* content for the redesigned dashboard's order/news/country/logistics sections, which the real sheet does not yet model. Seeded on first run, edited from the admin panel. Wiring these sections to real sheet data is an explicit future phase.
+
+Smart sheet sub-tables (titles, not IDs, are matched at runtime):
+- **温度记录** (w7xSwm, 11 fields) — per-container temperature readings. **Core** — drives the gantt + dashboard temperature/alerts. Linked to logistics sheets via 柜号.
+- **陆运明细** / **海运明细** — full land/sea shipment tracking (created by `scripts/create-sheets.js`, ~57 / ~89 fields). The dashboard's detention (滞留) calc reads these by sheet title.
+- **国内段明细** / **海运国内** — domestic-leg detail sheets.
+- **订单主表** (exh5Ik) / **分柜明细表** (APAxm1) — legacy sheets, kept but no longer the primary source.
 
 ## Common commands
 
@@ -27,11 +32,15 @@ node scripts/init-db.js        # create admin account interactively
 # Then in .env, replace JWT_SECRET with:
 # node -e "console.log(require('crypto').randomBytes(64).toString('hex'))"
 
-# Deploy (git-based)
-./deploy.sh "commit message"   # git add/commit/push to GitHub
+# Deploy (git-based) — user expects every change pushed to GitHub automatically
+./deploy.sh "commit message"   # git add/commit/push to GitHub (or run add/commit/push manually)
 
-# After deploy.sh, on the server:
+# After push, the USER pulls on the server themselves:
 cd /home/ubuntu/温度看板 && git pull && pm2 restart durian-dashboard
+
+# One-time smart-sheet setup scripts (need IP whitelisted, run locally or on server):
+node scripts/create-sheets.js   # create 陆运明细/海运明细/国内段明细/海运国内 sheets + fields
+node scripts/import-xls-data.js # import data/明细表.xls into 陆运/海运明细
 
 # Server management (SSH)
 ssh ubuntu@124.221.92.98
@@ -97,7 +106,7 @@ Express server (server.js)
 ```
 1. express.json()              — body parsing
 2. cookieParser()              — cookie parsing (must come before auth)
-3. express.static('public')    — static files (login.html, app.js, style.css)
+3. express.static('public')    — static files (index.html, admin.html, login.html, gantt.js, admin-smartsheet.js, style.css)
 4. /login, /admin routes       — page serving
 5. CORS                        — permissive headers
 6. /callback raw body parsers  — XML for WeChat Work
@@ -111,24 +120,31 @@ Express server (server.js)
 
 ```
 温度看板/
-├── server.js              # Express backend (all API routes)
+├── server.js              # Express backend (all API routes; mounts board-routes after the auth guard)
 ├── deploy.sh              # git add/commit/push helper
 ├── lib/
 │   ├── wecom.js           # WeChat Work API wrapper (token, CRUD, views, groups)
 │   ├── crypto.js          # Callback crypto (SHA1 verify, AES-256-CBC encrypt/decrypt)
-│   ├── db.js              # SQLite database (users table, user CRUD functions)
-│   └── auth.js            # JWT auth (generate/verify token, requireAuth/requireRole middleware)
+│   ├── db.js              # SQLite database (users/audit_logs tables, user CRUD)
+│   ├── auth.js            # JWT auth (generate/verify token, requireAuth/requireRole middleware)
+│   ├── content-store.js   # JSON store for editable board content (data/board-content.json) + seed defaults
+│   └── board-routes.js    # express.Router: /api/aggregate + orders/logistics/news CRUD; exports { router, aggregate }
 ├── public/                # Frontend static files
-│   ├── index.html         # Dashboard (gantt heatmap, stats, alerts, data table)
-│   ├── admin.html         # Admin panel (record CRUD, field mgmt, JSON/table toggle)
+│   ├── index.html         # Dashboard: 泰越交付总览 board (template) + temperature gantt at bottom + auth wrapper
+│   ├── gantt.js           # Temperature gantt heatmap (reads real /api/dashboard), independent fetch loop
+│   ├── admin.html         # Admin panel: 4 tabs (订单/物流/新闻 → board-content; 🗄 智能表格管理 → wecom)
+│   ├── admin-smartsheet.js# Smart-sheet management logic for the 4th admin tab (globals; loaded after inline script)
 │   ├── login.html         # Login page (dark theme, remember-me, JWT cookie auth)
-│   ├── app.js             # Dashboard logic (gantt heatmap, auto-polling, settings, auth)
-│   └── style.css          # Dark-theme styles (dashboard + login page)
-├── data/                  # Data files (auth.db SQLite database + backups)
+│   └── style.css          # Dark-theme styles for login page (dashboard/admin are self-contained inline)
+├── data/                  # auth.db (SQLite) + board-content.json (gitignored, auto-seeded) + import sources
 ├── scripts/
-│   └── init-db.js         # Interactive first-time admin user creation
+│   ├── init-db.js         # Interactive first-time admin user creation
+│   ├── create-sheets.js   # Create 陆运/海运/国内段/海运国内 sheets + fields via wecom API
+│   └── import-xls-data.js # Import 明细表.xls historical data into 陆运/海运明细
 └── docs/                  # Documentation
 ```
+
+> Note: `public/app.js` was removed in the redesign — the gantt logic now lives in `gantt.js`. The dashboard and admin pages keep their CSS/JS **inline** (template style); only `login.html` uses `style.css`.
 
 ### Backend (`server.js`)
 
@@ -143,8 +159,11 @@ Express server with static file serving from `public/`. All API routes return JS
 | `/api/auth/logout` | POST | 无 | Clears auth cookie |
 | `/api/auth/me` | GET | 登录 | Returns current user `{ username, displayName, role }` |
 | `/api/config/info` | GET | 登录 | Document schema (sheets, fields, auto-detected temp/info sheet) |
-| `/api/dashboard` | GET | 登录 | Aggregated data (records + stats + alerts + container list). Query: `hours`(default 24), `limit`(default 200), `container` |
+| `/api/aggregate` | GET | 登录 | **Dashboard board data** from `board-content.json`: `{ meta, global, th, vn, logistics, news, generatedAt }`. Raw object (NOT `{success,data}`). `no-store` |
+| `/api/dashboard` | GET | 登录 | Real temperature data from 温度记录 + **detention** from 陆运/海运明细: `{ records, stats, alerts, containers, detention }`. Query: `hours`(default 24), `limit`(200), `container` |
 | `/api/temperature/history` | GET | 登录 | Historical temperature data for charts |
+| `/api/orders`, `/api/news` | GET·POST·PUT·DELETE | 登录读 / admin写 | Board-content order & news CRUD (`board-routes.js`). Raw object/array responses |
+| `/api/logistics`, `.../kpis`, `.../portDelays[/:id]`, `.../inTransitContainers[/:id]` | GET·PUT·POST·DELETE | 登录读 / admin写 | Board-content logistics CRUD |
 | `/api/setup` | POST | admin | Create new smart sheet doc with 温度记录 sheet + 11 default fields |
 | `/api/schema/refresh` | POST | 登录 | Clear schema cache |
 | `/api/smartsheet/records` | GET | 登录 | **Generic** record query for ANY sheet. Query: `?sheetId=xxx&limit=500` |
@@ -160,6 +179,8 @@ Express server with static file serving from `public/`. All API routes return JS
 **Schema detection strategy:** Title-based matching first (标题含「温度」→ tempSheet, 含「订单」→ infoSheet), then field-keyword fallback.
 
 **Alert logic:** Primarily compares 回风温度 vs 设定温度 — if `|returnTemp - setTemp| > TEMP_DIFF_WARNING` (default 3°C), record is marked abnormal. Falls back to TEMP_MIN/TEMP_MAX thresholds if no setTemp available.
+
+**Detention logic** (in `/api/dashboard`, joined onto temperature records by 柜号): reads the 陆运明细 / 海运明细 sheets by title. 陆运 detention = (出口岸时间 ?? now) − 进卡时间; 海运 detention = (放行时间 ?? now) − 实际到港时间, in days. `parseLogisticsTime()` accepts ms-timestamp strings or ISO. Logistics-read failures are caught and never block the temperature response.
 
 ### Key modules (`lib/`)
 
@@ -180,14 +201,23 @@ Transparent retry on token expiry (errcode 40014/42001). All API calls require t
 
 **`db.js`** — SQLite database layer (better-sqlite3, synchronous API). Creates/opens `data/auth.db`, maintains `users` and `audit_logs` tables. Exports: `initDatabase`, `getDb`, `getUserByUsername`, `getUserById`, `createUser` (async — bcrypt hashing), `updateUser`, `listUsers`, `incrementTokenVersion`, `countUsers`. Role CHECK constraint: `admin` or `viewer`.
 
-**`auth.js`** — JWT authentication and Express middleware. Uses `jsonwebtoken` (HS256) and httpOnly cookies (`cookie-parser`). Exports: `generateToken` (7d remember-me / 24h default), `verifyToken`, `setAuthCookie`/`clearAuthCookie`, `requireAuth` (validates JWT + checks `token_version` for forced logout), `requireRole(...roles)` (factory middleware). JWT payload: `{ userId, username, role, tokenVersion }`.
+**`auth.js`** — JWT authentication and Express middleware. Uses `jsonwebtoken` (HS256) and httpOnly cookies (`cookie-parser`, cookie name `token`). Exports: `generateToken` (7d remember-me / 24h default), `verifyToken`, `setAuthCookie`/`clearAuthCookie`, `requireAuth` (validates JWT + checks `token_version` for forced logout), `requireRole(...roles)` (factory middleware). JWT payload: `{ userId, username, role, tokenVersion }`.
+
+**`content-store.js`** — JSON store for editable board content. `read()` (auto-seeds `data/board-content.json` from inline `seedData()` on first call; throws on parse error), `writeSync(data)` (tmp-file + atomic `renameSync`), `genId(prefix)` (`crypto.randomUUID()`). The file is gitignored — it regenerates from seed on a fresh server.
+
+**`board-routes.js`** — `express.Router` for the redesigned dashboard. Exports `{ router, aggregate }`. `aggregate(db)` groups orders by country (`done = TH?delivered:signed`, `rate = done/boxes`) into the `/api/aggregate` shape. CRUD writes go through `requireRole('admin')`; reads only need the guard. **Responses are raw objects/arrays** (not the `{success,data}` envelope) so the ported template frontend works unchanged. Mounted in `server.js` via `app.use('/api', boardRouter)` *after* the auth guard.
 
 ### Frontend (`public/`)
-- **`login.html`** — Dark-theme login page, checks `/api/auth/me` on load (auto-redirect if already logged in), submit to `POST /api/auth/login`, supports `?redirect=` param for post-login navigation. "记住登录状态（7天）" checkbox maps to JWT 7d expiry.
 
-- **`index.html` + `app.js`** — Dashboard. On load: `loadUserInfo()` → `fetchDashboard()`. `apiFetch()` wrapper handles 401→redirect to login, 403→alert. Header shows user name + logout button. Gantt heatmap (container × date grid, color-coded blue≤6°C→green→red≥20°C), 7-day range with last-record-per-day dedup. Settings panel (temp thresholds, refresh interval) persisted to localStorage. 30s auto-polling. Cache-busted with `?v=` query param.
-- **`admin.html`** — Admin panel. On load: `checkAdminAuth()` verifies role==='admin', else redirects. All `fetch` calls use `apiFetch()` wrapper. System status, smart sheet creation, table structure/dashboard data viewers (JSON/table toggle), record CRUD (modal with 11 fields, table view for any sheet, checkbox + batch delete), field/view/group management, document rename/delete. All write operations gated by server-side `requireRole('admin')`.
-- **`style.css`** — Dark-theme styles shared by dashboard and login page. Admin panel has its own inline `<style>` block with separate CSS variables (same color values).
+Dashboard and admin are **self-contained** (inline CSS + JS) — a polished dark gold/red template (Oswald/Noto Sans fonts). Only `login.html` uses the external `style.css`.
+
+- **`login.html`** — Dark-theme login page, checks `/api/auth/me` on load (auto-redirect if logged in), submits to `POST /api/auth/login`, supports `?redirect=` param. "记住登录状态（7天）" maps to JWT 7d expiry.
+
+- **`index.html`** — 泰越交付总览 board. `boot()`: `loadUser()` (`/api/auth/me`, 401→login, shows name + logout + an 后台 link for admins) → `loadData()` (`/api/aggregate`) → `paint()` (TH/VN country panels with FRESH/FROZEN rows, global aggregate, logistics monitoring tables, news columns, live clock), 30s poll. **All placeholder data except the bottom gantt.**
+- **`gantt.js`** — Loaded after the inline board script. Independent fetch loop against the real `/api/dashboard?hours=168` (temperature), renders the柜号×7-day color-coded heatmap (blue≤6°C→green→red≥20°C). Scoped under `#ganttContainer`. Locally without IP whitelist it just shows 「暂无温度数据」 (errors are swallowed); real data appears once deployed.
+- **`admin.html`** — 4-tab admin. Inline script (`api()` helper, 401→login / 403→toast) manages 订单/物流/新闻 against the board-content CRUD endpoints with autosave + 10s sync. The 4th tab **🗄 智能表格管理** holds the wecom smart-sheet management UI; its logic is in `admin-smartsheet.js` (globals, lazy-`initSmartsheet()` on first tab open). Auth via `checkAuth()` (non-admin → bounced to `/`).
+  - **JS collision rule:** both the inline admin script and `admin-smartsheet.js` share global scope. The inline script renamed its modal closer to `closeModalById` and its escape helpers to `esc`/`md`; `admin-smartsheet.js` uses `ssCloseModal`, `escHtml`/`escAttr`. Don't reintroduce a name defined in the other file.
+- **`style.css`** — Dark-theme styles for `login.html` only.
 
 ## 温度记录 sub-table schema (w7xSwm, 11 fields)
 
