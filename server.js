@@ -19,6 +19,7 @@ const {
   requireAuth,
   requireRole,
 } = require('./lib/auth');
+const { router: boardRouter } = require('./lib/board-routes');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -307,6 +308,10 @@ app.use('/api', (req, res, next) => {
   if (req.path === '/auth/login' || req.path === '/auth/logout') return next();
   requireAuth(req, res, next);
 });
+
+// ---- 看板内容 API（/api/aggregate + orders/logistics/news CRUD）----
+// 挂在鉴权 guard 之后：GET 默认登录可读，写操作在 board-routes 内各自 requireRole('admin')
+app.use('/api', boardRouter);
 
 /**
  * GET /api/auth/me

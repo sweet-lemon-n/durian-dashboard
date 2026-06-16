@@ -5,3 +5,5 @@ node_modules/
 data/auth.db
 data/auth.db-wal
 data/auth.db-shm
+data/board-content.json
+data/board-content.json.tmp
