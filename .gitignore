@@ -7,3 +7,5 @@ data/auth.db-wal
 data/auth.db-shm
 data/board-content.json
 data/board-content.json.tmp
+data/data-source.json
+data/data-source.json.tmp

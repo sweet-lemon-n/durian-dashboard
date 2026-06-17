@@ -383,7 +383,8 @@ function paint(d){
   renderCountry($('country-vn'),d.vn,'VN');
   renderLogistics($('logistics'),d.logistics);
   renderNewsCombined($('news-combined'),d.news.th,d.news.vn);
-  $('topDate').textContent='最后更新 ' + new Date(d.generatedAt||Date.now()).toLocaleTimeString('zh-CN');
+  const srcTag = d._source==='wecom' ? ' · 📡企微' : ' · ✏️手动';
+  $('topDate').textContent='最后更新 ' + new Date(d.generatedAt||Date.now()).toLocaleTimeString('zh-CN') + srcTag;
 }
 async function boot(){
   const ok = await loadUser();

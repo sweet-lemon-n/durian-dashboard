@@ -37,6 +37,14 @@
   #connStatus{font-size:12px;padding:4px 10px;border-radius:12px;}
   #connStatus.ok{background:rgba(34,197,94,.15);color:#86efac;}
   #connStatus.err{background:rgba(248,113,113,.15);color:#fca5a5;}
+  /* 数据源切换器 */
+  .ds-switch{display:flex;align-items:center;gap:8px;font-size:12px;color:var(--txt2);
+    background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:4px 10px;}
+  .ds-switch label{font-weight:500;}
+  .ds-switch select{background:var(--panel2);border:1px solid var(--line);color:var(--gold);
+    padding:3px 8px;border-radius:6px;font-size:12px;font-weight:700;cursor:pointer;}
+  .ds-switch select:focus{outline:none;border-color:var(--gold);}
+  .ds-switch.wecom select{color:var(--signed);}
 
   /* 布局 */
   .wrap{max-width:1400px;margin:0 auto;padding:20px;}
@@ -211,6 +219,13 @@
 <header>
   <h1>⚙️ 榴莲看板管理后台 <small>Durian Dashboard Admin</small></h1>
   <span id="connStatus">检测中</span>
+  <div class="ds-switch" id="dsSwitch" title="切换看板数据源">
+    <label>📊 数据源</label>
+    <select id="dsSelect">
+      <option value="manual">手动后台</option>
+      <option value="wecom">企微智能表</option>
+    </select>
+  </div>
   <div class="spacer"></div>
   <span class="user" id="headerUser"></span>
   <a href="/" target="_blank">📺 打开看板</a>
@@ -817,10 +832,32 @@ $('#filterCountry').onchange = renderOrders;
 $('#filterCat').onchange = renderOrders;
 $('#btnLogout').onclick = async (e)=>{ e.preventDefault(); try{ await fetch('/api/auth/logout',{method:'POST'}); }catch(_){} window.location.href='/login'; };
 
+// ===== 数据源切换器 =====
+async function loadDataSource(){
+  try{
+    const r = await api('/api/data-source');
+    const sel = $('#dsSelect');
+    sel.value = r.current;
+    $('#dsSwitch').classList.toggle('wecom', r.current==='wecom');
+  }catch(e){ console.warn('加载数据源失败', e.message); }
+}
+$('#dsSelect').onchange = async (e)=>{
+  const v = e.target.value;
+  if(!confirm(`切换看板数据源到「${v==='wecom'?'企微智能表':'手动后台'}」？\n切换后会立即影响所有看板访问。`)){
+    loadDataSource(); return; // 还原
+  }
+  try{
+    await api('/api/data-source','PUT',{source:v});
+    $('#dsSwitch').classList.toggle('wecom', v==='wecom');
+    toast(`已切换至「${v==='wecom'?'企微智能表':'手动后台'}」`);
+  }catch(e){ toast('切换失败：'+e.message, true); loadDataSource(); }
+};
+
 // 启动
 (async function(){
   const ok = await checkAuth();
   if(!ok) return;
+  await loadDataSource();
   loadAll();
   // 每 10 秒同步（不在输入框聚焦时刷新，避免丢焦点）
   setInterval(()=>{ if(document.activeElement.tagName!=='INPUT') loadAll(); }, 10000);
