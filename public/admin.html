@@ -80,8 +80,28 @@
   .pill.alarm{background:rgba(248,113,113,.2);color:#fca5a5;}
   .rate{font-weight:700;}
   .rate.good{color:#86efac;} .rate.low{color:#fca5a5;}
-  .row-actions{display:flex;gap:6px;white-space:nowrap;}
+  .row-actions{display:flex;gap:6px;white-space:nowrap;align-items:center;}
   .row-actions .btn{padding:3px 9px;font-size:11px;}
+  /* 订单排序：拖拽 + 悬停箭头 */
+  #ordersTable tbody tr{cursor:move;}
+  #ordersTable tbody tr.dragging{opacity:.4;}
+  #ordersTable tbody tr.drop-above td{box-shadow:0 -2px 0 var(--gold) inset;}
+  #ordersTable tbody tr.drop-below td{box-shadow:0 2px 0 var(--gold) inset;}
+  .ord-arrows{display:none;flex-direction:column;gap:1px;margin-right:4px;}
+  #ordersTable tbody tr:hover .ord-arrows{display:inline-flex;}
+  .ord-arrows button{width:18px;height:14px;padding:0;border:1px solid var(--line);background:var(--panel2);
+    color:var(--txt2);font-size:10px;line-height:1;cursor:pointer;border-radius:3px;}
+  .ord-arrows button:hover{color:var(--gold);border-color:var(--gold);}
+  .ord-arrows button:disabled{opacity:.3;cursor:not-allowed;}
+  /* 合计行 */
+  #ordersTable tfoot td{padding:6px 10px;border-top:2px solid var(--gold);background:rgba(245,196,81,.05);
+    font-size:13px;color:var(--txt);font-family:"Oswald";font-weight:700;white-space:nowrap;}
+  #ordersTable tfoot select{background:var(--panel2);border:1px solid var(--line);color:var(--txt2);
+    padding:2px 6px;border-radius:4px;font-size:10px;font-weight:500;font-family:inherit;
+    margin-bottom:3px;display:block;width:100%;max-width:88px;}
+  #ordersTable tfoot select:focus{outline:none;border-color:var(--gold);}
+  #ordersTable tfoot .agg-val{font-size:14px;color:var(--gold);}
+  #ordersTable tfoot .agg-val.muted{color:var(--txt3);font-weight:500;}
   .empty{padding:40px;text-align:center;color:var(--txt3);}
   .summary{display:flex;gap:24px;margin-bottom:16px;flex-wrap:wrap;}
   .summary .item{background:var(--panel2);padding:12px 18px;border-radius:8px;border:1px solid var(--line);}
@@ -220,6 +240,7 @@
       <thead><tr><th>国家</th><th>品类</th><th>品牌/品种</th><th>订单数</th><th>箱量</th>
         <th>已签收</th><th>已交付</th><th>在途</th><th>口岸</th><th>待发</th><th>完成率</th><th>操作</th></tr></thead>
       <tbody></tbody>
+      <tfoot></tfoot>
     </table>
   </div>
 
@@ -516,7 +537,22 @@ async function loadAll(){
   }
 }
 
-// ===== 订单渲染 =====
+// ===== 订单渲染（拖拽排序 + 悬停箭头 + tfoot 合计行）=====
+const ORDER_NUM_COLS = ['orders','boxes','signed','delivered','transit','port','pending'];
+const ORDER_AGG_KEY = 'admin.ordersAgg.v1';
+const ORDER_AGG_DEFAULT = {
+  country:'distinct', category:'distinct', brand:'count',
+  orders:'sum', boxes:'sum', signed:'sum', delivered:'sum', transit:'sum', port:'sum', pending:'sum',
+  rate:'avg'
+};
+const ORDER_AGG_LABEL = {sum:'求和',avg:'平均',count:'计数',distinct:'去重',none:'—'};
+function loadOrderAgg(){
+  try{ return Object.assign({}, ORDER_AGG_DEFAULT, JSON.parse(localStorage.getItem(ORDER_AGG_KEY)||'{}')); }
+  catch(_){ return {...ORDER_AGG_DEFAULT}; }
+}
+function saveOrderAgg(a){ localStorage.setItem(ORDER_AGG_KEY, JSON.stringify(a)); }
+let orderAgg = loadOrderAgg();
+
 function renderOrders(){
   const fc = $('#filterCountry').value, fcat = $('#filterCat').value;
   let rows = orders.filter(o => (!fc||o.country===fc) && (!fcat||o.category===fcat));
@@ -529,21 +565,31 @@ function renderOrders(){
     <div class="item"><div class="v num">${sum.done}</div><div class="l">累计完成/柜</div></div>`;
 
   const tb = $('#ordersTable tbody');
-  if(!rows.length){ tb.innerHTML = '<tr><td colspan="12" class="empty">暂无数据</td></tr>'; return; }
-  tb.innerHTML = rows.map(o => {
+  const tf = $('#ordersTable tfoot');
+  if(!rows.length){ tb.innerHTML = '<tr><td colspan="12" class="empty">暂无数据</td></tr>'; tf.innerHTML=''; return; }
+  tb.innerHTML = rows.map((o,i) => {
     const done = o.country==='TH' ? (+o.delivered||0) : (+o.signed||0);
     const rate = (+o.boxes||0) ? (done/+o.boxes*100).toFixed(1)+'%' : '0%';
     const rateCls = done>0 ? 'good' : 'low';
-    return `<tr data-id="${o.id}">
+    const isFirst = i===0, isLast = i===rows.length-1;
+    return `<tr draggable="true" data-id="${o.id}">
       <td><span class="pill ${o.country.toLowerCase()}">${o.country==='TH'?'泰国':'越南'}</span></td>
       <td><span class="pill ${o.category.toLowerCase()}">${o.category==='FRESH'?'鲜果':'冻肉'}</span></td>
       <td>${esc(o.brand)}</td>
-      ${['orders','boxes','signed','delivered','transit','port','pending'].map(k =>
+      ${ORDER_NUM_COLS.map(k =>
         `<td><input type="number" data-field="${k}" value="${o[k]||0}" onchange="editOrder('${o.id}','${k}',this.value)"></td>`).join('')}
       <td><span class="rate ${rateCls} num">${rate}</span></td>
-      <td><div class="row-actions"><button class="btn danger" onclick="delOrder('${o.id}')">删除</button></div></td>
+      <td><div class="row-actions">
+        <span class="ord-arrows">
+          <button title="上移" onclick="moveOrder('${o.id}',-1)" ${isFirst?'disabled':''}>▲</button>
+          <button title="下移" onclick="moveOrder('${o.id}',1)" ${isLast?'disabled':''}>▼</button>
+        </span>
+        <button class="btn danger" onclick="delOrder('${o.id}')">删除</button>
+      </div></td>
     </tr>`;
   }).join('');
+  bindOrderDnD();
+  renderOrderAggRow(rows);
 }
 
 async function editOrder(id, field, val){
@@ -556,6 +602,119 @@ async function delOrder(id){
   if(!confirm('确定删除该订单？')) return;
   try{ await api('/api/orders/'+id,'DELETE'); orders = orders.filter(o=>o.id!==id); renderOrders(); toast('已删除'); }
   catch(e){ toast('删除失败', true); }
+}
+
+// ===== 订单排序：拖拽 + 上下箭头 =====
+async function persistOrder(idsInView){
+  // idsInView 是当前视图过滤后的顺序；合并到全量 orders 的全局顺序里再持久化
+  const filteredSet = new Set(idsInView);
+  const merged = [];
+  let p = 0;
+  orders.forEach(o => {
+    if(filteredSet.has(o.id)) merged.push(idsInView[p++]);
+    else merged.push(o.id);
+  });
+  // 同步本地 orders 顺序，便于立即重渲染
+  const byId = new Map(orders.map(o=>[o.id,o]));
+  orders = merged.map(id=>byId.get(id));
+  try{
+    await api('/api/orders/reorder','PUT',{ids:merged});
+    renderOrders(); toast('排序已保存');
+  }catch(e){ toast('排序保存失败', true); }
+}
+function moveOrder(id, dir){
+  const fc = $('#filterCountry').value, fcat = $('#filterCat').value;
+  const view = orders.filter(o => (!fc||o.country===fc) && (!fcat||o.category===fcat));
+  const i = view.findIndex(o=>o.id===id);
+  const j = i + dir;
+  if(i<0 || j<0 || j>=view.length) return;
+  [view[i], view[j]] = [view[j], view[i]];
+  persistOrder(view.map(o=>o.id));
+}
+function bindOrderDnD(){
+  const tb = $('#ordersTable tbody');
+  let dragId = null;
+  tb.querySelectorAll('tr[draggable]').forEach(tr=>{
+    tr.ondragstart = (e)=>{
+      // 拖拽时不触发 input change
+      if(e.target.tagName==='INPUT'){ e.preventDefault(); return; }
+      dragId = tr.dataset.id; tr.classList.add('dragging');
+      e.dataTransfer.effectAllowed='move';
+    };
+    tr.ondragend = ()=>{ tr.classList.remove('dragging'); tb.querySelectorAll('tr').forEach(r=>r.classList.remove('drop-above','drop-below')); };
+    tr.ondragover = (e)=>{
+      if(!dragId || tr.dataset.id===dragId) return;
+      e.preventDefault();
+      const rect = tr.getBoundingClientRect();
+      const above = e.clientY < rect.top + rect.height/2;
+      tr.classList.toggle('drop-above', above);
+      tr.classList.toggle('drop-below', !above);
+    };
+    tr.ondragleave = ()=>{ tr.classList.remove('drop-above','drop-below'); };
+    tr.ondrop = (e)=>{
+      e.preventDefault();
+      if(!dragId || tr.dataset.id===dragId) return;
+      const above = tr.classList.contains('drop-above');
+      const ids = Array.from(tb.querySelectorAll('tr')).map(r=>r.dataset.id).filter(Boolean);
+      const from = ids.indexOf(dragId);
+      ids.splice(from,1);
+      let to = ids.indexOf(tr.dataset.id);
+      if(!above) to += 1;
+      ids.splice(to, 0, dragId);
+      tr.classList.remove('drop-above','drop-below');
+      persistOrder(ids);
+    };
+  });
+}
+
+// ===== 合计行（Excel/飞书风格：每列下拉选聚合方式）=====
+function aggValue(rows, field, type){
+  if(type==='none') return '';
+  const vals = rows.map(r=>r[field]);
+  if(type==='count') return vals.filter(v=>v!=null && v!=='').length;
+  if(type==='distinct') return new Set(vals.filter(v=>v!=null && v!=='')).size;
+  const nums = vals.map(v=>{
+    if(typeof v==='string' && v.endsWith('%')) return parseFloat(v);
+    const n = +v; return isNaN(n) ? null : n;
+  }).filter(v=>v!==null);
+  if(!nums.length) return 0;
+  if(type==='sum')  return nums.reduce((a,b)=>a+b,0).toFixed(2).replace(/\.?0+$/,'');
+  if(type==='avg')  return (nums.reduce((a,b)=>a+b,0)/nums.length).toFixed(2);
+  return '';
+}
+function renderOrderAggRow(rows){
+  const tf = $('#ordersTable tfoot');
+  // 给 rows 加上一个派生 rate 列方便聚合
+  const enriched = rows.map(o=>{
+    const done = o.country==='TH' ? (+o.delivered||0) : (+o.signed||0);
+    const rate = (+o.boxes||0) ? +(done/+o.boxes*100).toFixed(1) : 0;
+    return {...o, rate};
+  });
+  const cell = (field, allowed) => {
+    const cur = orderAgg[field] || 'none';
+    const opts = allowed.map(t=>`<option value="${t}" ${cur===t?'selected':''}>${ORDER_AGG_LABEL[t]}</option>`).join('');
+    const v = aggValue(enriched, field, cur);
+    const cls = cur==='none' ? 'agg-val muted' : 'agg-val';
+    return `<td>
+      <select onchange="changeOrderAgg('${field}',this.value)">${opts}</select>
+      <div class="${cls}">${cur==='none'?'—':esc(String(v))}</div>
+    </td>`;
+  };
+  const TEXT = ['count','distinct','none'];
+  const NUM = ['sum','avg','count','distinct','none'];
+  tf.innerHTML = '<tr>'
+    + cell('country', TEXT)
+    + cell('category', TEXT)
+    + cell('brand', TEXT)
+    + ORDER_NUM_COLS.map(k=>cell(k, NUM)).join('')
+    + cell('rate', NUM)
+    + '<td><span style="color:var(--txt3);font-size:11px">合计</span></td>'
+    + '</tr>';
+}
+function changeOrderAgg(field, type){
+  orderAgg[field] = type;
+  saveOrderAgg(orderAgg);
+  renderOrders();
 }
 function openOrderModal(){ $('#orderModal').classList.add('show'); }
 async function submitOrder(){
