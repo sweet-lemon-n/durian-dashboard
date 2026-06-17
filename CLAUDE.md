@@ -162,7 +162,8 @@ Express server with static file serving from `public/`. All API routes return JS
 | `/api/aggregate` | GET | 登录 | **Dashboard board data** from `board-content.json`: `{ meta, global, th, vn, logistics, news, generatedAt }`. Raw object (NOT `{success,data}`). `no-store` |
 | `/api/dashboard` | GET | 登录 | Real temperature data from 温度记录 + **detention** from 陆运/海运明细: `{ records, stats, alerts, containers, detention }`. Query: `hours`(default 24), `limit`(200), `container` |
 | `/api/temperature/history` | GET | 登录 | Historical temperature data for charts |
-| `/api/orders`, `/api/news` | GET·POST·PUT·DELETE | 登录读 / admin写 | Board-content order & news CRUD (`board-routes.js`). Raw object/array responses |
+| `/api/orders`, `/api/news` | GET·POST·PUT·DELETE | 登录读 / admin写 | Board-content order & news CRUD (`board-routes.js`). Raw object/array responses. `GET /api/orders` returns sorted by `sort` field asc. |
+| `/api/orders/reorder` | PUT | admin | Body `{ ids: [...] }` — rewrites every order's `sort` to its index in the array. Used by admin drag-and-drop. |
 | `/api/logistics`, `.../kpis`, `.../portDelays[/:id]`, `.../inTransitContainers[/:id]` | GET·PUT·POST·DELETE | 登录读 / admin写 | Board-content logistics CRUD |
 | `/api/setup` | POST | admin | Create new smart sheet doc with 温度记录 sheet + 11 default fields |
 | `/api/schema/refresh` | POST | 登录 | Clear schema cache |
@@ -205,7 +206,9 @@ Transparent retry on token expiry (errcode 40014/42001). All API calls require t
 
 **`content-store.js`** — JSON store for editable board content. `read()` (auto-seeds `data/board-content.json` from inline `seedData()` on first call; throws on parse error), `writeSync(data)` (tmp-file + atomic `renameSync`), `genId(prefix)` (`crypto.randomUUID()`). The file is gitignored — it regenerates from seed on a fresh server.
 
-**`board-routes.js`** — `express.Router` for the redesigned dashboard. Exports `{ router, aggregate }`. `aggregate(db)` groups orders by country (`done = TH?delivered:signed`, `rate = done/boxes`) into the `/api/aggregate` shape. CRUD writes go through `requireRole('admin')`; reads only need the guard. **Responses are raw objects/arrays** (not the `{success,data}` envelope) so the ported template frontend works unchanged. Mounted in `server.js` via `app.use('/api', boardRouter)` *after* the auth guard.
+**`board-routes.js`** — `express.Router` for the redesigned dashboard. Exports `{ router, aggregate }`. `aggregate(db)` groups orders by country (`done = TH?delivered:signed`, `rate = done/boxes`) into the `/api/aggregate` shape, sorted by each order's `sort` field. CRUD writes go through `requireRole('admin')`; reads only need the guard. **Responses are raw objects/arrays** (not the `{success,data}` envelope) so the ported template frontend works unchanged. Mounted in `server.js` via `app.use('/api', boardRouter)` *after* the auth guard.
+
+**Order sorting:** Every order has an integer `sort` field (missing = `Number.MAX_SAFE_INTEGER`, i.e. tail). `POST /api/orders` auto-assigns `sort = max+1` if not provided. `PUT /api/orders/reorder { ids: [...] }` rewrites every listed order's `sort` to its index; orders not in `ids` get pushed past the listed range. `aggregate()` calls `sortOrders()` so the dashboard's brand rows track admin order. Admin drag-and-drop persists per drop event via `reorder`; the admin frontend also has hover-revealed ↑↓ arrows that call `moveOrder()`.
 
 ### Frontend (`public/`)
 
@@ -213,9 +216,10 @@ Dashboard and admin are **self-contained** (inline CSS + JS) — a polished dark
 
 - **`login.html`** — Dark-theme login page, checks `/api/auth/me` on load (auto-redirect if logged in), submits to `POST /api/auth/login`, supports `?redirect=` param. "记住登录状态（7天）" maps to JWT 7d expiry.
 
-- **`index.html`** — 泰越交付总览 board. `boot()`: `loadUser()` (`/api/auth/me`, 401→login, shows name + logout + an 后台 link for admins) → `loadData()` (`/api/aggregate`) → `paint()` (TH/VN country panels with FRESH/FROZEN rows, global aggregate, logistics monitoring tables, news columns, live clock), 30s poll. **All placeholder data except the bottom gantt.**
+- **`index.html`** — 泰越交付总览 board. `boot()`: `loadUser()` (`/api/auth/me`, 401→login, shows name + logout + an 后台 link for admins) → `loadData()` (`/api/aggregate`) → `paint()` (TH/VN country panels with FRESH/FROZEN rows, global aggregate, logistics monitoring, single combined news column with TH/VN sections inside, live clock), 30s poll. **All placeholder data except the bottom gantt.**
 - **`gantt.js`** — Loaded after the inline board script. Independent fetch loop against the real `/api/dashboard?hours=168` (temperature), renders the柜号×7-day color-coded heatmap (blue≤6°C→green→red≥20°C). Scoped under `#ganttContainer`. Locally without IP whitelist it just shows 「暂无温度数据」 (errors are swallowed); real data appears once deployed.
 - **`admin.html`** — 4-tab admin. Inline script (`api()` helper, 401→login / 403→toast) manages 订单/物流/新闻 against the board-content CRUD endpoints with autosave + 10s sync. The 4th tab **🗄 智能表格管理** holds the wecom smart-sheet management UI; its logic is in `admin-smartsheet.js` (globals, lazy-`initSmartsheet()` on first tab open). Auth via `checkAuth()` (non-admin → bounced to `/`).
+  - **Orders tab specifics:** rows are `draggable=true` and ↑↓ buttons appear on hover (`.ord-arrows`); both paths call `persistOrder(idsInView)` → `PUT /api/orders/reorder` and merge the filtered view back into the global order list. `<tfoot>` renders an Excel/飞书-style 合计行: each column has a per-cell `<select>` with `求和/平均/计数/去重/不显示`; choices persist to `localStorage` under `admin.ordersAgg.v1`. Defaults: numeric columns → sum, country/category/brand → distinct-count, rate → avg.
   - **JS collision rule:** both the inline admin script and `admin-smartsheet.js` share global scope. The inline script renamed its modal closer to `closeModalById` and its escape helpers to `esc`/`md`; `admin-smartsheet.js` uses `ssCloseModal`, `escHtml`/`escAttr`. Don't reintroduce a name defined in the other file.
 - **`style.css`** — Dark-theme styles for `login.html` only.
 
