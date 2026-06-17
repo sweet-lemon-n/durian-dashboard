@@ -151,7 +151,7 @@ function loadXlsx() {
   console.log('\n=== 当前子表清单 ===');
   const sheetsResp = await wecom.getSheets(docid);
   if (sheetsResp.errcode) throw new Error(`getSheets 失败: ${sheetsResp.errmsg}`);
-  const allSheets = sheetsResp.properties || [];
+  const allSheets = sheetsResp.sheet_list || sheetsResp.properties || [];
   allSheets.forEach(s => console.log(`  · ${s.title} | ${s.sheet_id}`));
 
   // 3. 删除 4 张旧子表
