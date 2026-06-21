@@ -334,7 +334,7 @@ function renderLogistics(el, L){
 }
 
 function renderNewsCombined(el, thArr, vnArr, autoArr){
-  const nItem = n => `<div class="n-item"><span class="n-ico">${esc(n.icon||'📌')}</span><div class="n-body"><div class="n-t">${esc(n.title)}${n.source?' <small style="color:var(--gold)">自动</small>':''}</div><div class="n-d">${md(n.detail||'')}</div></div></div>`;
+  const nItem = n => `<div class="n-item"><span class="n-ico">${esc(n.icon||'📌')}</span><div class="n-body"><div class="n-t">${n.url ? `<a href="${esc(n.url)}" target="_blank" style="color:inherit;text-decoration:none" title="点击查看原文">${esc(n.title)}</a>` : esc(n.title)}${n.source?' <small style="color:var(--gold)">自动</small>':''}</div><div class="n-d">${md(n.detail||'')}</div></div></div>`;
   const sec = (country, arr) => {
     const flag = country==='TH' ? '🇹🇭 泰国 · 产业快讯' : '🇻🇳 越南 · 市场动向';
     const items = (arr||[]).map(nItem).join('') || '<div style="color:var(--txt3);font-size:1.1vh">暂无</div>';

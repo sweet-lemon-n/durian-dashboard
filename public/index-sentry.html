@@ -568,9 +568,12 @@ function paintLogistics(el, L) {
 // ---- News ----
 function paintNews(el, thArr, vnArr, autoArr) {
   function newsItem(n) {
+    const titleHtml = n.url
+      ? `<a href="${esc(n.url)}" target="_blank" style="color:inherit;text-decoration:none" title="点击查看原文">${esc(n.title)}</a>`
+      : esc(n.title);
     return `<div class="news-item">
       <span class="icon">${esc(n.icon || '📌')}</span>
-      <div><div class="title">${esc(n.title)}${n.source ? ' <small style="color:var(--lime);font-size:11px">自动</small>' : ''}</div><div class="detail">${md(n.detail || '')}</div></div>
+      <div><div class="title">${titleHtml}${n.source ? ' <small style="color:var(--lime);font-size:11px">自动</small>' : ''}</div><div class="detail">${md(n.detail || '')}</div></div>
     </div>`;
   }
   function sec(label, cls, arr) {
