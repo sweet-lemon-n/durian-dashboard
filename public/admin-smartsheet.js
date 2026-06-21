@@ -33,6 +33,7 @@ async function initSmartsheet() {
   if (_smartsheetInited) return;
   _smartsheetInited = true;
   refreshStatus();
+  loadAiImportConfig(false);
   await populateSheetSelects();
 }
 
@@ -404,6 +405,58 @@ function setAiImportOutput(message, isError = false) {
   out.textContent = message || '';
 }
 
+function setAiImportConfigStatus(message) {
+  const el = document.getElementById('aiImportConfigStatus');
+  if (el) el.textContent = message || '';
+}
+
+async function loadAiImportConfig(showMessage = true) {
+  try {
+    const resp = await apiFetch('/api/ai-import/config');
+    const json = await resp.json();
+    if (!json.success) throw new Error(json.error || '读取失败');
+    const cfg = json.data || {};
+    const baseUrl = document.getElementById('aiImportBaseUrl');
+    const model = document.getElementById('aiImportModel');
+    const apiKey = document.getElementById('aiImportApiKey');
+    const temperature = document.getElementById('aiImportTemperature');
+    if (baseUrl) baseUrl.value = cfg.baseUrl || 'https://api.deepseek.com';
+    if (model) model.value = cfg.model || 'deepseek-v4-flash';
+    if (temperature) temperature.value = cfg.temperature ?? 0.1;
+    if (apiKey) {
+      apiKey.value = '';
+      apiKey.placeholder = cfg.hasApiKey ? `已保存：${cfg.apiKeyMasked}` : '留空则保留当前 Key';
+    }
+    setAiImportConfigStatus(`${cfg.hasApiKey ? 'DeepSeek Key 已配置' : 'DeepSeek Key 未配置'} · ${cfg.model || '-'}`);
+    if (showMessage) setAiImportOutput('DeepSeek 配置已读取');
+  } catch (e) {
+    setAiImportConfigStatus('DeepSeek 配置读取失败');
+    if (showMessage) setAiImportOutput('DeepSeek 配置读取失败: ' + e.message, true);
+  }
+}
+
+async function saveAiImportConfig() {
+  const body = {
+    baseUrl: (document.getElementById('aiImportBaseUrl')?.value || '').trim(),
+    model: (document.getElementById('aiImportModel')?.value || '').trim(),
+    apiKey: (document.getElementById('aiImportApiKey')?.value || '').trim(),
+    temperature: Number(document.getElementById('aiImportTemperature')?.value || 0.1),
+  };
+  try {
+    const resp = await apiFetch('/api/ai-import/config', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    const json = await resp.json();
+    if (!json.success) throw new Error(json.error || '保存失败');
+    await loadAiImportConfig(false);
+    setAiImportOutput('DeepSeek 配置已保存');
+  } catch (e) {
+    setAiImportOutput('DeepSeek 配置保存失败: ' + e.message, true);
+  }
+}
+
 function renderAiImportPreview(data) {
   const { preview, commit } = getAiImportEls();
   if (!preview) return;
@@ -418,7 +471,7 @@ function renderAiImportPreview(data) {
       <td>${escHtml(f.title)}</td>
       <td><input data-ai-field="${escAttr(f.title)}" value="${escAttr(f.value)}"></td>
       <td>${escHtml(f.fieldType || '-')}</td>
-      <td>${Math.round((f.confidence || 0) * 100)}%</td>
+      <td>${Math.round((f.confidence || 0) * 100)}%${f.reason ? `<br><small>${escHtml(f.reason)}</small>` : ''}</td>
     </tr>
   `).join('');
   const warnings = data.warnings && data.warnings.length
@@ -427,6 +480,7 @@ function renderAiImportPreview(data) {
   preview.innerHTML = `
     <div class="ai-preview">
       <h3>待确认写入信息</h3>
+      <div>解析器：<b>${escHtml(data.parser || 'deepseek')}</b></div>
       <div>目标子表：<b>${escHtml(data.sheet.title)}</b> <span style="color:var(--text-muted)">(${escHtml(data.sheet.sheetId)})</span></div>
       <table>
         <thead><tr><th>字段</th><th>识别值（可修改）</th><th>字段类型</th><th>置信度</th></tr></thead>
@@ -446,7 +500,7 @@ async function parseAiImport() {
   }
   if (commit) commit.disabled = true;
   renderAiImportPreview(null);
-  setAiImportOutput('正在智能解析，暂不写入智能表...');
+  setAiImportOutput('正在调用 DeepSeek 解析，暂不写入智能表...');
   try {
     const resp = await apiFetch('/api/ai-import/parse', {
       method: 'POST',
@@ -456,7 +510,7 @@ async function parseAiImport() {
     const json = await resp.json();
     if (!json.success) throw new Error(json.error || '解析失败');
     renderAiImportPreview(json.data);
-    setAiImportOutput('解析完成，请核对目标子表和字段值，确认后再写入。');
+    setAiImportOutput('DeepSeek 解析完成，请核对目标子表和字段值，确认后再写入。');
   } catch (e) {
     setAiImportOutput('解析失败: ' + e.message, true);
   }

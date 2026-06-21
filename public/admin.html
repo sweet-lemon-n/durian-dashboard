@@ -389,8 +389,19 @@
     <div class="card">
       <h2>🤖 智能解析录入</h2>
       <p style="font-size:0.85rem;color:var(--text-muted);margin-bottom:12px">
-        粘贴自然语言温度信息，系统用规则智能解析并展示目标子表和字段，确认后才写入智能表。
+        粘贴自然语言温度信息，DeepSeek 会结合当前智能表结构判断目标子表和字段，确认后才写入智能表。
       </p>
+      <div class="form-row">
+        <div class="form-group"><label>DeepSeek Base URL</label><input class="form-input" id="aiImportBaseUrl" value="https://api.deepseek.com" style="width:240px"></div>
+        <div class="form-group"><label>模型</label><input class="form-input" id="aiImportModel" value="deepseek-v4-flash" style="width:180px"></div>
+        <div class="form-group"><label>API Key</label><input class="form-input" id="aiImportApiKey" type="password" placeholder="留空则保留当前 Key" style="width:220px"></div>
+        <div class="form-group"><label>温度</label><input class="form-input" id="aiImportTemperature" type="number" min="0" max="2" step="0.1" value="0.1" style="width:90px"></div>
+      </div>
+      <div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:12px">
+        <button class="btn" onclick="loadAiImportConfig()">读取 DeepSeek 配置</button>
+        <button class="btn btn-primary" onclick="saveAiImportConfig()">保存 DeepSeek 配置</button>
+        <span style="font-size:0.8rem;color:var(--text-muted);align-self:center" id="aiImportConfigStatus">未加载</span>
+      </div>
       <div class="form-row" style="align-items:stretch">
         <div class="form-group" style="flex:1;min-width:320px">
           <label>自然语言 / 截图文字</label>

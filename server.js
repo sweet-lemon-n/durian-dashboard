@@ -9,6 +9,7 @@ require('dotenv').config();
 const express = require('express');
 const path = require('path');
 const cookieParser = require('cookie-parser');
+const axios = require('axios');
 const wecom = require('./lib/wecom');
 const wecomCrypto = require('./lib/crypto');
 const {
@@ -33,6 +34,7 @@ const {
 } = require('./lib/auth');
 const { router: boardRouter } = require('./lib/board-routes');
 const { initNewsFetcher } = require('./lib/news-fetcher');
+const { getAiImportConfig, getPublicAiImportConfig, updateAiImportConfig } = require('./lib/runtime-config');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -51,20 +53,6 @@ let schemaCache = {
 
 const SCHEMA_CACHE_TTL = 5 * 60 * 1000; // 5 分钟
 
-const AI_IMPORT_FIELD_ALIASES = {
-  柜号: ['柜号', '箱号', '货柜号', 'containerNo'],
-  品牌: ['品牌', 'brand'],
-  放柜时间: ['放柜时间', '放柜', '放柜日期', 'placementTime'],
-  设定温度: ['设定温度', '设温', '设定', 'setTemp'],
-  送风温度: ['送风温度', '送风', 'supplyTemp'],
-  回风温度: ['回风温度', '回风', 'returnTemp'],
-  风口设定: ['风口设定', '风口', '通风口', 'vent'],
-  当前位置: ['当前位置', '位置', 'location'],
-  味道: ['味道', '气味', 'aroma'],
-  关口: ['关口', '口岸', '关岸', 'port'],
-  更新时间: ['更新时间', '更新', 'updateTime'],
-};
-
 function normalizeImportText(text) {
   return String(text || '')
     .replace(/\r/g, '\n')
@@ -73,31 +61,6 @@ function normalizeImportText(text) {
     .replace(/[‘’']/g, '')
     .replace(/\u00a0/g, ' ')
     .trim();
-}
-
-function parseKeyValueLines(text) {
-  const lines = normalizeImportText(text).split(/\n+/).map(s => s.trim()).filter(Boolean);
-  const pairs = [];
-  const free = [];
-  lines.forEach(line => {
-    const m = line.match(/^([^:：]{1,20})[:：]\s*(.+)$/);
-    if (m) pairs.push({ key: m[1].trim(), value: m[2].trim(), line });
-    else free.push(line);
-  });
-  return { pairs, free, lines };
-}
-
-function canonicalImportField(label) {
-  const raw = String(label || '').trim().replace(/\s/g, '');
-  for (const [title, aliases] of Object.entries(AI_IMPORT_FIELD_ALIASES)) {
-    if (aliases.some(a => raw.includes(String(a).replace(/\s/g, '')))) return title;
-  }
-  return '';
-}
-
-function parseNumberValue(value) {
-  const m = String(value || '').replace(/,/g, '').match(/-?\d+(?:\.\d+)?/);
-  return m ? Number(m[0]) : null;
 }
 
 function parseImportDate(value) {
@@ -112,43 +75,6 @@ function parseImportDate(value) {
   if (m) return new Date(now.getFullYear(), now.getMonth(), now.getDate(), Number(m[1]), Number(m[2]));
   const d = new Date(raw);
   return Number.isNaN(d.getTime()) ? null : d;
-}
-
-function formatImportDate(d) {
-  if (!d || Number.isNaN(d.getTime())) return '';
-  const pad = n => String(n).padStart(2, '0');
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
-}
-
-function setExtractedField(extracted, confidence, title, value, score) {
-  if (value === null || value === undefined || value === '') return;
-  if (extracted[title] !== undefined && (confidence[title] || 0) >= score) return;
-  extracted[title] = typeof value === 'string' ? value.trim() : value;
-  confidence[title] = score;
-}
-
-function parseRelativeImportDate(text) {
-  const now = new Date();
-  let base = null;
-  if (/前天/.test(text)) base = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 2);
-  else if (/昨天|昨日/.test(text)) base = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1);
-  else if (/今天|今日/.test(text)) base = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-  if (!base) return null;
-
-  let hour = 12;
-  let minute = 0;
-  const clock = text.match(/(\d{1,2})(?::|\.|点|时)(\d{1,2})?/);
-  if (clock) {
-    hour = Number(clock[1]);
-    minute = Number(clock[2] || 0);
-  } else if (/凌晨/.test(text)) hour = 2;
-  else if (/早上|上午/.test(text)) hour = 9;
-  else if (/中午/.test(text)) hour = 12;
-  else if (/下午/.test(text)) hour = 15;
-  else if (/傍晚|黄昏/.test(text)) hour = 18;
-  else if (/晚上|晚间|夜里/.test(text)) hour = 20;
-  base.setHours(hour, minute, 0, 0);
-  return base;
 }
 
 function makeCellValue(field, rawValue) {
@@ -167,125 +93,112 @@ function makeCellValue(field, rawValue) {
   return [{ type: 'text', text: String(rawValue).trim() }];
 }
 
-function pickImportSheet(schema, extracted) {
-  const wantedTitles = Object.keys(extracted).filter(k => extracted[k] !== null && extracted[k] !== undefined && extracted[k] !== '');
-  let best = null;
-  let bestScore = -1;
-  for (const sheet of schema.sheets || []) {
-    const titles = new Set((sheet.fields || []).map(f => f.field_title));
-    let score = 0;
-    wantedTitles.forEach(t => { if (titles.has(t)) score += 2; });
-    if (/温度|temp/i.test(sheet.title || '')) score += 3;
-    if (titles.has('柜号')) score += 2;
-    if (titles.has('回风温度')) score += 2;
-    if (score > bestScore) { bestScore = score; best = sheet; }
-  }
-  return best || schema.detected.tempSheet || schema.sheets?.[0] || null;
+function buildAiImportSchema(schema) {
+  return (schema.sheets || []).map(sheet => ({
+    sheetId: sheet.sheet_id,
+    title: sheet.title,
+    fields: (sheet.fields || []).map(f => ({
+      title: f.field_title,
+      fieldId: f.field_id,
+      fieldType: f.field_type,
+    })),
+  }));
 }
 
-function parseImportText(text, schema) {
-  const parsed = parseKeyValueLines(text);
-  const extracted = {};
-  const confidence = {};
+function extractJsonObject(text) {
+  const raw = String(text || '').trim();
+  if (!raw) throw new Error('DeepSeek 未返回内容');
+  try { return JSON.parse(raw); } catch (_) {}
+  const m = raw.match(/\{[\s\S]*\}/);
+  if (!m) throw new Error('DeepSeek 返回内容不是 JSON');
+  return JSON.parse(m[0]);
+}
 
-  parsed.pairs.forEach(({ key, value }) => {
-    const field = canonicalImportField(key);
-    if (!field) return;
-    if (['设定温度', '送风温度', '回风温度'].includes(field)) {
-      const n = parseNumberValue(value);
-      if (n !== null) { extracted[field] = n; confidence[field] = 0.95; }
-    } else if (['放柜时间', '更新时间'].includes(field)) {
-      const d = parseImportDate(value);
-      if (d) { extracted[field] = formatImportDate(d); confidence[field] = 0.9; }
-    } else {
-      extracted[field] = value.replace(/\s+/g, ' ').trim();
-      confidence[field] = 0.9;
-    }
+async function callDeepSeekImport(text, schema) {
+  const cfg = getAiImportConfig();
+  if (!cfg.apiKey) throw new Error('请先在后台配置 DeepSeek API Key');
+  const sheets = buildAiImportSchema(schema);
+  if (!sheets.length) throw new Error('没有可用于判断的智能表结构');
+  const systemPrompt = [
+    '你是榴莲运输温度监控看板的数据录入助手。',
+    '请根据用户提供的自然语言或截图文字，判断应该写入哪张智能表子表，以及应填写哪些字段。',
+    '只能从提供的 sheets[].fields[].title 中选择字段，不能编造字段；只能从 sheets[].sheetId 中选择目标子表。',
+    '如果用户提到“第10柜/南部第10柜”但没有标准海运柜号，也可以把它作为“柜号”的值。',
+    '相对日期要结合 currentDate 解析，例如“昨天傍晚”可推断为昨天 18:00。',
+    '温度字段返回数字，日期时间返回 yyyy-MM-dd HH:mm，文本字段返回字符串。',
+    '必须只返回 json，不要返回 markdown。',
+  ].join('\n');
+  const userPayload = {
+    currentDate: new Date().toISOString(),
+    sheets,
+    text: normalizeImportText(text),
+    outputJsonShape: {
+      sheetId: '目标子表ID',
+      sheetTitle: '目标子表标题',
+      fields: [
+        { title: '字段标题', value: '字段值', confidence: 0.9, reason: '简短依据' },
+      ],
+      warnings: ['无法确定的信息'],
+    },
+  };
+  const resp = await axios.post(`${cfg.baseUrl.replace(/\/$/, '')}/chat/completions`, {
+    model: cfg.model,
+    messages: [
+      { role: 'system', content: systemPrompt },
+      { role: 'user', content: `请返回 json。输入如下：\n${JSON.stringify(userPayload, null, 2)}` },
+    ],
+    response_format: { type: 'json_object' },
+    temperature: cfg.temperature,
+  }, {
+    timeout: 45000,
+    headers: {
+      Authorization: `Bearer ${cfg.apiKey}`,
+      'Content-Type': 'application/json',
+    },
   });
+  return extractJsonObject(resp.data?.choices?.[0]?.message?.content);
+}
 
-  const all = parsed.lines.join('\n');
-  if (!extracted.柜号) {
-    const m = all.match(/\b[A-Z]{3,4}\d{6,8}\b/i);
-    if (m) { extracted.柜号 = m[0].toUpperCase(); confidence.柜号 = 0.82; }
-  }
-  if (!extracted.柜号) {
-    const m = all.match(/([\u4e00-\u9fa5A-Za-z]*第\s*\d+\s*柜)/);
-    if (m) setExtractedField(extracted, confidence, '柜号', m[1].replace(/\s+/g, ''), 0.72);
-  }
-  if (!extracted.品牌) {
-    const m = all.match(/品牌\s*[:：]?\s*([^\n]+)/);
-    if (m) { extracted.品牌 = m[1].trim(); confidence.品牌 = 0.8; }
-  }
-  if (!extracted.品牌) {
-    const m = all.match(/[“"「『']([^”"」』']{2,20})[”"」』']/);
-    if (m) setExtractedField(extracted, confidence, '品牌', m[1], 0.78);
-  }
-  if (!extracted.放柜时间 && /装柜|放柜|发出|发车|启运/.test(all)) {
-    const d = parseRelativeImportDate(all);
-    if (d) setExtractedField(extracted, confidence, '放柜时间', formatImportDate(d), 0.72);
-  }
-  if (!extracted.回风温度) {
-    const m = all.match(/回风(?:温度)?(?:控制)?(?:正常)?\s*(?:是|为|约|大概)?\s*(-?\d+(?:\.\d+)?)\s*(?:度|°C|℃|C)?/i);
-    if (m) setExtractedField(extracted, confidence, '回风温度', Number(m[1]), 0.9);
-  }
-  if (!extracted.送风温度) {
-    const m = all.match(/送风(?:温度)?\s*(?:是|为|约|大概)?\s*(-?\d+(?:\.\d+)?)\s*(?:度|°C|℃|C)?/i);
-    if (m) setExtractedField(extracted, confidence, '送风温度', Number(m[1]), 0.9);
-  }
-  if (!extracted.设定温度) {
-    const m = all.match(/设定(?:温度)?\s*(?:是|为|约|大概)?\s*(-?\d+(?:\.\d+)?)\s*(?:度|°C|℃|C)?/i);
-    if (m) setExtractedField(extracted, confidence, '设定温度', Number(m[1]), 0.9);
-  }
-  if (!extracted.当前位置) {
-    let m = all.match(/(?:目前|现在|当前位置)?(?:正)?(?:从)?([^，,。；;\n]{1,24}?)(?:往|去|到|开往)([^，,。；;\n]{1,24}?)(?:运|运输|在途|途中|路上)/);
-    if (m) setExtractedField(extracted, confidence, '当前位置', `${m[1].replace(/^从/, '').trim()}往${m[2].trim()}`, 0.82);
-    else {
-      m = all.match(/(泰国|越南|老挝|柬埔寨|马来西亚|友谊关|磨憨|凭祥|南部)[^，,。；;\n]{0,18}(?:在途|途中|运输|口岸)/);
-      if (m) setExtractedField(extracted, confidence, '当前位置', m[0], 0.7);
-    }
-  }
-  if (!extracted.关口) {
-    const m = all.match(/(友谊关|磨憨|凭祥|东兴|河口|瑞丽|勐康|金水河)(?:口岸|关)?/);
-    if (m) setExtractedField(extracted, confidence, '关口', m[1], 0.86);
-  }
-  if (!extracted.味道) {
-    const m = all.match(/(?:味道|气味|闻起来|闻着)(?:还是|是|为)?\s*([^，,。；;\n]{1,12})/);
-    if (m) setExtractedField(extracted, confidence, '味道', m[1].replace(/^(闻起来|闻着|还是|是|为)+/, '').trim(), 0.82);
-  }
-  if (!extracted.当前位置 && /泰国/.test(all)) { extracted.当前位置 = '泰国在途'; confidence.当前位置 = 0.55; }
-  if (!extracted.更新时间) {
-    extracted.更新时间 = formatImportDate(new Date());
-    confidence.更新时间 = 0.5;
-  }
-
-  const sheet = pickImportSheet(schema, extracted);
-  if (!sheet) throw new Error('没有可写入的智能子表');
-
+async function parseImportWithAi(text, schema) {
+  const ai = await callDeepSeekImport(text, schema);
+  const sheets = buildAiImportSchema(schema);
+  const sheet = (schema.sheets || []).find(s => s.sheet_id === ai.sheetId)
+    || (schema.sheets || []).find(s => s.title === ai.sheetTitle)
+    || schema.detected?.tempSheet
+    || (schema.sheets || [])[0];
+  if (!sheet) throw new Error('DeepSeek 未能选择有效子表');
   const fieldMap = {};
   (sheet.fields || []).forEach(f => { fieldMap[f.field_title] = f; });
   const values = {};
   const previewFields = [];
-  Object.entries(extracted).forEach(([title, value]) => {
+  const aiFields = Array.isArray(ai.fields) ? ai.fields : [];
+  aiFields.forEach(item => {
+    const title = String(item.title || '').trim();
     const field = fieldMap[title];
-    if (!field || value === undefined || value === null || value === '') return;
-    const cellValue = makeCellValue(field, value);
+    if (!field || item.value === undefined || item.value === null || item.value === '') return;
+    const cellValue = makeCellValue(field, item.value);
     if (cellValue === undefined) return;
     values[title] = cellValue;
     previewFields.push({
       title,
-      value,
+      value: item.value,
       fieldId: field.field_id,
       fieldType: field.field_type,
-      confidence: confidence[title] || 0.7,
+      confidence: Number(item.confidence) || 0.75,
+      reason: String(item.reason || ''),
     });
   });
-
   return {
     sheet: { sheetId: sheet.sheet_id, title: sheet.title },
     fields: previewFields,
     values,
     rawText: normalizeImportText(text),
-    warnings: previewFields.length ? [] : ['没有识别到可写入字段，请补充字段名和值'],
+    warnings: [
+      ...(Array.isArray(ai.warnings) ? ai.warnings.map(String) : []),
+      ...(previewFields.length ? [] : ['DeepSeek 没有返回可写入字段，或返回字段不在目标子表中']),
+    ],
+    parser: 'deepseek',
+    availableSheets: sheets.map(s => ({ sheetId: s.sheetId, title: s.title })),
   };
 }
 
@@ -1373,9 +1286,22 @@ app.post('/api/smartsheet/sheet/add', requirePermission('smartsheet'), async (re
   }
 });
 
+app.get('/api/ai-import/config', requirePermission('smartsheet'), (req, res) => {
+  res.json({ success: true, data: getPublicAiImportConfig() });
+});
+
+app.put('/api/ai-import/config', requirePermission('smartsheet'), (req, res) => {
+  try {
+    const config = updateAiImportConfig(req.body || {});
+    res.json({ success: true, data: config });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
 /**
  * POST /api/ai-import/parse
- * 将自然语言温度信息解析成待确认的智能表写入预览。只解析，不写入。
+ * 调用 DeepSeek 将自然语言温度信息解析成待确认的智能表写入预览。只解析，不写入。
  */
 app.post('/api/ai-import/parse', requirePermission('smartsheet'), async (req, res) => {
   try {
@@ -1385,7 +1311,7 @@ app.post('/api/ai-import/parse', requirePermission('smartsheet'), async (req, re
     }
     if (!String(text || '').trim()) throw new Error('请粘贴需要识别的文本');
     const schema = await getDocumentSchema();
-    const preview = parseImportText(text, schema);
+    const preview = await parseImportWithAi(text, schema);
     res.json({ success: true, data: preview });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
@@ -1802,9 +1728,4 @@ if (require.main === module) {
   });
 }
 
-// 导出供测试
-app.__test = {
-  parseImportText,
-  parseRelativeImportDate,
-};
 module.exports = app;
