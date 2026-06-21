@@ -304,19 +304,19 @@
     <div class="source-card">
       <h3>自动新闻源配置</h3>
       <div class="source-grid">
-        <div style="grid-column:1 / -1"><label><input id="metasoEnabled" type="checkbox" style="width:auto;margin-right:6px">启用秘塔付费搜索（默认关闭；服务器未允许时不会生效）</label></div>
+        <div style="grid-column:1 / -1"><label><input id="metasoEnabled" type="checkbox" style="width:auto;margin-right:6px">启用秘塔付费搜索（受每日上限和冷却时间控制；上限为 0 时不扣费）</label></div>
         <div><label>秘塔 MCP 地址</label><input id="metasoMcpUrl" placeholder="ModelScope MCP server URL"></div>
         <div><label>秘塔 MCP Key</label><input id="metasoMcpApiKey" type="password" placeholder="留空则保留当前 Key"></div>
         <div><label>秘塔直连 API 地址（可选）</label><input id="metasoApiUrl" placeholder="没有 MCP 时才使用"></div>
         <div><label>秘塔直连 API Key（可选）</label><input id="metasoApiKey" type="password" placeholder="留空则保留当前 Key"></div>
         <div><label>秘塔每日调用上限</label><input id="metasoDailyLimit" type="number" min="0" step="1" value="0"></div>
         <div><label>秘塔冷却时间（分钟）</label><input id="metasoCooldownMinutes" type="number" min="0" step="1" value="60"></div>
-        <div style="grid-column:1 / -1"><label>搜索关键词（每行一个）</label><textarea id="newsKeywords" placeholder="榴莲进口&#10;泰国榴莲&#10;越南榴莲"></textarea></div>
+        <div style="grid-column:1 / -1"><label>搜索关键词（每行一个）</label><textarea id="newsKeywords" placeholder="榴莲进口&#10;东南亚 榴莲&#10;榴莲 通关 口岸&#10;榴莲 冷链 物流"></textarea></div>
       </div>
       <div class="source-meta">
         <span id="newsSourceStatus">未加载</span>
         <button class="btn sm" onclick="loadNewsSourceConfig()">读取配置</button>
-        <button class="btn primary sm" onclick="saveNewsSourceConfig()">保存并刷新</button>
+        <button class="btn primary sm" onclick="saveNewsSourceConfig()">保存配置</button>
         <button class="btn sm" onclick="refreshAutoNews()">刷新自动新闻</button>
       </div>
       <div class="source-diagnostics" id="newsDiagnostics"></div>
@@ -923,7 +923,9 @@ function renderNewsSourceStatus(){
   const count = autoNewsInfo && autoNewsInfo.count != null ? autoNewsInfo.count : '-';
   const sources = autoNewsInfo && autoNewsInfo.sources ? Object.entries(autoNewsInfo.sources).map(([k,v])=>`${k}:${v}`).join(' / ') : '无';
   const mcp = cfg && cfg.metasoMcpUrl ? 'MCP 已配置' : 'MCP 未配置';
-  const enabled = cfg && cfg.metasoEnabled ? '秘塔已启用' : '秘塔已关闭';
+  const enabled = cfg && cfg.metasoEnabled
+    ? (Number(cfg.metasoDailyLimit || 0) > 0 ? '秘塔已启用' : '秘塔已勾选，额度 0 暂不调用')
+    : '秘塔已关闭';
   const key = cfg && cfg.hasMetasoMcpApiKey ? `Key ${cfg.metasoMcpApiKeyMasked}` : 'Key 未配置';
   el.textContent = `${enabled} · ${mcp} · ${key} · 自动新闻 ${count} 条 · 来源 ${sources} · ${fetchedAt}`;
   const dEl = $('#newsDiagnostics');
@@ -981,7 +983,7 @@ async function saveNewsSourceConfig(){
     $('#metasoApiKey').value = '';
     renderNewsSourceStatus();
     await loadNewsSourceConfig(false);
-    toast(`已保存并刷新，自动新闻 ${r.data.count} 条`);
+    toast(`已保存配置，当前自动新闻 ${r.data.count} 条`);
   }catch(e){ toast('保存新闻源失败：'+e.message, true); }
 }
 async function refreshAutoNews(){

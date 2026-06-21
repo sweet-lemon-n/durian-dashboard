@@ -225,11 +225,12 @@
     padding:.95vh .9vw;display:flex;flex-direction:column;gap:.5vh;overflow:hidden;backdrop-filter:blur(4px);}
   .n-head{display:flex;align-items:center;gap:.35vw;font-size:1.35vh;font-weight:800;letter-spacing:-0.01em;flex-shrink:0;}
   .n-updated{margin-left:auto;font-size:.82vh;color:var(--txt3);font-weight:400;letter-spacing:0;}
-  .n-body-wrap{display:grid;grid-template-rows:minmax(0,1fr) minmax(0,1fr);gap:.5vh;flex:1;min-height:0;overflow:hidden;padding-right:.1vw;}
+  .n-body-wrap{display:flex;flex-direction:column;gap:.5vh;flex:1;min-height:0;overflow:hidden;padding-right:.1vw;}
   .n-body-wrap::-webkit-scrollbar{width:3px;}
   .n-body-wrap::-webkit-scrollbar-thumb{background:var(--line);border-radius:2px;}
   .n-section{display:flex;flex-direction:column;gap:.32vh;min-height:0;overflow:hidden;}
   .n-section-head{display:flex;align-items:center;gap:.35vw;font-size:1vh;font-weight:600;letter-spacing:.04em;padding:.2vh .45vw;border-radius:0.4vh;align-self:flex-start;text-transform:uppercase;}
+  .n-section-head.global{background:rgba(255,255,255,0.05);color:var(--accent);border:1px solid var(--line);}
   .n-section-head.th{background:rgba(255,255,255,0.05);color:var(--th);border:1px solid var(--line);}
   .n-section-head.vn{background:rgba(255,255,255,0.05);color:var(--vn);border:1px solid var(--line);}
   .n-list{display:flex;flex-direction:column;gap:.32vh;min-height:0;overflow:hidden;}
@@ -436,8 +437,8 @@ function renderNews(el, thArr, vnArr, autoArr, fetchedAt){
     const items = (arr||[]).map(nItem).join('')||'<div style="color:var(--txt3);font-size:0.95vh">暂无</div>';
     return `<div class="n-section"><div class="n-section-head ${cls}">${label}</div><div class="n-list">${items}</div></div>`;
   };
-  const autoByCountry = (country) => (autoArr||[]).filter(n => n.country === country).slice(0, 6);
-  el.innerHTML = `<div class="n-head">📢 自动新闻 · NEWS <span class="n-updated">${newsTimeText(fetchedAt)}</span></div><div class="n-body-wrap">${sec('🇹🇭 泰国', 'th', autoByCountry('TH'))}${sec('🇻🇳 越南', 'vn', autoByCountry('VN'))}</div>`;
+  const autoItems = (autoArr||[]).slice(0, 12);
+  el.innerHTML = `<div class="n-head">📢 自动新闻 · NEWS <span class="n-updated">${newsTimeText(fetchedAt)}</span></div><div class="n-body-wrap">${sec('🌏 榴莲与东南亚影响', 'global', autoItems)}</div>`;
 }
 
 // ---- Auth ----

@@ -246,6 +246,7 @@
     display: flex; flex-direction: column; gap: var(--xl);
   }
   .news-section-eyebrow { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.2px; padding: 3px 8px; border-radius: var(--r-xs); align-self: flex-start; }
+  .news-section-eyebrow.global { background: rgba(194,239,78,0.1); color: var(--lime); border: 1px solid rgba(194,239,78,0.2); }
   .news-section-eyebrow.th { background: rgba(194,239,78,0.1); color: var(--lime); border: 1px solid rgba(194,239,78,0.2); }
   .news-section-eyebrow.vn { background: rgba(250,127,170,0.1); color: #fca5c0; border: 1px solid rgba(250,127,170,0.2); }
   .news-item { display: flex; gap: 10px; align-items: flex-start; margin-bottom: 12px; }
@@ -566,7 +567,14 @@ function paintLogistics(el, L) {
 }
 
 // ---- News ----
-function paintNews(el, thArr, vnArr, autoArr) {
+function newsTimeText(fetchedAt) {
+  if (!fetchedAt) return '等待自动更新';
+  return '最后更新 ' + new Date(fetchedAt).toLocaleString('zh-CN', {
+    month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit'
+  });
+}
+
+function paintNews(el, thArr, vnArr, autoArr, fetchedAt) {
   function newsItem(n) {
     const titleHtml = n.url
       ? `<a href="${esc(n.url)}" target="_blank" style="color:inherit;text-decoration:none" title="点击查看原文">${esc(n.title)}</a>`
@@ -580,13 +588,11 @@ function paintNews(el, thArr, vnArr, autoArr) {
     const items = (arr || []).map(newsItem).join('') || '<div style="color:var(--txt-faint);font-size:13px">暂无</div>';
     return `<div><span class="news-section-eyebrow ${cls}">${label}</span><div style="margin-top:12px">${items}</div></div>`;
   }
-  const autoSec = (autoArr || []).length ? sec('📡 实时热点', 'th', autoArr) : '';
+  const autoItems = (autoArr || []).slice(0, 12);
   el.innerHTML = `
     <div class="heading-sm">📢 产业快讯</div>
-    <div style="font-size:12px;color:var(--txt-faint);text-transform:uppercase;letter-spacing:0.2px;margin-top:-8px">Industry News</div>
-    ${autoSec}
-    ${sec('🇹🇭 泰国 · 产业快讯', 'th', thArr)}
-    ${sec('🇻🇳 越南 · 市场动向', 'vn', vnArr)}`;
+    <div style="font-size:12px;color:var(--txt-faint);text-transform:uppercase;letter-spacing:0.2px;margin-top:-8px">Industry News · ${newsTimeText(fetchedAt)}</div>
+    ${sec('🌏 榴莲与东南亚影响', 'global', autoItems)}`;
 }
 
 // ---- Auth ----
@@ -624,7 +630,7 @@ function paint(d) {
   paintCountry($('card-th'), d.th, 'TH');
   paintCountry($('card-vn'), d.vn, 'VN');
   paintLogistics($('logistics'), d.logistics);
-  paintNews($('news'), d.news.th, d.news.vn, d.news.auto);
+  paintNews($('news'), d.news.th, d.news.vn, d.news.auto, d.news.fetchedAt);
   const src = d._source === 'wecom' ? ' · 📡企微' : ' · ✏️手动';
   $('navDate').textContent = '更新 ' + new Date(d.generatedAt || Date.now()).toLocaleTimeString('zh-CN') + src;
 }
