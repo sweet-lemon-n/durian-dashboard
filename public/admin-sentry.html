@@ -278,7 +278,14 @@
   #panel-smartsheet .form-group label { font-size: 11px; color: var(--txt-faint); text-transform: uppercase; letter-spacing: 0.15px; font-weight: 600; }
   #panel-smartsheet .form-input { padding: 8px 12px; border: 1px solid var(--hairline-cool); border-radius: var(--r-sm);
     background: var(--surface2); color: var(--txt); font-size: 14px; outline: none; font-family: inherit; }
+  #panel-smartsheet textarea.form-input { min-height: 150px; resize: vertical; line-height: 1.55; font-family: inherit; }
   #panel-smartsheet .form-input:focus { border-color: var(--violet); box-shadow: 0 0 0 2px rgba(59,130,246,0.2); }
+  #panel-smartsheet .ai-preview { border: 1px solid var(--hairline-cloud); border-radius: var(--r-md); padding: var(--lg); margin-top: var(--md); background: var(--surface2); }
+  #panel-smartsheet .ai-preview h3 { font-size: 15px; font-weight: 600; margin-bottom: var(--sm); color: var(--ink); }
+  #panel-smartsheet .ai-preview table { width: 100%; border-collapse: collapse; font-size: 13px; margin-top: var(--sm); }
+  #panel-smartsheet .ai-preview th, #panel-smartsheet .ai-preview td { padding: 7px 8px; border-bottom: 1px solid var(--hairline-cloud); text-align: left; }
+  #panel-smartsheet .ai-preview th { color: var(--txt-faint); font-weight: 600; }
+  #panel-smartsheet .ai-preview input { width: 100%; padding: 6px 8px; border: 1px solid var(--hairline-cool); border-radius: var(--r-sm); background: var(--surface); color: var(--txt); }
   #panel-smartsheet .data-table-wrap { max-height: 500px; overflow: auto; margin-top: 8px; border: 1px solid var(--hairline-cloud); border-radius: var(--r-md); }
   #panel-smartsheet .data-table { width: 100%; border-collapse: collapse; font-size: 13px; }
   #panel-smartsheet .data-table thead { position: sticky; top: 0; z-index: 2; }
@@ -447,6 +454,25 @@
         <button class="btn" onclick="testCallback()">测试回调接口</button>
       </div>
       <div id="actionOutputWrap" style="display:none;margin-top:12px"></div>
+    </div>
+
+    <div class="card">
+      <h2>🤖 AI 自动录入</h2>
+      <p style="font-size:14px;color:var(--txt-muted);margin-bottom:12px">粘贴自然语言温度信息，系统先解析并展示目标子表和字段，确认后才写入智能表。</p>
+      <div class="form-row" style="align-items:stretch">
+        <div class="form-group" style="flex:1;min-width:320px">
+          <label>自然语言 / 截图文字</label>
+          <textarea class="form-input" id="aiImportText" placeholder="南部 第11柜&#10;品牌：烨荣&#10;柜号：LYGU0023499&#10;放柜时间：6/21 12.15&#10;设定温度：13.0°C&#10;送风温度：13.0°C&#10;回风温度：14.8°C&#10;风口设定：30%&#10;当前位置：泰国在途&#10;口岸：友谊关&#10;味道：无"></textarea>
+        </div>
+      </div>
+      <div style="display:flex;flex-wrap:wrap;gap:8px">
+        <button class="btn btn-primary" onclick="parseAiImport()">AI 解析</button>
+        <button class="btn" onclick="document.getElementById('aiImportImage').click()">上传截图</button>
+        <input id="aiImportImage" type="file" accept="image/*" style="display:none" onchange="handleAiImportImage(this)">
+        <button class="btn btn-danger" id="aiImportCommitBtn" onclick="commitAiImport()" disabled>确认写入智能表</button>
+      </div>
+      <div id="aiImportOutput" class="output" style="display:none"></div>
+      <div id="aiImportPreview"></div>
     </div>
 
     <div class="card">

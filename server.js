@@ -51,6 +51,173 @@ let schemaCache = {
 
 const SCHEMA_CACHE_TTL = 5 * 60 * 1000; // 5 分钟
 
+const AI_IMPORT_FIELD_ALIASES = {
+  柜号: ['柜号', '箱号', '货柜号', 'containerNo'],
+  品牌: ['品牌', 'brand'],
+  放柜时间: ['放柜时间', '放柜', '放柜日期', 'placementTime'],
+  设定温度: ['设定温度', '设温', '设定', 'setTemp'],
+  送风温度: ['送风温度', '送风', 'supplyTemp'],
+  回风温度: ['回风温度', '回风', 'returnTemp'],
+  风口设定: ['风口设定', '风口', '通风口', 'vent'],
+  当前位置: ['当前位置', '位置', 'location'],
+  味道: ['味道', '气味', 'aroma'],
+  关口: ['关口', '口岸', '关岸', 'port'],
+  更新时间: ['更新时间', '更新', 'updateTime'],
+};
+
+function normalizeImportText(text) {
+  return String(text || '')
+    .replace(/\r/g, '\n')
+    .replace(/[：﹕]/g, ':')
+    .replace(/[℃]/g, '°C')
+    .replace(/[‘’']/g, '')
+    .replace(/\u00a0/g, ' ')
+    .trim();
+}
+
+function parseKeyValueLines(text) {
+  const lines = normalizeImportText(text).split(/\n+/).map(s => s.trim()).filter(Boolean);
+  const pairs = [];
+  const free = [];
+  lines.forEach(line => {
+    const m = line.match(/^([^:：]{1,20})[:：]\s*(.+)$/);
+    if (m) pairs.push({ key: m[1].trim(), value: m[2].trim(), line });
+    else free.push(line);
+  });
+  return { pairs, free, lines };
+}
+
+function canonicalImportField(label) {
+  const raw = String(label || '').trim().replace(/\s/g, '');
+  for (const [title, aliases] of Object.entries(AI_IMPORT_FIELD_ALIASES)) {
+    if (aliases.some(a => raw.includes(String(a).replace(/\s/g, '')))) return title;
+  }
+  return '';
+}
+
+function parseNumberValue(value) {
+  const m = String(value || '').replace(/,/g, '').match(/-?\d+(?:\.\d+)?/);
+  return m ? Number(m[0]) : null;
+}
+
+function parseImportDate(value) {
+  const raw = String(value || '').trim();
+  if (!raw) return null;
+  const now = new Date();
+  let m = raw.match(/(\d{4})[\/\-.年](\d{1,2})[\/\-.月](\d{1,2})日?\s*(\d{1,2})(?::|\.|点|时)(\d{1,2})?/);
+  if (m) return new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]), Number(m[4]), Number(m[5] || 0));
+  m = raw.match(/(\d{1,2})[\/\-.月](\d{1,2})日?\s*(\d{1,2})(?::|\.|点|时)(\d{1,2})?/);
+  if (m) return new Date(now.getFullYear(), Number(m[1]) - 1, Number(m[2]), Number(m[3]), Number(m[4] || 0));
+  m = raw.match(/(\d{1,2})(?::|\.|点|时)(\d{1,2})/);
+  if (m) return new Date(now.getFullYear(), now.getMonth(), now.getDate(), Number(m[1]), Number(m[2]));
+  const d = new Date(raw);
+  return Number.isNaN(d.getTime()) ? null : d;
+}
+
+function formatImportDate(d) {
+  if (!d || Number.isNaN(d.getTime())) return '';
+  const pad = n => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
+function makeCellValue(field, rawValue) {
+  const type = String(field?.field_type || field?.type || '').toUpperCase();
+  const title = field?.field_title || field?.title || '';
+  if (rawValue === null || rawValue === undefined || rawValue === '') return undefined;
+  if (type.includes('NUMBER') || ['设定温度', '送风温度', '回风温度'].includes(title)) {
+    const n = Number(rawValue);
+    return Number.isFinite(n) ? n : undefined;
+  }
+  if (type.includes('DATE') || ['放柜时间', '更新时间'].includes(title)) {
+    const d = rawValue instanceof Date ? rawValue : parseImportDate(rawValue);
+    return d && !Number.isNaN(d.getTime()) ? String(d.getTime()) : undefined;
+  }
+  if (type.includes('SELECT')) return [{ text: String(rawValue).trim() }];
+  return [{ type: 'text', text: String(rawValue).trim() }];
+}
+
+function pickImportSheet(schema, extracted) {
+  const wantedTitles = Object.keys(extracted).filter(k => extracted[k] !== null && extracted[k] !== undefined && extracted[k] !== '');
+  let best = null;
+  let bestScore = -1;
+  for (const sheet of schema.sheets || []) {
+    const titles = new Set((sheet.fields || []).map(f => f.field_title));
+    let score = 0;
+    wantedTitles.forEach(t => { if (titles.has(t)) score += 2; });
+    if (/温度|temp/i.test(sheet.title || '')) score += 3;
+    if (titles.has('柜号')) score += 2;
+    if (titles.has('回风温度')) score += 2;
+    if (score > bestScore) { bestScore = score; best = sheet; }
+  }
+  return best || schema.detected.tempSheet || schema.sheets?.[0] || null;
+}
+
+function parseImportText(text, schema) {
+  const parsed = parseKeyValueLines(text);
+  const extracted = {};
+  const confidence = {};
+
+  parsed.pairs.forEach(({ key, value }) => {
+    const field = canonicalImportField(key);
+    if (!field) return;
+    if (['设定温度', '送风温度', '回风温度'].includes(field)) {
+      const n = parseNumberValue(value);
+      if (n !== null) { extracted[field] = n; confidence[field] = 0.95; }
+    } else if (['放柜时间', '更新时间'].includes(field)) {
+      const d = parseImportDate(value);
+      if (d) { extracted[field] = formatImportDate(d); confidence[field] = 0.9; }
+    } else {
+      extracted[field] = value.replace(/\s+/g, ' ').trim();
+      confidence[field] = 0.9;
+    }
+  });
+
+  const all = parsed.lines.join('\n');
+  if (!extracted.柜号) {
+    const m = all.match(/\b[A-Z]{3,4}\d{6,8}\b/i);
+    if (m) { extracted.柜号 = m[0].toUpperCase(); confidence.柜号 = 0.82; }
+  }
+  if (!extracted.品牌) {
+    const m = all.match(/品牌\s*[:：]?\s*([^\n]+)/);
+    if (m) { extracted.品牌 = m[1].trim(); confidence.品牌 = 0.8; }
+  }
+  if (!extracted.当前位置 && /泰国/.test(all)) { extracted.当前位置 = '泰国在途'; confidence.当前位置 = 0.55; }
+  if (!extracted.更新时间) {
+    extracted.更新时间 = formatImportDate(new Date());
+    confidence.更新时间 = 0.5;
+  }
+
+  const sheet = pickImportSheet(schema, extracted);
+  if (!sheet) throw new Error('没有可写入的智能子表');
+
+  const fieldMap = {};
+  (sheet.fields || []).forEach(f => { fieldMap[f.field_title] = f; });
+  const values = {};
+  const previewFields = [];
+  Object.entries(extracted).forEach(([title, value]) => {
+    const field = fieldMap[title];
+    if (!field || value === undefined || value === null || value === '') return;
+    const cellValue = makeCellValue(field, value);
+    if (cellValue === undefined) return;
+    values[title] = cellValue;
+    previewFields.push({
+      title,
+      value,
+      fieldId: field.field_id,
+      fieldType: field.field_type,
+      confidence: confidence[title] || 0.7,
+    });
+  });
+
+  return {
+    sheet: { sheetId: sheet.sheet_id, title: sheet.title },
+    fields: previewFields,
+    values,
+    rawText: normalizeImportText(text),
+    warnings: previewFields.length ? [] : ['没有识别到可写入字段，请补充字段名和值'],
+  };
+}
+
 /**
  * 获取文档结构（带缓存），自动识别温度子表和基础信息子表
  *
@@ -1130,6 +1297,55 @@ app.post('/api/smartsheet/sheet/add', requirePermission('smartsheet'), async (re
     if (result.errcode !== 0) throw new Error(`[${result.errcode}] ${result.errmsg}`);
     clearSchemaCache();
     res.json({ success: true, data: { sheet_id: result.properties.sheet_id, title } });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+/**
+ * POST /api/ai-import/parse
+ * 将自然语言温度信息解析成待确认的智能表写入预览。只解析，不写入。
+ */
+app.post('/api/ai-import/parse', requirePermission('smartsheet'), async (req, res) => {
+  try {
+    const { text, imageData } = req.body || {};
+    if (imageData && !String(text || '').trim()) {
+      throw new Error('截图识别需要先配置 OCR/视觉 AI 服务；当前请把截图文字复制到文本框后解析');
+    }
+    if (!String(text || '').trim()) throw new Error('请粘贴需要识别的文本');
+    const schema = await getDocumentSchema();
+    const preview = parseImportText(text, schema);
+    res.json({ success: true, data: preview });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+/**
+ * POST /api/ai-import/commit
+ * 人员确认后写入智能表。values 使用字段标题作为 key，服务端会二次校验字段存在并转换单元格格式。
+ */
+app.post('/api/ai-import/commit', requirePermission('smartsheet'), async (req, res) => {
+  try {
+    const { sheetId, values } = req.body || {};
+    if (!sheetId) throw new Error('缺少 sheetId');
+    if (!values || typeof values !== 'object' || Array.isArray(values)) throw new Error('缺少待写入字段');
+    const schema = await getDocumentSchema();
+    const sheet = (schema.sheets || []).find(s => s.sheet_id === sheetId);
+    if (!sheet) throw new Error('目标子表不存在或无权限访问');
+    const fieldMap = {};
+    (sheet.fields || []).forEach(f => { fieldMap[f.field_title] = f; });
+    const normalizedValues = {};
+    Object.entries(values).forEach(([title, value]) => {
+      const field = fieldMap[title];
+      if (!field) return;
+      const cellValue = makeCellValue(field, value);
+      if (cellValue !== undefined) normalizedValues[title] = cellValue;
+    });
+    if (!Object.keys(normalizedValues).length) throw new Error('没有有效字段可写入');
+    const result = await wecom.addRecords(DOCID, sheetId, [{ values: normalizedValues }], 'CELL_VALUE_KEY_TYPE_FIELD_TITLE');
+    if (result.errcode !== 0) throw new Error(`[${result.errcode}] ${result.errmsg}`);
+    res.json({ success: true, data: { sheet: { sheetId, title: sheet.title }, fields: Object.keys(normalizedValues), result } });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
   }

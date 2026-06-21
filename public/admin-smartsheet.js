@@ -12,6 +12,7 @@ let cachedFields = [];
 let loadedRecords = [];
 let currentEditRecordId = null;
 let _smartsheetInited = false;
+let aiImportPreview = null;
 
 // ============ 认证 fetch 包装 ============
 async function apiFetch(url, options = {}) {
@@ -385,6 +386,137 @@ const FIELD_TITLE_MAP = {
   port: '关口',
   updateTime: '更新时间',
 };
+
+function getAiImportEls() {
+  return {
+    text: document.getElementById('aiImportText'),
+    out: document.getElementById('aiImportOutput'),
+    preview: document.getElementById('aiImportPreview'),
+    commit: document.getElementById('aiImportCommitBtn'),
+  };
+}
+
+function setAiImportOutput(message, isError = false) {
+  const { out } = getAiImportEls();
+  if (!out) return;
+  out.style.display = message ? 'block' : 'none';
+  out.className = 'output' + (isError ? ' error' : '');
+  out.textContent = message || '';
+}
+
+function renderAiImportPreview(data) {
+  const { preview, commit } = getAiImportEls();
+  if (!preview) return;
+  aiImportPreview = data;
+  if (!data || !data.sheet) {
+    preview.innerHTML = '';
+    if (commit) commit.disabled = true;
+    return;
+  }
+  const rows = (data.fields || []).map(f => `
+    <tr>
+      <td>${escHtml(f.title)}</td>
+      <td><input data-ai-field="${escAttr(f.title)}" value="${escAttr(f.value)}"></td>
+      <td>${escHtml(f.fieldType || '-')}</td>
+      <td>${Math.round((f.confidence || 0) * 100)}%</td>
+    </tr>
+  `).join('');
+  const warnings = data.warnings && data.warnings.length
+    ? `<div style="color:var(--warning);margin-top:8px">${data.warnings.map(escHtml).join('<br>')}</div>`
+    : '';
+  preview.innerHTML = `
+    <div class="ai-preview">
+      <h3>待确认写入信息</h3>
+      <div>目标子表：<b>${escHtml(data.sheet.title)}</b> <span style="color:var(--text-muted)">(${escHtml(data.sheet.sheetId)})</span></div>
+      <table>
+        <thead><tr><th>字段</th><th>识别值（可修改）</th><th>字段类型</th><th>置信度</th></tr></thead>
+        <tbody>${rows || '<tr><td colspan="4">暂无可写入字段</td></tr>'}</tbody>
+      </table>
+      ${warnings}
+    </div>
+  `;
+  if (commit) commit.disabled = !(data.fields && data.fields.length);
+}
+
+async function parseAiImport() {
+  const { text, commit } = getAiImportEls();
+  if (!text || !text.value.trim()) {
+    setAiImportOutput('请先粘贴自然语言文本或截图 OCR 后的文字', true);
+    return;
+  }
+  if (commit) commit.disabled = true;
+  renderAiImportPreview(null);
+  setAiImportOutput('正在解析，暂不写入智能表...');
+  try {
+    const resp = await apiFetch('/api/ai-import/parse', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text: text.value }),
+    });
+    const json = await resp.json();
+    if (!json.success) throw new Error(json.error || '解析失败');
+    renderAiImportPreview(json.data);
+    setAiImportOutput('解析完成，请核对目标子表和字段值，确认后再写入。');
+  } catch (e) {
+    setAiImportOutput('解析失败: ' + e.message, true);
+  }
+}
+
+async function commitAiImport() {
+  if (!aiImportPreview || !aiImportPreview.sheet) {
+    setAiImportOutput('请先解析并确认信息', true);
+    return;
+  }
+  const values = {};
+  document.querySelectorAll('[data-ai-field]').forEach(input => {
+    const key = input.getAttribute('data-ai-field');
+    const val = input.value.trim();
+    if (key && val) values[key] = val;
+  });
+  if (!Object.keys(values).length) {
+    setAiImportOutput('没有可写入字段', true);
+    return;
+  }
+  const ok = confirm(`确认写入「${aiImportPreview.sheet.title}」？\n字段：${Object.keys(values).join('、')}`);
+  if (!ok) return;
+  const committedSheetId = aiImportPreview.sheet.sheetId;
+  setAiImportOutput('正在写入智能表...');
+  try {
+    const resp = await apiFetch('/api/ai-import/commit', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ sheetId: aiImportPreview.sheet.sheetId, values }),
+    });
+    const json = await resp.json();
+    if (!json.success) throw new Error(json.error || '写入失败');
+    setAiImportOutput(`写入成功：${json.data.sheet.title}\n字段：${json.data.fields.join('、')}`);
+    renderAiImportPreview(null);
+    await clearCacheAndReload();
+    const currentSheet = document.getElementById('recSheetId');
+    if (currentSheet && currentSheet.value === committedSheetId) loadRecords();
+  } catch (e) {
+    setAiImportOutput('写入失败: ' + e.message, true);
+  }
+}
+
+async function handleAiImportImage(input) {
+  if (input && input.files && input.files[0]) {
+    const file = input.files[0];
+    const imageData = await new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result);
+      reader.onerror = () => reject(reader.error || new Error('图片读取失败'));
+      reader.readAsDataURL(file);
+    }).catch(e => {
+      setAiImportOutput('图片读取失败: ' + e.message, true);
+      return '';
+    });
+    if (imageData) {
+      setAiImportOutput('截图已读取；当前服务器尚未配置 OCR/视觉 AI 服务，请先把截图文字复制到文本框后解析。', true);
+    }
+    input.value = '';
+  }
+}
 
 async function loadRecords() {
   const sheetId = document.getElementById('recSheetId').value;
