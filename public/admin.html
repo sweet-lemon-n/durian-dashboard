@@ -309,6 +309,8 @@
         <div><label>秘塔 MCP Key</label><input id="metasoMcpApiKey" type="password" placeholder="留空则保留当前 Key"></div>
         <div><label>秘塔直连 API 地址（可选）</label><input id="metasoApiUrl" placeholder="没有 MCP 时才使用"></div>
         <div><label>秘塔直连 API Key（可选）</label><input id="metasoApiKey" type="password" placeholder="留空则保留当前 Key"></div>
+        <div><label>秘塔每日调用上限</label><input id="metasoDailyLimit" type="number" min="0" step="1" value="0"></div>
+        <div><label>秘塔冷却时间（分钟）</label><input id="metasoCooldownMinutes" type="number" min="0" step="1" value="60"></div>
         <div style="grid-column:1 / -1"><label>搜索关键词（每行一个）</label><textarea id="newsKeywords" placeholder="榴莲进口&#10;泰国榴莲&#10;越南榴莲"></textarea></div>
       </div>
       <div class="source-meta">
@@ -929,7 +931,11 @@ function renderNewsSourceStatus(){
     const d = autoNewsInfo && autoNewsInfo.diagnostics;
     const errors = d && d.errors && d.errors.length ? d.errors.map(x=>`- ${x.source}: ${x.message}`).join('\n') : '暂无错误';
     const keywords = d && d.keywords && d.keywords.length ? d.keywords.join(' / ') : (cfg && cfg.keywords ? cfg.keywords.join(' / ') : '');
-    dEl.textContent = `关键词：${keywords || '未配置'}\n诊断：${(d && d.message) || '尚未刷新'}\n${errors}`;
+    const stats = d && d.sourceStats ? Object.entries(d.sourceStats).map(([name,s]) =>
+      `${name}: 原始 ${s.raw||0} / 通过 ${s.accepted||0} / 过滤 ${s.filtered||0}\n  原始样例：${(s.samples||[]).join(' | ') || '-'}\n  通过样例：${(s.acceptedSamples||[]).join(' | ') || '-'}`
+    ).join('\n') : '暂无来源统计';
+    const usage = d && d.metasoUsage ? `秘塔用量：${d.metasoUsage.day || '-'} ${d.metasoUsage.calls || 0} 次` : '秘塔用量：-';
+    dEl.textContent = `关键词：${keywords || '未配置'}\n诊断：${(d && d.message) || '尚未刷新'}\n${usage}\n错误：\n${errors}\n来源统计：\n${stats}`;
   }
 }
 async function loadAutoNewsInfo(showToast=true){
@@ -948,6 +954,8 @@ async function loadNewsSourceConfig(showToast=true){
     $('#metasoEnabled').checked = !!c.metasoEnabled;
     $('#metasoMcpUrl').value = c.metasoMcpUrl || '';
     $('#metasoApiUrl').value = c.metasoApiUrl || '';
+    $('#metasoDailyLimit').value = c.metasoDailyLimit || 0;
+    $('#metasoCooldownMinutes').value = c.metasoCooldownMinutes || 60;
     $('#newsKeywords').value = (c.keywords || []).join('\n');
     $('#metasoMcpApiKey').placeholder = c.hasMetasoMcpApiKey ? `已保存：${c.metasoMcpApiKeyMasked}` : '留空则保留当前 Key';
     $('#metasoApiKey').placeholder = c.hasMetasoApiKey ? `已保存：${c.metasoApiKeyMasked}` : '留空则保留当前 Key';
@@ -962,6 +970,8 @@ async function saveNewsSourceConfig(){
     metasoMcpApiKey: $('#metasoMcpApiKey').value.trim(),
     metasoApiUrl: $('#metasoApiUrl').value.trim(),
     metasoApiKey: $('#metasoApiKey').value.trim(),
+    metasoDailyLimit: +$('#metasoDailyLimit').value || 0,
+    metasoCooldownMinutes: +$('#metasoCooldownMinutes').value || 0,
     keywords: $('#newsKeywords').value.split(/\n/).map(s=>s.trim()).filter(Boolean),
   };
   try{

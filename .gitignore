@@ -11,5 +11,6 @@ data/data-source.json
 data/data-source.json.tmp
 data/runtime-config.json
 data/runtime-config.json.tmp
+data/news-fetcher.log
 data/*.xlsx
 data/*.xls
