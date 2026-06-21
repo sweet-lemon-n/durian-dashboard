@@ -66,6 +66,13 @@ npm start
 | TEMP_MIN | 温度下限告警阈值（°C） | 2 |
 | TEMP_MAX | 温度上限告警阈值（°C） | 8 |
 | REFRESH_INTERVAL | 前端刷新间隔（秒） | 30 |
+| METASO_MCP_URL | 秘塔搜索 ModelScope MCP 地址（可选，优先用于自动新闻） | 空 |
+| METASO_MCP_API_KEY | 秘塔/ModelScope MCP 鉴权 Key（可选；未填时回退 METASO_API_KEY） | 空 |
+| METASO_API_KEY | 秘塔搜索 API Key（可选；兼容直连 API 或 MCP） | 空 |
+| METASO_API_URL | 秘塔搜索直连 API 地址（可选；没有 MCP 地址时使用） | 空 |
+
+自动新闻优先级：`METASO_MCP_URL` → `METASO_API_URL` → 新浪财经/RSS/搜索引擎 fallback。ModelScope MCP 服务可参考：
+`https://www.modelscope.cn/mcp/servers/metasota/metaso-search`
 
 ## 生产部署
 
