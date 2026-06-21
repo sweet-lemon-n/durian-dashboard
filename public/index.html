@@ -333,14 +333,16 @@ function renderLogistics(el, L){
     </div>`;
 }
 
-function renderNewsCombined(el, thArr, vnArr){
+function renderNewsCombined(el, thArr, vnArr, autoArr){
+  const nItem = n => `<div class="n-item"><span class="n-ico">${esc(n.icon||'📌')}</span><div class="n-body"><div class="n-t">${esc(n.title)}${n.source?' <small style="color:var(--gold)">自动</small>':''}</div><div class="n-d">${md(n.detail||'')}</div></div></div>`;
   const sec = (country, arr) => {
     const flag = country==='TH' ? '🇹🇭 泰国 · 产业快讯' : '🇻🇳 越南 · 市场动向';
-    const items = (arr||[]).map(n=>`<div class="n-item"><span class="n-ico">${esc(n.icon||'📌')}</span><div class="n-body"><div class="n-t">${esc(n.title)}</div><div class="n-d">${md(n.detail||'')}</div></div></div>`).join('') || '<div style="color:var(--txt3);font-size:1.1vh">暂无</div>';
+    const items = (arr||[]).map(nItem).join('') || '<div style="color:var(--txt3);font-size:1.1vh">暂无</div>';
     return `<div class="n-section"><div class="n-section-head ${country.toLowerCase()}">${flag}</div><div class="n-list">${items}</div></div>`;
   };
+  const autoItems = (autoArr||[]).length ? `<div class="n-section"><div class="n-section-head th" style="background:rgba(245,196,81,.16);color:#fde68a;border-color:rgba(245,196,81,.32)">📡 实时热点</div><div class="n-list">${(autoArr||[]).map(nItem).join('')}</div></div>` : '';
   el.innerHTML = `<div class="n-head">📢 产业快讯 · INDUSTRY NEWS</div>
-    <div class="n-body-wrap">${sec('TH',thArr)}${sec('VN',vnArr)}</div>`;
+    <div class="n-body-wrap">${autoItems}${sec('TH',thArr)}${sec('VN',vnArr)}</div>`;
 }
 
 function hideById(id, hidden){ const el=$(id); if(el) el.hidden = !!hidden; }
@@ -424,7 +426,7 @@ function paint(d){
   if(d.th) renderCountry($('country-th'),d.th,'TH');
   if(d.vn) renderCountry($('country-vn'),d.vn,'VN');
   if(d.logistics) renderLogistics($('logistics'),d.logistics);
-  if(d.news) renderNewsCombined($('news-combined'),d.news.th,d.news.vn);
+  if(d.news) renderNewsCombined($('news-combined'),d.news.th,d.news.vn,d.news.auto);
   const srcTag = d._source==='wecom' ? ' · 📡企微' : ' · ✏️手动';
   $('topDate').textContent='最后更新 ' + new Date(d.generatedAt||Date.now()).toLocaleTimeString('zh-CN') + srcTag;
 }

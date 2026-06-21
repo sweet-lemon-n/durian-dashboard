@@ -1,0 +1,650 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>榴莲交付总览 · DURIAN DELIVERY OVERVIEW</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Rubik:wght@400;500;600;700;800&family=Noto+Sans+SC:wght@400;500;700;900&family=Space+Grotesk:wght@600;700&display=swap" rel="stylesheet">
+<style>
+  /* ============================================================
+     Sentry Design System — Dashboard
+     Dark canvas · feature cards · lime as typographic highlight
+     ============================================================ */
+  :root {
+    --canvas: #1f1633;
+    --night: #150f23;
+    --ink-deep: #1f1633;
+    --white: #ffffff;
+    --lime: #c2ef4e;
+    --pink: #fa7faa;
+    --violet: #6a5fc1;
+    --violet-deep: #422082;
+    --violet-mid: #79628c;
+    --hairline: #362d59;
+    --hairline-subtle: rgba(54,45,89,0.45);
+    --txt: #ffffff;
+    --txt-muted: rgba(255,255,255,0.72);
+    --txt-faint: rgba(255,255,255,0.38);
+    --on-dark-faint: rgba(255,255,255,0.18);
+    /* semantic */
+    --signed: #34d399; --delivered: #2dd4bf; --transit: #fbbf24;
+    --port: #f59e0b; --pending: #79628c; --danger: #f87171; --warn: #fbbf24;
+    /* spacing */
+    --section: 96px; --xxl: 32px; --xl: 24px; --lg: 16px; --md: 12px; --sm: 8px;
+    /* radius */
+    --r-xs: 4px; --r-sm: 6px; --r-md: 8px; --r-lg: 10px; --r-xl: 12px; --r-xxl: 18px; --r-full: 9999px;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: var(--canvas);
+    color: var(--txt);
+    font-family: "Rubik", "Noto Sans SC", "Microsoft YaHei", sans-serif;
+    font-weight: 500;
+    font-size: 16px;
+    line-height: 1.5;
+    min-height: 100vh;
+    /* starfield depth — subtle white pinpricks on violet */
+    background-image:
+      radial-gradient(1px 1px at 12% 8%, rgba(255,255,255,0.25), transparent),
+      radial-gradient(1px 1px at 23% 18%, rgba(255,255,255,0.18), transparent),
+      radial-gradient(1px 1px at 38% 5%, rgba(255,255,255,0.22), transparent),
+      radial-gradient(1px 1px at 52% 14%, rgba(255,255,255,0.15), transparent),
+      radial-gradient(1px 1px at 67% 9%, rgba(255,255,255,0.2), transparent),
+      radial-gradient(1px 1px at 81% 21%, rgba(255,255,255,0.16), transparent),
+      radial-gradient(1px 1px at 94% 7%, rgba(255,255,255,0.2), transparent),
+      radial-gradient(1px 1px at 8% 93%, rgba(255,255,255,0.15), transparent),
+      radial-gradient(1px 1px at 44% 96%, rgba(255,255,255,0.12), transparent),
+      radial-gradient(1px 1px at 73% 89%, rgba(255,255,255,0.18), transparent);
+    background-attachment: fixed;
+  }
+
+  /* ============================================================
+     Typography tokens
+     ============================================================ */
+  .display-lg { font-family: "Space Grotesk", "Rubik", sans-serif; font-size: 60px; font-weight: 700; line-height: 1.1; letter-spacing: -0.01em; }
+  .heading-xl { font-size: 30px; font-weight: 600; line-height: 1.2; }
+  .heading-md { font-size: 24px; font-weight: 600; line-height: 1.25; }
+  .heading-sm { font-size: 20px; font-weight: 600; line-height: 1.25; }
+  .eyebrow { font-size: 14px; font-weight: 600; line-height: 1.4; text-transform: uppercase; letter-spacing: 0.2px; color: var(--txt-muted); }
+  .body-md { font-size: 16px; font-weight: 500; line-height: 1.5; }
+  .caption { font-size: 14px; font-weight: 400; line-height: 1.43; color: var(--txt-muted); }
+  .micro { font-size: 10px; font-weight: 600; line-height: 1.8; letter-spacing: 0.25px; text-transform: uppercase; color: var(--txt-faint); }
+  .num { font-family: "Rubik", sans-serif; font-feature-settings: "tnum"; font-weight: 700; letter-spacing: -0.02em; }
+  .mono { font-family: "Rubik", sans-serif; font-weight: 600; }
+
+  /* ============================================================
+     Lime keyword chip — Sentry's signature typographic device
+     ============================================================ */
+  .lime-chip {
+    display: inline-block;
+    background: var(--lime);
+    color: var(--night);
+    border-radius: var(--r-xs);
+    padding: 0 12px;
+    font-weight: inherit;
+    font-size: inherit;
+    font-family: inherit;
+    line-height: inherit;
+  }
+
+  /* ============================================================
+     Layout — wide container, generous section spacing
+     ============================================================ */
+  .page { max-width: 1440px; margin: 0 auto; padding: 0 48px; }
+
+  /* ---- Nav bar ---- */
+  .nav { display: flex; align-items: center; padding: 16px 0; gap: 24px; }
+  .nav-brand { display: flex; align-items: center; gap: 10px; font-weight: 700; font-size: 18px; letter-spacing: -0.01em; }
+  .nav-brand .logo { font-size: 28px; }
+  .nav-spacer { flex: 1; }
+  .nav-meta { display: flex; align-items: center; gap: 20px; }
+  .nav-clock { text-align: right; }
+  .nav-clock .date { font-size: 13px; color: var(--txt-muted); }
+  .nav-clock .time { font-size: 16px; font-weight: 600; font-family: "Rubik", sans-serif; }
+  .nav-user { display: flex; align-items: center; gap: 10px; font-size: 14px; color: var(--txt-muted); }
+  .nav-user .name { color: var(--lime); font-weight: 700; }
+  .nav-user a { color: var(--txt-muted); text-decoration: none; font-size: 13px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.2px; padding: 6px 12px; border: 1px solid var(--hairline); border-radius: var(--r-sm); transition: 0.15s; }
+  .nav-user a:hover { color: var(--pink); border-color: var(--pink); }
+  .nav-user a.admin { color: var(--lime); border-color: rgba(194,239,78,0.35); }
+  .nav-user a.admin:hover { background: var(--lime); color: var(--night); border-color: var(--lime); }
+
+  /* ---- Section ---- */
+  .section { padding: var(--section) 0; }
+  .section + .section { border-top: 1px solid var(--hairline); }
+  .section-eyebrow { margin-bottom: var(--sm); }
+
+  /* ============================================================
+     Hero — big global numbers
+     ============================================================ */
+  .hero { padding: 48px 0 64px; text-align: center; }
+  .hero h1 { font-family: "Space Grotesk", "Rubik", sans-serif; font-size: 56px; font-weight: 700; line-height: 1.15; letter-spacing: -0.02em; margin-bottom: 16px; }
+  .hero h1 .lime-chip { padding: 2px 16px; }
+  .hero .subtitle { font-size: 18px; color: var(--txt-muted); max-width: 640px; margin: 0 auto 40px; line-height: 1.8; }
+  .stat-strip { display: flex; justify-content: center; gap: 0; max-width: 900px; margin: 0 auto; }
+  .stat-item { flex: 1; padding: 24px 16px; text-align: center; }
+  .stat-item + .stat-item { border-left: 1px solid var(--hairline); }
+  .stat-value { font-family: "Rubik", sans-serif; font-size: 48px; font-weight: 700; line-height: 1.1; letter-spacing: -0.02em; color: var(--white); }
+  .stat-value.highlight { color: var(--lime); }
+  .stat-label { font-size: 13px; color: var(--txt-faint); margin-top: 8px; text-transform: uppercase; letter-spacing: 0.25px; font-weight: 500; }
+
+  /* ============================================================
+     Feature cards — two country panels
+     ============================================================ */
+  .card-grid { display: grid; grid-template-columns: 1fr 1fr; gap: var(--xl); }
+  .feature-card {
+    background: var(--night);
+    border: 1px solid var(--hairline);
+    border-radius: var(--r-xxl);
+    padding: var(--xxl);
+    position: relative;
+    overflow: hidden;
+  }
+  .feature-card::before {
+    content: "";
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 3px;
+  }
+  .feature-card.th::before { background: var(--lime); }
+  .feature-card.vn::before { background: var(--pink); }
+
+  .card-head { display: flex; align-items: center; gap: 12px; margin-bottom: var(--xl); }
+  .card-flag { font-size: 36px; }
+  .card-title { font-family: "Space Grotesk", "Rubik", sans-serif; font-size: 28px; font-weight: 700; letter-spacing: -0.01em; }
+  .card-subtitle { display: block; font-size: 13px; color: var(--txt-faint); font-weight: 400; text-transform: uppercase; letter-spacing: 0.12em; margin-top: 2px; }
+  .card-rate { margin-left: auto; text-align: right; }
+  .card-rate .big-num { font-size: 42px; font-weight: 700; line-height: 1; color: var(--signed); }
+  .card-rate .big-label { font-size: 12px; color: var(--txt-faint); text-transform: uppercase; letter-spacing: 0.2px; margin-top: 4px; }
+
+  /* KPI pills inside card */
+  .kpi-row { display: flex; gap: var(--sm); margin-bottom: var(--xl); }
+  .kpi-pill { flex: 1; background: rgba(255,255,255,0.03); border: 1px solid var(--hairline-subtle); border-radius: var(--r-md); padding: 12px 8px; text-align: center; }
+  .kpi-pill .val { font-size: 24px; font-weight: 700; line-height: 1.1; }
+  .kpi-pill .val.lime { color: var(--lime); }
+  .kpi-pill .val.pink { color: var(--pink); }
+  .kpi-pill .val.green { color: var(--signed); }
+  .kpi-pill .val.amber { color: var(--transit); }
+  .kpi-pill .lab { font-size: 10px; color: var(--txt-faint); margin-top: 4px; text-transform: uppercase; letter-spacing: 0.15px; }
+
+  /* Progress bar */
+  .progress-wrap { display: flex; align-items: center; gap: 12px; margin-bottom: var(--xl); }
+  .progress-label { font-size: 13px; font-weight: 600; color: var(--txt-muted); text-transform: uppercase; letter-spacing: 0.2px; white-space: nowrap; }
+  .progress-bar { flex: 1; height: 28px; background: rgba(255,255,255,0.04); border-radius: var(--r-sm); display: flex; overflow: hidden; border: 1px solid var(--hairline-subtle); }
+  .progress-bar .seg { display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 700; color: var(--night); white-space: nowrap; overflow: hidden; }
+  .seg-done { background: var(--signed); } .seg-dlv { background: var(--delivered); }
+  .seg-transit { background: var(--transit); } .seg-port { background: var(--port); }
+  .seg-pending { background: var(--pending); color: var(--txt); }
+
+  /* Legend */
+  .legend-row { display: flex; gap: 18px; margin-bottom: var(--xl); font-size: 12px; color: var(--txt-muted); }
+  .legend-row span { display: inline-flex; align-items: center; gap: 6px; }
+  .legend-dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
+
+  /* Category breakdown */
+  .cat-group { margin-bottom: var(--lg); }
+  .cat-tag { display: inline-flex; align-items: center; gap: 6px; padding: 4px 12px; border-radius: var(--r-sm); font-size: 13px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.2px; margin-bottom: var(--sm); }
+  .cat-tag.fresh { background: rgba(250,127,170,0.12); color: #ffb4c8; border: 1px solid rgba(250,127,170,0.25); }
+  .cat-tag.frozen { background: rgba(106,95,193,0.12); color: #b8b0e8; border: 1px solid rgba(106,95,193,0.25); }
+  .cat-summary { font-size: 13px; color: var(--txt-muted); margin-left: 8px; display: inline; }
+  .cat-summary b { color: var(--txt); font-weight: 700; }
+  .brand-row { display: grid; grid-template-columns: 1fr 3fr 80px; align-items: center; gap: 12px; padding: 8px 0; border-bottom: 1px solid var(--hairline-subtle); }
+  .brand-row:last-child { border-bottom: none; }
+  .brand-name { font-size: 14px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .brand-meta { font-size: 11px; color: var(--txt-faint); display: block; font-weight: 400; }
+  .brand-bar { height: 20px; background: rgba(255,255,255,0.04); border-radius: var(--r-xs); display: flex; overflow: hidden; border: 1px solid rgba(255,255,255,0.05); }
+  .brand-bar .seg { font-size: 10px; font-weight: 700; color: var(--night); }
+  .brand-rate { font-size: 14px; font-weight: 700; text-align: right; }
+
+  /* ============================================================
+     Logistics + News row
+     ============================================================ */
+  .bottom-grid { display: grid; grid-template-columns: 1.35fr 1fr; gap: var(--xl); }
+
+  /* Logistics card */
+  .logistics-card {
+    background: var(--night);
+    border: 1px solid var(--hairline);
+    border-radius: var(--r-xxl);
+    padding: var(--xxl);
+  }
+  .logistics-card .card-head { margin-bottom: var(--xl); }
+  .logistics-card .card-title { font-size: 22px; }
+  .l-kpi-strip { display: flex; gap: var(--sm); margin-bottom: var(--xl); }
+  .l-kpi-item { flex: 1; background: rgba(255,255,255,0.03); border: 1px solid var(--hairline-subtle); border-radius: var(--r-md); padding: 14px 10px; text-align: center; }
+  .l-kpi-item.alarm { border-color: rgba(248,113,113,0.35); background: rgba(248,113,113,0.04); }
+  .l-kpi-item.warn { border-color: rgba(251,191,36,0.3); background: rgba(251,191,36,0.03); }
+  .l-val { font-size: 28px; font-weight: 700; line-height: 1.1; }
+  .l-val .unit { font-size: 12px; font-weight: 500; color: var(--txt-muted); }
+  .l-label { font-size: 10px; color: var(--txt-faint); margin-top: 4px; text-transform: uppercase; letter-spacing: 0.15px; }
+  .l-tables { display: grid; grid-template-columns: 1fr 1.15fr; gap: var(--xl); }
+  .l-table-block h4 { font-size: 13px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.2px; margin-bottom: var(--sm); display: flex; align-items: center; gap: 8px; }
+  .l-table-block h4 .badge { font-size: 10px; padding: 2px 8px; border-radius: var(--r-xs); font-weight: 700; background: rgba(248,113,113,0.15); color: #ffb4b4; }
+  .l-table-block table { width: 100%; border-collapse: collapse; table-layout: fixed; }
+  .l-table-block th { font-size: 10px; color: var(--txt-faint); font-weight: 500; text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--hairline); text-transform: uppercase; letter-spacing: 0.15px; white-space: nowrap; }
+  .l-table-block td { font-size: 13px; padding: 6px 8px; border-bottom: 1px solid var(--hairline-subtle); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .l-table-block tr:last-child td { border-bottom: none; }
+
+  /* Pill tags */
+  .pill { display: inline-block; font-size: 10px; font-weight: 700; padding: 2px 8px; border-radius: var(--r-xs); text-transform: uppercase; letter-spacing: 0.2px; }
+  .pill.fresh { background: rgba(250,127,170,0.15); color: #ffb4c8; }
+  .pill.frozen { background: rgba(106,95,193,0.15); color: #b8b0e8; }
+  .pill.ok { background: rgba(52,211,153,0.14); color: #86efac; }
+  .pill.warn { background: rgba(251,191,36,0.15); color: #ffe08a; }
+  .pill.alarm { background: rgba(248,113,113,0.15); color: #ffb4b4; }
+
+  /* News side panel */
+  .news-card {
+    background: var(--night);
+    border: 1px solid var(--hairline);
+    border-radius: var(--r-xxl);
+    padding: var(--xxl);
+    border-top: 3px solid var(--lime);
+    display: flex; flex-direction: column; gap: var(--xl);
+  }
+  .news-section-eyebrow { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.2px; padding: 3px 8px; border-radius: var(--r-xs); align-self: flex-start; }
+  .news-section-eyebrow.th { background: rgba(194,239,78,0.1); color: var(--lime); border: 1px solid rgba(194,239,78,0.2); }
+  .news-section-eyebrow.vn { background: rgba(250,127,170,0.1); color: #fca5c0; border: 1px solid rgba(250,127,170,0.2); }
+  .news-item { display: flex; gap: 10px; align-items: flex-start; margin-bottom: 12px; }
+  .news-item .icon { font-size: 18px; flex-shrink: 0; }
+  .news-item .title { font-size: 14px; font-weight: 600; }
+  .news-item .detail { font-size: 13px; color: var(--txt-muted); margin-top: 2px; line-height: 1.5; }
+  .news-item .detail b { color: var(--lime); font-weight: 700; }
+
+  /* ============================================================
+     Gantt — code-block-style technical section
+     ============================================================ */
+  .gantt-wrap { background: var(--night); border: 1px solid var(--hairline); border-radius: var(--r-xxl); padding: var(--xxl); }
+  .gantt-toolbar { display: flex; align-items: center; gap: 16px; margin-bottom: var(--xl); flex-wrap: wrap; }
+  .gantt-toolbar .gantt-title { font-family: "Space Grotesk", "Rubik", sans-serif; font-size: 22px; font-weight: 700; letter-spacing: -0.01em; }
+  .gantt-toolbar .gantt-desc { font-size: 14px; color: var(--txt-muted); }
+  .gantt-toolbar .spacer { flex: 1; }
+  .gantt-toolbar select { background: rgba(255,255,255,0.04); border: 1px solid var(--hairline); color: var(--txt); padding: 8px 12px; border-radius: var(--r-sm); font-size: 14px; font-family: inherit; cursor: pointer; }
+  .gantt-toolbar select:focus { outline: none; border-color: var(--lime); }
+  .gantt-legend { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--txt-muted); margin-bottom: var(--lg); }
+  .gantt-legend .gradient-bar { width: 180px; height: 10px; border-radius: 5px; background: linear-gradient(90deg, rgb(21,101,192), rgb(66,165,245), rgb(102,187,106), rgb(255,235,59), rgb(255,152,0), rgb(244,67,54)); }
+  #ganttContainer { overflow: auto; border: 1px solid var(--hairline); border-radius: var(--r-md); background: rgba(255,255,255,0.015); }
+  #ganttContainer .gantt-empty { padding: 40px; text-align: center; color: var(--txt-faint); font-size: 14px; }
+  #ganttContainer table.gantt-table { width: 100%; border-collapse: collapse; }
+  #ganttContainer table.gantt-table th { font-size: 13px; color: var(--txt-muted); font-weight: 500; padding: 10px 8px; border-bottom: 1px solid var(--hairline); white-space: nowrap; text-align: center; }
+  #ganttContainer table.gantt-table th small { color: var(--txt-faint); font-weight: 400; }
+  #ganttContainer table.gantt-table td { padding: 10px 8px; text-align: center; font-size: 14px; font-weight: 600; border-bottom: 1px solid var(--hairline-subtle); min-width: 58px; }
+  #ganttContainer .gantt-row-label { text-align: left; font-weight: 700; color: var(--txt); background: var(--night); position: sticky; left: 0; white-space: nowrap; }
+  #ganttContainer .gantt-empty-cell { color: var(--txt-faint); background: transparent; font-weight: 400; }
+
+  /* ============================================================
+     Footer squiggle divider
+     ============================================================ */
+  .footer-squiggle { height: 4px; background: var(--lime); margin-top: var(--section); border-radius: 2px; opacity: 0.6; }
+
+  /* ============================================================
+     Loader
+     ============================================================ */
+  #loader { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center;
+    background: var(--canvas); z-index: 99; color: var(--txt-muted); font-size: 16px; flex-direction: column; gap: 16px; }
+  #loader .spin { width: 48px; height: 48px; border: 3px solid rgba(255,255,255,0.06); border-top-color: var(--lime);
+    border-radius: 50%; animation: sp 0.8s linear infinite; }
+  @keyframes sp { to { transform: rotate(360deg); } }
+  #loader.hidden { display: none; }
+
+  /* ============================================================
+     Scrollbar
+     ============================================================ */
+  ::-webkit-scrollbar { width: 6px; height: 6px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 3px; }
+</style>
+</head>
+<body>
+
+<div id="loader"><div class="spin"></div><div>Loading data…</div></div>
+
+<!-- ============================================================
+     NAV BAR
+     ============================================================ -->
+<nav class="nav page">
+  <div class="nav-brand"><span class="logo">🌴</span>榴莲交付总览</div>
+  <div class="nav-spacer"></div>
+  <div class="nav-meta">
+    <div class="nav-clock">
+      <div class="date" id="navDate">…</div>
+      <div class="time num" id="navClock">--:--:--</div>
+    </div>
+    <div class="nav-user" id="userbar"></div>
+  </div>
+</nav>
+
+<div class="page">
+
+  <!-- ============================================================
+       HERO — global aggregate
+       ============================================================ -->
+  <section class="hero">
+    <h1>榴莲<span class="lime-chip">冷链交付</span>总览</h1>
+    <p class="subtitle">泰国 & 越南双产季 · 订单进度 + 物流监控 + 温度追踪 — 实时数据驱动</p>
+    <div class="stat-strip" id="heroStats"></div>
+  </section>
+
+  <!-- ============================================================
+       COUNTRY BREAKDOWN
+       ============================================================ -->
+  <section class="section">
+    <p class="eyebrow section-eyebrow">Country Breakdown</p>
+    <div class="card-grid">
+      <div class="feature-card th" id="card-th"></div>
+      <div class="feature-card vn" id="card-vn"></div>
+    </div>
+  </section>
+
+  <!-- ============================================================
+       COLD CHAIN + INTEL
+       ============================================================ -->
+  <section class="section">
+    <p class="eyebrow section-eyebrow">Cold Chain & Intelligence</p>
+    <div class="bottom-grid">
+      <div class="logistics-card" id="logistics"></div>
+      <div class="news-card" id="news"></div>
+    </div>
+  </section>
+
+  <!-- ============================================================
+       TEMPERATURE GANTT
+       ============================================================ -->
+  <section class="section">
+    <p class="eyebrow section-eyebrow">Temperature Timeline</p>
+    <div class="gantt-wrap">
+      <div class="gantt-toolbar">
+        <span class="gantt-title">📅 温度甘特图</span>
+        <span class="gantt-desc">柜号 × 最近7天 · 企业微信实时数据</span>
+        <span class="spacer"></span>
+        <span style="font-size:13px;color:var(--txt-muted)">显示温度</span>
+        <select id="tempTypeFilter">
+          <option value="returnTemp">回风温度</option>
+          <option value="setTemp">设定温度</option>
+          <option value="supplyTemp">送风温度</option>
+        </select>
+      </div>
+      <div class="gantt-legend"><span>冷</span><span class="gradient-bar"></span><span>热</span></div>
+      <div id="ganttContainer"><p class="gantt-empty">加载中...</p></div>
+    </div>
+  </section>
+
+</div><!-- /page -->
+
+<div class="footer-squiggle"></div>
+
+<script>
+// ====================================================================
+//  Dashboard renderer — Sentry design system edition
+//  Data source: /api/aggregate (board content) + /api/dashboard (gantt)
+// ====================================================================
+const API = '';
+const $ = id => document.getElementById(id);
+const esc = s => String(s==null?'':s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+function md(s) { return esc(s).replace(/\*\*(.+?)\*\*/g, '<b>$1</b>'); }
+const num = n => Number(n) || 0;
+const gotoLogin = () => { window.location.href = '/login?redirect=' + encodeURIComponent(window.location.pathname); };
+
+// ---- Hero stats ----
+function paintHero(g) {
+  $('heroStats').innerHTML = `
+    <div class="stat-item">
+      <div class="stat-value highlight num">${g.totalOrders}</div>
+      <div class="stat-label">Total Orders / 合计订单</div>
+    </div>
+    <div class="stat-item">
+      <div class="stat-value num">${g.totalBoxes}</div>
+      <div class="stat-label">Total Containers / 总箱量</div>
+    </div>
+    <div class="stat-item">
+      <div class="stat-value num">${g.totalDone}</div>
+      <div class="stat-label">Delivered / 累计完成</div>
+    </div>
+    <div class="stat-item">
+      <div class="stat-value num">${g.totalMoving}</div>
+      <div class="stat-label">In Transit / 在途+口岸</div>
+    </div>
+    <div class="stat-item">
+      <div class="stat-value num">${g.totalPending}</div>
+      <div class="stat-label">Pending / 待发</div>
+    </div>`;
+}
+
+// ---- Country feature card ----
+function paintCountry(el, info, country) {
+  const isTH = country === 'TH';
+  const accent = isTH ? 'lime' : 'pink';
+  const accentCls = isTH ? 'lime' : 'pink';
+  const done = isTH ? info.delivered : info.signed;
+  const total = info.boxes || 1;
+  const rate = info.rate;
+
+  // KPI pills
+  const kpis = isTH ? [
+    { v: info.orders, l: '总订单', c: accentCls },
+    { v: info.boxes, l: '总箱量', c: '' },
+    { v: info.delivered, l: '已交付', c: 'green' },
+    { v: info.transit, l: '在途', c: 'amber' },
+    { v: info.pending, l: '待发', c: '' },
+  ] : [
+    { v: info.orders, l: '总订单', c: accentCls },
+    { v: info.boxes, l: '总箱量', c: '' },
+    { v: info.signed, l: '已签收', c: 'green' },
+    { v: info.delivered, l: '已交付', c: '' },
+    { v: info.transit, l: '在途', c: 'amber' },
+    { v: info.port, l: '口岸', c: '' },
+    { v: info.pending, l: '待发', c: '' },
+  ];
+
+  // Progress bar segments
+  function seg(w, cls, txt) { return w > 0.3 ? `<span class="seg ${cls}" style="width:${w}%">${txt}</span>` : ''; }
+  const bar = seg(done/total*100, 'seg-done', done)
+    + (isTH ? '' : seg(info.delivered/total*100, 'seg-dlv', info.delivered))
+    + seg(info.transit/total*100, 'seg-transit', info.transit)
+    + seg(info.port/total*100, 'seg-port', info.port)
+    + seg(info.pending/total*100, 'seg-pending', info.pending);
+
+  // Legend
+  const legendItems = isTH
+    ? [{ c:'#34d399', t:'已交付' }, { c:'#fbbf24', t:'在途' }, { c:'#79628c', t:'待发' }]
+    : [{ c:'#34d399', t:'已签收' }, { c:'#2dd4bf', t:'已交付' }, { c:'#fbbf24', t:'在途' }, { c:'#f59e0b', t:'口岸' }, { c:'#79628c', t:'待发' }];
+
+  // Category rows
+  const catLabel = { FRESH: '🍒 鲜果 FRESH', FROZEN: '❄️ 冻肉 FROZEN' };
+  function paintCat(cat) {
+    const rows = info.rows.filter(r => r.category === cat);
+    if (!rows.length) return '';
+    const s = { orders: 0, boxes: 0, delivered: 0, signed: 0, transit: 0, port: 0, pending: 0 };
+    rows.forEach(r => { Object.keys(s).forEach(k => s[k] += num(r[k])); });
+    const summary = isTH
+      ? `<b>${s.orders}单 / ${s.boxes}柜</b> · 已交${s.delivered} · 在途${s.transit} · 待发${s.pending}`
+      : `<b>${s.orders}单 / ${s.boxes}柜</b> · 签收${s.signed} · 在途${s.transit} · 口岸${s.port} · 待发${s.pending}`;
+
+    const brandRows = rows.map(r => {
+      const rt = r.boxes || 1;
+      const rDone = isTH ? num(r.delivered) : num(r.signed);
+      const rRate = rDone / rt * 100;
+      const b = seg(rDone/rt*100, 'seg-done', rDone)
+        + (isTH ? '' : seg(num(r.delivered)/rt*100, 'seg-dlv', r.delivered))
+        + seg(num(r.transit)/rt*100, 'seg-transit', r.transit)
+        + seg(num(r.port)/rt*100, 'seg-port', r.port)
+        + seg(num(r.pending)/rt*100, 'seg-pending', r.pending);
+      return `<div class="brand-row">
+        <div class="brand-name">${esc(r.brand)}<span class="brand-meta">${num(r.orders)}单 / ${num(r.boxes)}柜</span></div>
+        <div class="brand-bar">${b || '<span class="seg seg-pending" style="width:100%">待发</span>'}</div>
+        <div class="brand-rate ${rRate > 0 ? '' : 'num'}" style="color:${rRate > 0 ? 'var(--signed)' : 'var(--txt-faint)'}">${rRate.toFixed(1)}%</div>
+      </div>`;
+    }).join('');
+
+    return `<div class="cat-group">
+      <div><span class="cat-tag ${cat.toLowerCase()}">${catLabel[cat]}</span><span class="cat-summary">${summary}</span></div>
+      ${brandRows}
+    </div>`;
+  }
+
+  el.innerHTML = `
+    <div class="card-head">
+      <span class="card-flag">${isTH ? '🇹🇭' : '🇻🇳'}</span>
+      <div>
+        <div class="card-title">${isTH ? 'Thailand' : 'Vietnam'}</div>
+        <span class="card-subtitle">${isTH ? '泰国榴莲订单交付进度' : '越南榴莲订单交付进度'}</span>
+      </div>
+      <div class="card-rate">
+        <div class="big-num num">${rate.toFixed(1)}%</div>
+        <div class="big-label">${isTH ? '交付率' : '签收率'}</div>
+      </div>
+    </div>
+    <div class="kpi-row">${kpis.map(k => `<div class="kpi-pill"><div class="val num ${k.c}">${k.v}</div><div class="lab">${k.l}</div></div>`).join('')}</div>
+    <div class="progress-wrap">
+      <span class="progress-label">Progress</span>
+      <div class="progress-bar">${bar}</div>
+    </div>
+    <div class="legend-row">${legendItems.map(li => `<span><i class="legend-dot" style="background:${li.c}"></i>${li.t}</span>`).join('')}</div>
+    ${paintCat('FRESH')}${paintCat('FROZEN')}`;
+}
+
+// ---- Logistics ----
+function paintLogistics(el, L) {
+  const k = L.kpis || {}, pd = L.portDelays || [], tc = L.inTransitContainers || [];
+  const devCls = d => d >= 3 ? 'dev-alarm' : (d >= 2 ? 'dev-warn' : 'dev-ok');
+  const devStyle = d => d >= 3 ? 'color:var(--danger)' : (d >= 2 ? 'color:var(--warn)' : 'color:var(--signed)');
+  const statusPill = (s, n) => s === 'ALARM'
+    ? '<span class="pill alarm">▲ ' + esc(n || '异常') + '</span>'
+    : (s === 'WARN' ? '<span class="pill warn">' + esc(n || '注意') + '</span>' : '<span class="pill ok">' + esc(n || '正常') + '</span>');
+
+  const pdRows = pd.map(r => `<tr>
+    <td class="mono">${esc(r.container)}</td><td>${esc(r.route)}</td>
+    <td><span class="pill ${r.category==='FROZEN'?'frozen':'fresh'}">${r.category==='FROZEN'?'冻果':'鲜果'}</span></td>
+    <td style="${devStyle(num(r.delayDays))};font-weight:700">${num(r.delayDays).toFixed(1)}天</td>
+    <td>${esc(r.reason)}</td></tr>`).join('');
+
+  const alarms = tc.filter(r => r.status === 'ALARM').length;
+  const tcRows = tc.map(r => {
+    const dev = num(r.returnTemp) - num(r.setTemp);
+    return `<tr>
+      <td class="mono">${esc(r.container)}</td><td>${esc(r.brand)}</td>
+      <td class="mono">${num(r.setTemp)}° / ${num(r.returnTemp)}°</td>
+      <td style="${devStyle(dev)};font-weight:700">${dev >= 0 ? '+' : ''}${dev.toFixed(1)}°</td>
+      <td>${esc(r.location)}</td><td>${statusPill(r.status, r.note)}</td></tr>`;
+  }).join('');
+
+  const val = (v, cls, unit) => `<div class="l-val num" style="color:${cls ? 'var(--'+cls+')' : 'var(--txt)'}">${v}<span class="unit">${unit||''}</span></div>`;
+
+  el.innerHTML = `
+    <div class="card-head">
+      <span style="font-size:28px">🚚</span>
+      <div>
+        <div class="card-title">Logistics</div>
+        <span class="card-subtitle">冷链在途 · 温度与关口监控</span>
+      </div>
+      <span class="caption" style="margin-left:auto">实时</span>
+    </div>
+    <div class="l-kpi-strip">
+      <div class="l-kpi-item">${val(num(k.inTransit), 'transit', '柜')}<div class="l-label">在途批次</div></div>
+      <div class="l-kpi-item">${val(num(k.tempRecords), '', '条')}<div class="l-label">温度记录</div></div>
+      <div class="l-kpi-item">${val(num(k.avgReturnTemp).toFixed(1), 'delivered', '°C')}<div class="l-label">平均回风</div></div>
+      <div class="l-kpi-item alarm">${val(num(k.tempAlarms), 'danger', '条')}<div class="l-label">温度异常</div></div>
+      <div class="l-kpi-item warn">${val(num(k.portDelayed), 'port', '柜')}<div class="l-label">关口滞留</div></div>
+    </div>
+    <div class="l-tables">
+      <div class="l-table-block">
+        <h4>🚨 关口滞留预警 <span class="badge">${pd.length}批</span></h4>
+        <table><colgroup><col style="width:28%"><col style="width:22%"><col style="width:16%"><col style="width:14%"><col style="width:20%"></colgroup>
+        <thead><tr><th>柜号/路线</th><th>客户</th><th>品类</th><th>滞留</th><th>原因</th></tr></thead>
+        <tbody>${pdRows || '<tr><td colspan="5" style="color:var(--txt-faint);text-align:center;padding:20px">暂无滞留</td></tr>'}</tbody></table>
+      </div>
+      <div class="l-table-block">
+        <h4>🌡️ 在途冷柜 · 温度告警 <span class="badge">${alarms}异常</span></h4>
+        <table><colgroup><col style="width:25%"><col style="width:14%"><col style="width:18%"><col style="width:13%"><col style="width:20%"><col style="width:10%"></colgroup>
+        <thead><tr><th>柜号</th><th>品牌</th><th>设定/回风</th><th>偏差</th><th>位置</th><th>状态</th></tr></thead>
+        <tbody>${tcRows || '<tr><td colspan="6" style="color:var(--txt-faint);text-align:center;padding:20px">暂无在途柜</td></tr>'}</tbody></table>
+      </div>
+    </div>`;
+}
+
+// ---- News ----
+function paintNews(el, thArr, vnArr, autoArr) {
+  function newsItem(n) {
+    return `<div class="news-item">
+      <span class="icon">${esc(n.icon || '📌')}</span>
+      <div><div class="title">${esc(n.title)}${n.source ? ' <small style="color:var(--lime);font-size:11px">自动</small>' : ''}</div><div class="detail">${md(n.detail || '')}</div></div>
+    </div>`;
+  }
+  function sec(label, cls, arr) {
+    const items = (arr || []).map(newsItem).join('') || '<div style="color:var(--txt-faint);font-size:13px">暂无</div>';
+    return `<div><span class="news-section-eyebrow ${cls}">${label}</span><div style="margin-top:12px">${items}</div></div>`;
+  }
+  const autoSec = (autoArr || []).length ? sec('📡 实时热点', 'th', autoArr) : '';
+  el.innerHTML = `
+    <div class="heading-sm">📢 产业快讯</div>
+    <div style="font-size:12px;color:var(--txt-faint);text-transform:uppercase;letter-spacing:0.2px;margin-top:-8px">Industry News</div>
+    ${autoSec}
+    ${sec('🇹🇭 泰国 · 产业快讯', 'th', thArr)}
+    ${sec('🇻🇳 越南 · 市场动向', 'vn', vnArr)}`;
+}
+
+// ---- Auth ----
+async function loadUser() {
+  try {
+    const r = await fetch(API + '/api/auth/me', { cache: 'no-store' });
+    if (r.status === 401) { gotoLogin(); return false; }
+    const j = await r.json();
+    if (j && j.success && j.data) {
+      const name = j.data.displayName || j.data.username;
+      const adminLink = j.data.role === 'admin'
+        ? ' <a class="admin" href="/admin-sentry.html">后台</a>' : '';
+      $('userbar').innerHTML = `👤 <span class="name">${esc(name)}</span>${adminLink} <a id="btnLogout">退出</a>`;
+      $('btnLogout').onclick = async () => {
+        try { await fetch(API + '/api/auth/logout', { method: 'POST' }); } catch (_) {}
+        gotoLogin();
+      };
+    }
+    return true;
+  } catch (e) { console.warn('用户信息加载失败', e.message); return true; }
+}
+
+async function loadAggregate() {
+  try {
+    const r = await fetch(API + '/api/aggregate', { cache: 'no-store' });
+    if (r.status === 401) { gotoLogin(); return null; }
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    return await r.json();
+  } catch (e) { console.warn('加载失败', e.message); return null; }
+}
+
+function paint(d) {
+  if (!d) return;
+  paintHero(d.global);
+  paintCountry($('card-th'), d.th, 'TH');
+  paintCountry($('card-vn'), d.vn, 'VN');
+  paintLogistics($('logistics'), d.logistics);
+  paintNews($('news'), d.news.th, d.news.vn, d.news.auto);
+  const src = d._source === 'wecom' ? ' · 📡企微' : ' · ✏️手动';
+  $('navDate').textContent = '更新 ' + new Date(d.generatedAt || Date.now()).toLocaleTimeString('zh-CN') + src;
+}
+
+async function boot() {
+  const ok = await loadUser();
+  if (!ok) return;
+  const d = await loadAggregate();
+  $('loader').classList.add('hidden');
+  if (d) {
+    paint(d);
+    setInterval(async () => { const nd = await loadAggregate(); if (nd) paint(nd); }, 30000);
+  }
+}
+
+// Clock
+function tick() {
+  const d = new Date();
+  $('navClock').textContent = [d.getHours(), d.getMinutes(), d.getSeconds()].map(n => String(n).padStart(2, '0')).join(':');
+}
+tick(); setInterval(tick, 1000);
+boot();
+</script>
+<script src="gantt.js?v=1"></script>
+</body>
+</html>

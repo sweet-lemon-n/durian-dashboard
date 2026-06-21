@@ -1,0 +1,491 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>榴莲交付总览 · TV Dashboard</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Rubik:wght@400;500;600;700;800&family=Noto+Sans+SC:wght@400;500;700;900&display=swap" rel="stylesheet">
+<style>
+  /* ============================================================
+     TV Dashboard — 一屏总览 · 多主题切换
+     所有尺寸用 vh/vw，确保任何大屏都不滚动
+     ============================================================ */
+
+  /* ============ 主题定义 ============ */
+  [data-theme="forest"] {
+    --bg: #0a1a0f; --bg2: #0f2415; --panel: rgba(15,36,21,0.78); --panel2: rgba(10,26,15,0.92);
+    --line: rgba(52,211,153,0.15); --line2: rgba(52,211,153,0.1);
+    --txt: #eef7f0; --txt2: #8ab89a; --txt3: #5c8a6a;
+    --accent: #4ade80; --accent2: #f59e0b;
+    --th: #4ade80; --vn: #fb923c;
+    --signed: #22c55e; --delivered: #2dd4bf; --transit: #f59e0b; --port: #fbbf24; --pending: #557a62;
+    --danger: #f87171; --warn: #fbbf24; --ok: #34d399;
+    --top-glow: rgba(74,222,128,0.12);
+  }
+  [data-theme="ocean"] {
+    --bg: #06121f; --bg2: #0b1c30; --panel: rgba(11,28,48,0.78); --panel2: rgba(6,18,31,0.92);
+    --line: rgba(56,189,248,0.15); --line2: rgba(56,189,248,0.1);
+    --txt: #edf4fb; --txt2: #8ab4d8; --txt3: #5a84a8;
+    --accent: #38bdf8; --accent2: #f472b6;
+    --th: #38bdf8; --vn: #f472b6;
+    --signed: #22d3ee; --delivered: #2dd4bf; --transit: #fbbf24; --port: #f59e0b; --pending: #4a6a88;
+    --danger: #f87171; --warn: #fbbf24; --ok: #34d399;
+    --top-glow: rgba(56,189,248,0.12);
+  }
+  [data-theme="amber"] {
+    --bg: #1a1008; --bg2: #241a0f; --panel: rgba(36,26,15,0.78); --panel2: rgba(26,16,8,0.92);
+    --line: rgba(245,196,81,0.18); --line2: rgba(245,196,81,0.1);
+    --txt: #fef7ed; --txt2: #c4a87a; --txt3: #8a7048;
+    --accent: #f5c451; --accent2: #f87171;
+    --th: #f5c451; --vn: #f87171;
+    --signed: #a3e635; --delivered: #2dd4bf; --transit: #fbbf24; --port: #fb923c; --pending: #6a5840;
+    --danger: #f87171; --warn: #fbbf24; --ok: #34d399;
+    --top-glow: rgba(245,196,81,0.14);
+  }
+  [data-theme="slate"] {
+    --bg: #0d1117; --bg2: #161b22; --panel: rgba(22,27,34,0.78); --panel2: rgba(13,17,23,0.92);
+    --line: rgba(148,163,184,0.15); --line2: rgba(148,163,184,0.1);
+    --txt: #e6edf3; --txt2: #8b949e; --txt3: #6e7681;
+    --accent: #e6edf3; --accent2: #58a6ff;
+    --th: #e6edf3; --vn: #f778ba;
+    --signed: #3fb950; --delivered: #39d2c0; --transit: #d29922; --port: #e3b341; --pending: #484f58;
+    --danger: #f85149; --warn: #d29922; --ok: #3fb950;
+    --top-glow: rgba(230,237,243,0.06);
+  }
+  [data-theme="violet"] {
+    --bg: #1f1633; --bg2: #150f23; --panel: rgba(21,15,35,0.78); --panel2: rgba(21,15,35,0.92);
+    --line: rgba(54,45,89,0.5); --line2: rgba(54,45,89,0.3);
+    --txt: #ffffff; --txt2: rgba(255,255,255,0.72); --txt3: rgba(255,255,255,0.38);
+    --accent: #c2ef4e; --accent2: #fa7faa;
+    --th: #c2ef4e; --vn: #fa7faa;
+    --signed: #34d399; --delivered: #2dd4bf; --transit: #fbbf24; --port: #f59e0b; --pending: #79628c;
+    --danger: #f87171; --warn: #fbbf24; --ok: #34d399;
+    --top-glow: rgba(194,239,78,0.08);
+  }
+
+  /* ============================================================
+     基础
+     ============================================================ */
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{height:100vh;width:100vw;overflow:hidden;
+    background:var(--bg);color:var(--txt);
+    font-family:"Rubik","Noto Sans SC","Microsoft YaHei",sans-serif;
+    font-weight:500;font-size:14px;}
+  .num{font-family:"Rubik",sans-serif;font-weight:700;font-feature-settings:"tnum";letter-spacing:-0.01em;}
+  .mono{font-family:"Rubik",sans-serif;font-weight:600;letter-spacing:.01em;}
+
+  /* ============================================================
+     面板布局 — 填满整个视口，不滚动
+     ============================================================ */
+  .board{height:100vh;width:100vw;display:grid;
+    grid-template-rows:5.4vh 40vh 1fr;
+    gap:0.8vh;padding:0.8vh 0.9vw;
+    background:var(--bg);}
+
+  /* ---- Top bar ---- */
+  .top{display:flex;align-items:center;gap:1.2vw;padding:0 1.4vw;
+    border-radius:0.8vh;background:linear-gradient(90deg,var(--top-glow),transparent 50%,var(--top-glow));
+    border:1px solid var(--line);position:relative;overflow:hidden;
+    backdrop-filter:blur(8px);}
+  .brand{display:flex;align-items:center;gap:.7vw;flex-shrink:0;}
+  .logo{font-size:2.8vh;line-height:1;}
+  .title-main{font-weight:800;font-size:2vh;letter-spacing:-0.01em;white-space:nowrap;}
+  .title-sub{font-size:1vh;color:var(--txt3);font-weight:400;letter-spacing:.04em;margin-top:.1vh;white-space:nowrap;}
+  .divider-v{width:1px;height:4vh;background:var(--line);flex-shrink:0;}
+  .agg{display:flex;align-items:baseline;gap:1vw;min-width:0;flex:1;overflow:hidden;}
+  .agg .item{display:flex;flex-direction:column;line-height:1.05;flex-shrink:0;}
+  .agg .v{font-size:2.6vh;color:var(--accent);}
+  .agg .v.dim{color:var(--txt);}
+  .agg .u{font-size:0.95vh;color:var(--txt3);letter-spacing:.04em;margin-top:.2vh;white-space:nowrap;text-transform:uppercase;}
+  .top .right{margin-left:auto;display:flex;align-items:center;gap:.8vw;flex-shrink:0;}
+  .top .clock-box{display:flex;flex-direction:column;align-items:flex-end;gap:.1vh;line-height:1.1;}
+  .top .date{font-size:1.1vh;color:var(--txt2);font-weight:400;white-space:nowrap;}
+  .top .clock{font-size:1.8vh;color:var(--txt);letter-spacing:.04em;white-space:nowrap;}
+  .top .userbar{font-size:1.1vh;color:var(--txt2);white-space:nowrap;display:flex;align-items:center;gap:.5vw;}
+  .top .userbar .uname{color:var(--accent);font-weight:700;max-width:7vw;overflow:hidden;text-overflow:ellipsis;display:inline-block;vertical-align:bottom;}
+  .top .userbar a{color:var(--txt2);text-decoration:none;border:1px solid var(--line);padding:.2vh .5vw;border-radius:0.4vh;cursor:pointer;transition:.15s;font-size:1vh;font-weight:600;}
+  .top .userbar a:hover{color:var(--accent2);border-color:var(--accent2);}
+  .top .userbar a.admin{color:var(--accent);border-color:var(--accent);opacity:0.7;}
+  .top .userbar a.admin:hover{opacity:1;background:var(--accent);color:var(--bg);}
+
+  /* ============================================================
+     主题切换器
+     ============================================================ */
+  .theme-switch{position:fixed;bottom:1.2vh;right:1.2vw;z-index:200;
+    display:flex;gap:0.6vh;background:var(--panel2);border:1px solid var(--line);
+    padding:0.6vh 0.8vw;border-radius:1.2vh;backdrop-filter:blur(8px);}
+  .theme-dot{width:2.4vh;height:2.4vh;border-radius:50%;cursor:pointer;border:2px solid transparent;
+    transition:.15s;position:relative;flex-shrink:0;}
+  .theme-dot:hover{transform:scale(1.2);}
+  .theme-dot.active{border-color:var(--txt);box-shadow:0 0 8px currentColor;}
+  .theme-dot.forest{background:linear-gradient(135deg,#0a1a0f,#4ade80);}
+  .theme-dot.ocean{background:linear-gradient(135deg,#06121f,#38bdf8);}
+  .theme-dot.amber{background:linear-gradient(135deg,#1a1008,#f5c451);}
+  .theme-dot.slate{background:linear-gradient(135deg,#0d1117,#8b949e);}
+  .theme-dot.violet{background:linear-gradient(135deg,#1f1633,#c2ef4e);}
+  .theme-label{font-size:0.9vh;color:var(--txt3);align-self:center;text-transform:uppercase;letter-spacing:0.2px;font-weight:600;}
+
+  /* ---- Main: two country panels ---- */
+  .main{display:grid;grid-template-columns:1fr 1fr;gap:0.9vw;min-height:0;}
+  .country{display:flex;flex-direction:column;gap:0.75vh;min-height:0;
+    background:var(--panel);border:1px solid var(--line);border-radius:1vh;
+    padding:1vh 1.1vw 1.1vh;position:relative;overflow:hidden;
+    backdrop-filter:blur(4px);}
+  .country.th{border-top:0.35vh solid var(--th);} .country.vn{border-top:0.35vh solid var(--vn);}
+  .c-head{display:flex;align-items:center;gap:.5vw;}
+  .flag{font-size:2.4vh;}
+  .c-name{font-size:2.1vh;font-weight:800;letter-spacing:-0.01em;}
+  .c-name small{font-size:1.1vh;color:var(--txt2);font-weight:400;letter-spacing:.1em;margin-left:.3vw;text-transform:uppercase;}
+  .c-date{margin-left:auto;font-size:1.1vh;color:var(--txt3);}
+
+  .kpis{display:flex;gap:0.45vw;}
+  .kpi{flex:1 1 0;min-width:0;background:var(--panel2);border:1px solid var(--line2);
+    border-radius:0.7vh;padding:.55vh .3vw;text-align:center;}
+  .kpi .kv{font-size:2.5vh;line-height:1;}
+  .kpi .ku{font-size:0.9vh;color:var(--txt3);margin-top:.3vh;white-space:nowrap;text-transform:uppercase;letter-spacing:.04em;}
+  .c-th{color:var(--th);} .c-vn{color:var(--vn);}
+  .c-signed{color:var(--signed);} .c-dlv{color:var(--delivered);}
+  .c-transit{color:var(--transit);} .c-port{color:var(--port);} .c-pending{color:var(--pending);}
+  .c-danger{color:var(--danger);}
+
+  .overall{display:flex;align-items:center;gap:.7vw;}
+  .overall .lab{font-size:1.1vh;color:var(--txt2);white-space:nowrap;font-weight:600;letter-spacing:.04em;text-transform:uppercase;}
+  .bar{flex:1;min-width:0;height:2.1vh;background:rgba(255,255,255,.03);border-radius:0.4vh;
+    display:flex;overflow:hidden;border:1px solid var(--line2);}
+  .seg{display:flex;align-items:center;justify-content:center;font-size:1.1vh;font-weight:700;color:var(--bg);
+    white-space:nowrap;overflow:hidden;min-width:0;transition:width .4s;}
+  .seg.s-signed{background:var(--signed);} .seg.s-dlv{background:var(--delivered);}
+  .seg.s-transit{background:var(--transit);} .seg.s-port{background:var(--port);}
+  .seg.s-pending{background:var(--pending);color:var(--txt);}
+  .rate{font-size:1.5vh;font-weight:700;white-space:nowrap;} .rate.big{font-size:2.1vh;}
+
+  .legend{display:flex;flex-wrap:wrap;gap:.7vw;font-size:1vh;color:var(--txt2);}
+  .legend span{display:inline-flex;align-items:center;gap:.25vw;}
+  .dot{width:.8vh;height:.8vh;border-radius:50%;display:inline-block;}
+
+  .cats{display:flex;flex-direction:column;gap:.65vh;flex:1;min-height:0;overflow-y:auto;padding-right:.3vw;}
+  .cats::-webkit-scrollbar{width:3px;}
+  .cats::-webkit-scrollbar-thumb{background:var(--line);border-radius:2px;}
+  .cat{display:flex;flex-direction:column;gap:.45vh;}
+  .cat-head{display:flex;align-items:center;gap:.5vw;flex-wrap:wrap;}
+  .cat-tag{display:inline-flex;align-items:center;gap:.25vw;padding:.2vh .55vw;border-radius:0.5vh;
+    font-size:1.1vh;font-weight:700;letter-spacing:.04em;text-transform:uppercase;}
+  .cat-tag.fresh{background:rgba(248,113,113,.12);color:#ffb4b4;border:1px solid rgba(248,113,113,.25);}
+  .cat-tag.frozen{background:rgba(56,189,248,.1);color:#9fdcff;border:1px solid rgba(56,189,248,.2);}
+  .cat-sum{font-size:1.1vh;color:var(--txt2);font-weight:400;} .cat-sum b{color:var(--txt);}
+
+  .rows{display:flex;flex-direction:column;gap:.4vh;}
+  .row{display:grid;grid-template-columns:12vw 1fr 5.5vw;align-items:center;gap:.7vw;}
+  .row .nm{font-size:1.2vh;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  .row .nm small{display:block;font-size:0.95vh;color:var(--txt3);font-weight:400;margin-top:.03vh;}
+  .row .bar{height:1.7vh;}
+  .row .cap{font-size:0.95vh;color:var(--txt3);text-align:right;white-space:nowrap;line-height:1.2;}
+  .row .cap b{color:var(--txt2);font-weight:700;} .row .seg{font-size:0.95vh;}
+
+  /* ---- Bottom: logistics + news ---- */
+  .bottom{display:grid;grid-template-columns:1.35fr 1fr;gap:0.9vw;min-height:0;}
+  .logistics{background:var(--panel);border:1px solid var(--line);border-radius:1vh;
+    padding:.95vh 1vw;display:flex;flex-direction:column;
+    gap:0.65vh;overflow:hidden;position:relative;backdrop-filter:blur(4px);}
+  .l-head{display:flex;align-items:center;gap:.45vw;position:relative;}
+  .l-head .l-ico{font-size:1.8vh;}
+  .l-head .l-title{font-size:1.55vh;font-weight:800;letter-spacing:-0.01em;}
+  .l-head .l-title small{color:var(--txt3);font-weight:400;font-size:1vh;margin-left:.35vw;letter-spacing:.06em;text-transform:uppercase;}
+  .l-head .l-sub{margin-left:auto;font-size:1vh;color:var(--txt3);}
+  .l-kpis{display:grid;grid-template-columns:repeat(5,1fr);gap:0.4vw;}
+  .l-kpi{background:var(--panel2);border:1px solid var(--line2);border-radius:0.7vh;
+    padding:.5vh .25vw;text-align:center;}
+  .l-kpi .lv{font-size:2.1vh;line-height:1;}
+  .l-kpi .lv .u{font-size:0.9vh;font-weight:500;color:var(--txt2);margin-left:.1vw;}
+  .l-kpi .lu{font-size:0.9vh;color:var(--txt3);margin-top:.3vh;white-space:nowrap;text-transform:uppercase;letter-spacing:.04em;}
+  .l-kpi.alarm{border-color:rgba(248,113,113,.4);}
+  .l-kpi.warn{border-color:rgba(251,191,36,.3);}
+  .l-tables{display:grid;grid-template-columns:1fr 1.12fr;gap:0.8vw;flex:1;min-height:0;}
+  .l-table{display:flex;flex-direction:column;gap:.35vh;min-height:0;overflow:hidden;}
+  .l-th{display:flex;align-items:center;gap:.35vw;font-size:1.1vh;font-weight:600;text-transform:uppercase;letter-spacing:.04em;flex-shrink:0;}
+  .l-th .badge{font-size:0.9vh;padding:.12vh .45vw;border-radius:0.35vh;font-weight:700;background:rgba(248,113,113,.15);color:#ffb4b4;}
+  table.t{width:100%;border-collapse:collapse;table-layout:fixed;}
+  table.t th{font-size:0.9vh;color:var(--txt3);font-weight:500;text-align:left;
+    padding:.3vh .25vw;border-bottom:1px solid var(--line2);white-space:nowrap;text-transform:uppercase;letter-spacing:.04em;}
+  table.t td{padding:.38vh .25vw;border-bottom:1px solid var(--line2);
+    font-size:1.05vh;font-weight:400;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;vertical-align:middle;}
+  table.t tr:last-child td{border-bottom:none;}
+  .pill{display:inline-block;font-size:0.85vh;font-weight:700;padding:.1vh .4vw;border-radius:0.3vh;line-height:1.4;text-transform:uppercase;letter-spacing:0.2px;}
+  .pill.fresh{background:rgba(248,113,113,.12);color:#ffb4b4;}
+  .pill.frozen{background:rgba(56,189,248,.1);color:#9fdcff;}
+  .pill.ok{background:rgba(52,211,153,.12);color:#86efac;}
+  .pill.warn{background:rgba(251,191,36,.12);color:#ffe08a;}
+  .pill.alarm{background:rgba(248,113,113,.12);color:#ffb4b4;}
+  .dev-ok{color:var(--ok);font-weight:700;} .dev-warn{color:var(--warn);font-weight:700;} .dev-alarm{color:var(--danger);font-weight:700;}
+
+  .ncol{background:var(--panel);border:1px solid var(--line);border-radius:1vh;
+    border-top:0.3vh solid var(--accent);
+    padding:.95vh .9vw;display:flex;flex-direction:column;gap:.5vh;overflow:hidden;backdrop-filter:blur(4px);}
+  .n-head{display:flex;align-items:center;gap:.35vw;font-size:1.35vh;font-weight:800;letter-spacing:-0.01em;flex-shrink:0;}
+  .n-body-wrap{display:flex;flex-direction:column;gap:.65vh;flex:1;min-height:0;overflow-y:auto;padding-right:.25vw;}
+  .n-body-wrap::-webkit-scrollbar{width:3px;}
+  .n-body-wrap::-webkit-scrollbar-thumb{background:var(--line);border-radius:2px;}
+  .n-section{display:flex;flex-direction:column;gap:.4vh;}
+  .n-section-head{display:flex;align-items:center;gap:.35vw;font-size:1vh;font-weight:600;letter-spacing:.04em;padding:.2vh .45vw;border-radius:0.4vh;align-self:flex-start;text-transform:uppercase;}
+  .n-section-head.th{background:rgba(255,255,255,0.05);color:var(--th);border:1px solid var(--line);}
+  .n-section-head.vn{background:rgba(255,255,255,0.05);color:var(--vn);border:1px solid var(--line);}
+  .n-list{display:flex;flex-direction:column;gap:.45vh;}
+  .n-item{display:flex;gap:.4vw;align-items:flex-start;}
+  .n-ico{font-size:1.2vh;line-height:1.3;flex-shrink:0;}
+  .n-body{line-height:1.3;min-width:0;}
+  .n-t{font-size:1.1vh;font-weight:600;color:var(--txt);}
+  .n-d{font-size:0.95vh;color:var(--txt2);} .n-d b{color:var(--accent);font-weight:700;}
+
+  /* ---- Gantt in bottom area ---- */
+  #ganttWrap{flex:1;min-height:0;overflow:hidden;display:flex;flex-direction:column;}
+  #ganttWrap .g-head{display:flex;align-items:center;gap:10px;margin-bottom:.6vh;flex-shrink:0;}
+  #ganttWrap .g-head span{font-size:1.15vh;font-weight:600;}
+  #ganttWrap .g-head .g-sub{font-size:1vh;color:var(--txt3);}
+  #ganttWrap select{background:var(--panel2);border:1px solid var(--line);color:var(--txt);
+    padding:3px 8px;border-radius:0.4vh;font-size:1vh;font-family:inherit;margin-left:auto;}
+  #ganttWrap select:focus{outline:none;border-color:var(--accent);}
+  #ganttContainer{flex:1;min-height:0;overflow:auto;border:1px solid var(--line);border-radius:0.6vh;background:var(--panel2);}
+  #ganttContainer .gantt-empty{padding:20px;text-align:center;color:var(--txt3);font-size:1.2vh;}
+  #ganttContainer table.gantt-table{width:100%;border-collapse:collapse;}
+  #ganttContainer table.gantt-table th{font-size:1vh;color:var(--txt2);font-weight:500;padding:5px 4px;border-bottom:1px solid var(--line);white-space:nowrap;text-align:center;}
+  #ganttContainer table.gantt-table th small{color:var(--txt3);font-weight:400;}
+  #ganttContainer table.gantt-table td{padding:6px 4px;text-align:center;font-size:1.15vh;font-weight:600;border-bottom:1px solid var(--line2);min-width:44px;}
+  #ganttContainer .gantt-row-label{text-align:left;font-weight:700;color:var(--txt);background:var(--panel);position:sticky;left:0;white-space:nowrap;}
+  #ganttContainer .gantt-empty-cell{color:var(--txt3);background:transparent;font-weight:400;}
+
+  /* ---- Loader ---- */
+  #loader{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;
+    background:var(--bg);z-index:99;color:var(--txt2);font-size:1.5vh;flex-direction:column;gap:1vh;}
+  #loader .spin{width:4vh;height:4vh;border:0.3vh solid rgba(255,255,255,.06);border-top-color:var(--accent);
+    border-radius:50%;animation:sp .8s linear infinite;}
+  @keyframes sp{to{transform:rotate(360deg)}}
+  #loader.hidden{display:none;}
+</style>
+</head>
+<body data-theme="amber">
+
+<div id="loader"><div class="spin"></div><div>Loading…</div></div>
+
+<div class="board">
+  <div class="top">
+    <div class="brand">
+      <div class="logo">🌴</div>
+      <div>
+        <div class="title-main" id="title-main">榴莲交付总览 · DURIAN DELIVERY</div>
+        <div class="title-sub" id="title-sub">THAILAND & VIETNAM · 实时物流与温度监控看板</div>
+      </div>
+    </div>
+    <div class="divider-v"></div>
+    <div class="agg" id="agg"></div>
+    <div class="right">
+      <div class="clock-box">
+        <div class="date" id="topDate">…</div>
+        <div class="clock num" id="clock">--:--:--</div>
+      </div>
+      <div class="userbar" id="userbar"></div>
+    </div>
+  </div>
+
+  <div class="main">
+    <section class="country th" id="country-th"></section>
+    <section class="country vn" id="country-vn"></section>
+  </div>
+
+  <div class="bottom">
+    <section class="logistics" id="logistics"></section>
+    <div class="ncol" id="news"></div>
+  </div>
+</div>
+
+<!-- 主题切换器 -->
+<div class="theme-switch" id="themeSwitch">
+  <span class="theme-label">THEME</span>
+  <span class="theme-dot forest" data-theme="forest" title="森林绿"></span>
+  <span class="theme-dot ocean" data-theme="ocean" title="海洋蓝"></span>
+  <span class="theme-dot amber active" data-theme="amber" title="金榴莲"></span>
+  <span class="theme-dot slate" data-theme="slate" title="暗岩灰"></span>
+  <span class="theme-dot violet" data-theme="violet" title="紫罗兰"></span>
+</div>
+
+<script>
+// ====================================================================
+//  TV Dashboard — 一屏总览
+//  Data: /api/aggregate + /api/dashboard (gantt)
+// ====================================================================
+const API = '';
+const $ = id => document.getElementById(id);
+const esc = s => String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+function md(s){ return esc(s).replace(/\*\*(.+?)\*\*/g,'<b>$1</b>'); }
+const num = n => Number(n)||0;
+const gotoLogin = () => { window.location.href = '/login?redirect=' + encodeURIComponent(window.location.pathname); };
+
+// ---- Theme switcher ----
+(function(){
+  const saved = localStorage.getItem('tv-theme') || 'amber';
+  document.body.dataset.theme = saved;
+  document.querySelectorAll('.theme-dot').forEach(d => d.classList.toggle('active', d.dataset.theme === saved));
+  document.querySelectorAll('.theme-dot').forEach(d => {
+    d.addEventListener('click', () => {
+      const t = d.dataset.theme;
+      document.body.dataset.theme = t;
+      document.querySelectorAll('.theme-dot').forEach(x => x.classList.remove('active'));
+      d.classList.add('active');
+      localStorage.setItem('tv-theme', t);
+    });
+  });
+})();
+
+// ---- Render helpers ----
+function kpi(cls, val, label){ return `<div class="kpi"><div class="kv num ${cls}">${val}</div><div class="ku">${label}</div></div>`; }
+function seg(w,cls,txt){ return w>0.3 ? `<span class="seg ${cls}" style="width:${w}%">${txt}</span>` : ''; }
+
+function renderCountry(el, info, country){
+  const isTH = country === 'TH';
+  const accent = isTH ? 'c-th' : 'c-vn';
+  const kpis = isTH ? [
+    kpi(accent, info.orders, '总订单'), kpi('', info.boxes, '总箱量'),
+    kpi('c-signed', info.rows.filter(r=>num(r.delivered)>0).length, '已交付单'),
+    kpi('c-signed', info.delivered, '已交付柜'), kpi('c-transit', info.transit, '在途'),
+    kpi('c-pending', info.pending, '待发'), kpi('c-signed', info.rate.toFixed(1)+'%', '交付率')
+  ] : [
+    kpi(accent, info.orders, '总订单'), kpi('', info.boxes, '总箱量'),
+    kpi('c-signed', info.signed, '已签收'), kpi('c-dlv', info.delivered, '已交付'),
+    kpi('c-transit', info.transit, '在途'), kpi('c-port', info.port, '口岸'),
+    kpi('c-pending', info.pending, '待发'), kpi('c-signed', info.rate.toFixed(1)+'%', '签收率')
+  ];
+  const total = info.boxes||1;
+  const done = isTH ? info.delivered : info.signed;
+  const bar = seg(done/total*100,'s-signed',done)
+    + (isTH?'':seg(info.delivered/total*100,'s-dlv',info.delivered))
+    + seg(info.transit/total*100,'s-transit',info.transit)
+    + seg(info.port/total*100,'s-port',info.port)
+    + seg(info.pending/total*100,'s-pending',info.pending);
+  const legend = isTH
+    ? `<span><i class="dot" style="background:var(--signed)"></i>已交付</span><span><i class="dot" style="background:var(--transit)"></i>在途</span><span><i class="dot" style="background:var(--pending)"></i>待发</span>`
+    : `<span><i class="dot" style="background:var(--signed)"></i>已签收</span><span><i class="dot" style="background:var(--delivered)"></i>已交付</span><span><i class="dot" style="background:var(--transit)"></i>在途</span><span><i class="dot" style="background:var(--port)"></i>口岸</span><span><i class="dot" style="background:var(--pending)"></i>待发</span>`;
+
+  const catLabel = {FRESH:'🍒 鲜果', FROZEN:'❄️ 冻肉'};
+  const renderCat = (cat) => {
+    const rows = info.rows.filter(r=>r.category===cat);
+    if(!rows.length) return '';
+    const s={orders:0,boxes:0,delivered:0,signed:0,transit:0,port:0,pending:0};
+    rows.forEach(r=>Object.keys(s).forEach(k=>s[k]+=num(r[k])));
+    const sumTxt = `<b>${s.orders}单/${s.boxes}柜</b>` + (isTH
+      ? ` · 已交${s.delivered} · 在途${s.transit} · 待发${s.pending}`
+      : ` · 签收${s.signed} · 在途${s.transit} · 口岸${s.port} · 待发${s.pending}`);
+    const rowsHtml = rows.map(r=>{
+      const rt=r.boxes||1, rDone=isTH?num(r.delivered):num(r.signed), rRate=rDone/rt*100;
+      const b = seg(rDone/rt*100,'s-signed',rDone)+(isTH?'':seg(num(r.delivered)/rt*100,'s-dlv',r.delivered))
+        +seg(num(r.transit)/rt*100,'s-transit',r.transit)+seg(num(r.port)/rt*100,'s-port',r.port)
+        +seg(num(r.pending)/rt*100,'s-pending',r.pending);
+      return `<div class="row"><div class="nm">${esc(r.brand)}<small>${num(r.orders)}单/${num(r.boxes)}柜</small></div>
+        <div class="bar">${b||'<span class="seg s-pending" style="width:100%">待发</span>'}</div>
+        <div class="cap">${isTH?'交付':'签收'} <b class="${rRate>0?'c-signed':'c-pending'}">${rRate.toFixed(1)}%</b></div></div>`;
+    }).join('');
+    return `<div class="cat"><div class="cat-head"><span class="cat-tag ${cat.toLowerCase()}">${catLabel[cat]}</span><span class="cat-sum">${sumTxt}</span></div><div class="rows">${rowsHtml}</div></div>`;
+  };
+  el.innerHTML = `
+    <div class="c-head"><span class="flag">${isTH?'🇹🇭':'🇻🇳'}</span><span class="c-name">${isTH?'泰国':'越南'}<small>${isTH?'Thailand':'Vietnam'}</small></span><span class="c-date">实时</span></div>
+    <div class="kpis">${kpis.join('')}</div>
+    <div class="overall"><span class="lab">总进度</span><div class="bar">${bar}</div><span class="rate big c-signed num">${info.rate.toFixed(1)}%</span></div>
+    <div class="legend">${legend}</div>
+    <div class="cats">${renderCat('FRESH')}${renderCat('FROZEN')}</div>`;
+}
+
+function renderLogistics(el, L){
+  const k=L.kpis||{}, pd=L.portDelays||[], tc=L.inTransitContainers||[];
+  const dCls=d=>d>=3?'dev-alarm':(d>=2?'dev-warn':'dev-ok');
+  const pdRows=pd.map(r=>`<tr><td class="mono">${esc(r.container)}</td><td>${esc(r.route)}</td><td><span class="pill ${r.category==='FROZEN'?'frozen':'fresh'}">${r.category==='FROZEN'?'冻果':'鲜果'}</span></td><td class="${dCls(num(r.delayDays))}">${num(r.delayDays).toFixed(1)}天</td><td>${esc(r.reason)}</td></tr>`).join('');
+  const sPill=(s,n)=>s==='ALARM'?'<span class="pill alarm">▲'+esc(n||'异常')+'</span>':(s==='WARN'?'<span class="pill warn">'+esc(n||'注意')+'</span>':'<span class="pill ok">'+esc(n||'正常')+'</span>');
+  const tcRows=tc.map(r=>{const dev=num(r.returnTemp)-num(r.setTemp);return`<tr><td class="mono">${esc(r.container)}</td><td>${esc(r.brand)}</td><td class="mono">${num(r.setTemp)}°/${num(r.returnTemp)}°</td><td class="${dCls(dev)}">${dev>=0?'+':''}${dev.toFixed(1)}°</td><td>${esc(r.location)}</td><td>${sPill(r.status,r.note)}</td></tr>`;}).join('');
+  const alarms=tc.filter(r=>r.status==='ALARM').length;
+  el.innerHTML=`
+    <div class="l-head"><span class="l-ico">🚚</span><span class="l-title">物流监控<span class="l-sub">实时 · LOGISTICS</span></span></div>
+    <div class="l-kpis">
+      <div class="l-kpi"><div class="lv num c-transit">${num(k.inTransit)}<span class="u">柜</span></div><div class="lu">在途批次</div></div>
+      <div class="l-kpi"><div class="lv num">${num(k.tempRecords)}<span class="u">条</span></div><div class="lu">温度记录</div></div>
+      <div class="l-kpi"><div class="lv num c-dlv">${num(k.avgReturnTemp).toFixed(1)}<span class="u">°C</span></div><div class="lu">均回风温度</div></div>
+      <div class="l-kpi alarm"><div class="lv num c-danger">${num(k.tempAlarms)}<span class="u">条</span></div><div class="lu">温度异常</div></div>
+      <div class="l-kpi warn"><div class="lv num c-port">${num(k.portDelayed)}<span class="u">柜</span></div><div class="lu">关口滞留</div></div>
+    </div>
+    <div class="l-tables">
+      <div class="l-table"><div class="l-th">🚨 关口滞留 <span class="badge">${pd.length}</span></div>
+        <div style="flex:1;overflow:auto"><table class="t"><colgroup><col style="width:28%"><col style="width:22%"><col style="width:15%"><col style="width:14%"><col style="width:21%"></colgroup>
+        <thead><tr><th>柜号/路线</th><th>客户</th><th>品类</th><th>滞留</th><th>原因</th></tr></thead>
+        <tbody>${pdRows||'<tr><td colspan="5" style="color:var(--txt3);text-align:center">暂无</td></tr>'}</tbody></table></div></div>
+      <div class="l-table"><div class="l-th">🌡️ 温度告警 <span class="badge">${alarms}</span></div>
+        <div style="flex:1;overflow:auto"><table class="t"><colgroup><col style="width:25%"><col style="width:12%"><col style="width:16%"><col style="width:12%"><col style="width:20%"><col style="width:15%"></colgroup>
+        <thead><tr><th>柜号</th><th>品牌</th><th>设定/回风</th><th>偏差</th><th>位置</th><th>状态</th></tr></thead>
+        <tbody>${tcRows||'<tr><td colspan="6" style="color:var(--txt3);text-align:center">暂无</td></tr>'}</tbody></table></div></div>
+    </div>`;
+}
+
+function renderNews(el, thArr, vnArr, autoArr){
+  const nItem = n => `<div class="n-item"><span class="n-ico">${esc(n.icon||'📌')}</span><div class="n-body"><div class="n-t">${esc(n.title)}${n.source?' <small style="color:var(--accent)">自动</small>':''}</div><div class="n-d">${md(n.detail||'')}</div></div></div>`;
+  const sec = (label, cls, arr) => {
+    const items = (arr||[]).map(nItem).join('')||'<div style="color:var(--txt3);font-size:0.95vh">暂无</div>';
+    return `<div class="n-section"><div class="n-section-head ${cls}">${label}</div><div class="n-list">${items}</div></div>`;
+  };
+  const autoSec = (autoArr||[]).length ? sec('📡 实时热点', 'th', autoArr) : '';
+  el.innerHTML = `<div class="n-head">📢 产业快讯 · NEWS</div><div class="n-body-wrap">${autoSec}${sec('🇹🇭 泰国', 'th', thArr)}${sec('🇻🇳 越南', 'vn', vnArr)}</div>`;
+}
+
+// ---- Auth ----
+async function loadUser(){
+  try{
+    const r = await fetch(API+'/api/auth/me',{cache:'no-store'});
+    if(r.status===401){ gotoLogin(); return false; }
+    const j = await r.json();
+    if(j&&j.success&&j.data){
+      const name = j.data.displayName||j.data.username;
+      const adminLink = j.data.role==='admin'?' <a class="admin" href="/admin-sentry.html">后台</a>':'';
+      $('userbar').innerHTML = `👤 <span class="uname" title="${esc(name)}">${esc(name)}</span>${adminLink} <a id="btnLogout">退出</a>`;
+      $('btnLogout').onclick = async ()=>{try{await fetch(API+'/api/auth/logout',{method:'POST'});}catch(_){}gotoLogin();};
+    }
+    return true;
+  }catch(e){console.warn('用户信息:',e.message);return true;}
+}
+
+async function loadData(){
+  try{
+    const r = await fetch(API+'/api/aggregate',{cache:'no-store'});
+    if(r.status===401){gotoLogin();return null;}
+    if(!r.ok) throw new Error('HTTP '+r.status);
+    return await r.json();
+  }catch(e){console.warn('加载失败:',e.message);return null;}
+}
+
+function paint(d){
+  if(!d) return;
+  if(d.meta){if(d.meta.title)$('title-main').textContent=d.meta.title;if(d.meta.subtitle)$('title-sub').textContent=d.meta.subtitle;}
+  const g = d.global;
+  $('agg').innerHTML = `
+    <div class="item"><span class="v num">${g.totalOrders}</span><span class="u">订单</span></div>
+    <div class="item"><span class="v dim num">${g.totalBoxes}</span><span class="u">箱量</span></div>
+    <div class="item"><span class="v dim num">${g.totalDone}</span><span class="u">完成</span></div>
+    <div class="item"><span class="v dim num">${g.totalMoving}</span><span class="u">在途</span></div>
+    <div class="item"><span class="v dim num">${g.totalPending}</span><span class="u">待发</span></div>`;
+  renderCountry($('country-th'), d.th, 'TH');
+  renderCountry($('country-vn'), d.vn, 'VN');
+  renderLogistics($('logistics'), d.logistics);
+  renderNews($('news'), d.news.th, d.news.vn, d.news.auto);
+  const src = d._source==='wecom'?' · 企微':' · 手动';
+  $('topDate').textContent = '更新 '+new Date(d.generatedAt||Date.now()).toLocaleTimeString('zh-CN')+src;
+}
+
+async function boot(){
+  const ok = await loadUser(); if(!ok) return;
+  const d = await loadData();
+  $('loader').classList.add('hidden');
+  if(d){ paint(d); setInterval(async()=>{const nd=await loadData();if(nd)paint(nd);},30000); }
+}
+
+function tick(){const d=new Date();$('clock').textContent=[d.getHours(),d.getMinutes(),d.getSeconds()].map(n=>String(n).padStart(2,'0')).join(':');}
+tick();setInterval(tick,1000);boot();
+</script>
+<!-- 共用甘特图 -->
+<script src="gantt.js?v=1"></script>
+</body>
+</html>

@@ -4,7 +4,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project overview
 
-榴莲运输温度监控看板 — A data management dashboard for durian fruit shipping. The backend reads/writes data via WeChat Work (企业微信) Smart Sheet API, serving two frontends: a TV-style delivery-overview dashboard and an admin panel.
+榴莲运输温度监控看板 — A data management dashboard for durian fruit shipping. The backend reads/writes data via WeChat Work (企业微信) Smart Sheet API, serving multiple frontend variants: a TV-style delivery-overview dashboard (3 variants), an admin panel (2 variants), and a login page.
+
+**Domain:** `www.sweetlemon.club` (pending ICP filing; after filing: Nginx reverse proxy → `https://www.sweetlemon.club`). Until then, access via `http://124.221.92.98:3000`.
 
 **Tech stack:** Node.js + Express (backend), vanilla HTML/CSS/JS (frontend), SQLite (auth DB), JSON file (editable board content), `xlsx` for one-off Excel imports. Deployed on Tencent Cloud Ubuntu Lighthouse server.
 
@@ -71,11 +73,13 @@ node scripts/init-db.js
 ## Server info
 
 - **IP**: `124.221.92.98`
+- **Domain**: `www.sweetlemon.club` (ICP filing pending; Nginx + Let's Encrypt certbot ready but DNS currently blocked by Tencent Cloud DNSPod for un-filed domains)
 - **User**: `ubuntu`
 - **Project path**: `/home/ubuntu/温度看板`
 - **GitHub**: `git@github.com:sweet-lemon-n/durian-dashboard.git`
 - **Deploy flow**: local `git push` → server `git pull` + `pm2 restart`
 - **SSH may fail** due to key changes; use `curl` to the public IP to test API responses directly
+- **Nginx config** (after ICP filing): reverse proxy `127.0.0.1:3000`, certbot for HTTPS. Config at `/etc/nginx/sites-available/durian-dashboard`
 
 ## Architecture
 
@@ -130,12 +134,16 @@ Express server (server.js)
 │   ├── content-store.js   # JSON store for editable board content (data/board-content.json) + seed defaults
 │   └── board-routes.js    # express.Router: /api/aggregate + orders/logistics/news CRUD; exports { router, aggregate }
 ├── public/                # Frontend static files
-│   ├── index.html         # Dashboard: 泰越交付总览 board (template) + temperature gantt at bottom + auth wrapper
-│   ├── gantt.js           # Temperature gantt heatmap (reads real /api/dashboard), independent fetch loop
-│   ├── admin.html         # Admin panel: 4 tabs (订单/物流/新闻 → board-content; 🗄 智能表格管理 → wecom)
-│   ├── admin-smartsheet.js# Smart-sheet management logic for the 4th admin tab (globals; loaded after inline script)
-│   ├── login.html         # Login page (dark theme, remember-me, JWT cookie auth)
-│   └── style.css          # Dark-theme styles for login page (dashboard/admin are self-contained inline)
+│   ├── index.html         # [Original] Dashboard: 泰越交付总览 board (dark blue/gold theme)
+│   ├── index-sentry.html  # [Sentry] Dashboard: violet-canvas marketing-page layout with lime keyword accents
+│   ├── index-tv.html      # [TV] Dashboard: single-viewport zero-scroll layout with 5-theme switcher (forest/ocean/amber/slate/violet)
+│   ├── gantt.js           # Temperature gantt heatmap (shared by all dashboard variants — reads /api/dashboard)
+│   ├── admin.html         # [Original] Admin panel: 4 tabs, dark theme
+│   ├── admin-sentry.html  # [Sentry] Admin panel: 4 tabs, light-canvas pricing-page style (white bg, dark violet buttons)
+│   ├── admin-smartsheet.js# Smart-sheet management logic (shared by both admin variants; globals, lazy-init on tab open)
+│   ├── login.html         # Login page (shared by all variants — dark theme, JWT cookie auth)
+│   └── style.css          # Dark-theme styles for login.html only
+├── DESIGN-sentry.md       # Sentry design system reference (color tokens, typography, components, dos/don'ts)
 ├── data/                  # auth.db (SQLite) + board-content.json (gitignored, auto-seeded) + import sources
 ├── scripts/
 │   ├── init-db.js         # Interactive first-time admin user creation
@@ -223,6 +231,27 @@ Dashboard and admin are **self-contained** (inline CSS + JS) — a polished dark
   - **JS collision rule:** both the inline admin script and `admin-smartsheet.js` share global scope. The inline script renamed its modal closer to `closeModalById` and its escape helpers to `esc`/`md`; `admin-smartsheet.js` uses `ssCloseModal`, `escHtml`/`escAttr`. Don't reintroduce a name defined in the other file.
 - **`style.css`** — Dark-theme styles for `login.html` only.
 
+### Dashboard variants (all share the same `/api/aggregate` data)
+
+| File | URL | Canvas | Key trait |
+|------|-----|--------|-----------|
+| `index.html` | `/` | Dark blue `#070b16`, gold accent | Original production dashboard |
+| `index-sentry.html` | `/index-sentry.html` | Deep violet `#1f1633`, lime accent | Sentry-inspired marketing layout with hero section, eyebrow labels, feature cards, starfield texture, 96px section spacing |
+| `index-tv.html` | `/index-tv.html` | Theme-switchable (5 themes) | Single-viewport zero-scroll; 5 theme dots at bottom-right (forest/ocean/amber/slate/violet) persisted to `localStorage` key `tv-theme` |
+
+All three load `gantt.js` for the temperature heatmap. All use the same JS logic: `loadUser()` → `loadData()` → `paint()`, 30s polling.
+
+### Admin variants (both share `admin-smartsheet.js`)
+
+| File | URL | Canvas | Key trait |
+|------|-----|--------|-----------|
+| `admin.html` | `/admin` | Dark blue `#0f1421`, gold accent | Original production admin |
+| `admin-sentry.html` | `/admin-sentry.html` | White `#ffffff`, dark violet ink | Sentry light-canvas (pricing-page style); primary buttons use `#150f23` fill; form inputs focus with blue ring; modals have level-2 shadow |
+
+Both share the exact same inline JS (CRUD, drag-drop, tfoot aggregate, data-source switcher, 10s sync). Both load `admin-smartsheet.js`.
+
+**Important URL note:** The server has explicit routes for `/` (→ index.html) and `/admin` (→ admin.html) and `/login` (→ login.html). All other pages must be accessed with the full `.html` extension (e.g. `/index-tv.html`, `/admin-sentry.html`). Login redirects and inter-page links must include the `.html` suffix.
+
 ## 温度记录 sub-table schema (w7xSwm, 11 fields)
 
 | 字段标题 | 字段ID | 类型 |
@@ -264,6 +293,22 @@ Dashboard and admin are **self-contained** (inline CSS + JS) — a polished dark
 | `JWT_SECRET` | HMAC-SHA256 signing key for JWT tokens (generate via `crypto.randomBytes(64).toString('hex')`) |
 | `WECOM_TOKEN` | Callback URL verification token |
 | `WECOM_ENCODING_AES_KEY` | 43-char AES key for callback encryption |
+
+## TV dashboard theme system (`index-tv.html`)
+
+The TV dashboard supports 5 themes switched via color dots at the bottom-right corner. Themes are defined as CSS custom properties on `[data-theme="..."]`:
+
+| Theme | `data-theme` | Canvas | Accent | Vibe |
+|-------|-------------|--------|--------|------|
+| 森林绿 | `forest` | `#0a1a0f` | `#4ade80` | Agriculture/nature |
+| 海洋蓝 | `ocean` | `#06121f` | `#38bdf8` | Shipping/logistics |
+| 金榴莲 | `amber` | `#1a1008` | `#f5c451` | Durian/tropical (default) |
+| 暗岩灰 | `slate` | `#0d1117` | `#e6edf3` | Professional/monitor |
+| 紫罗兰 | `violet` | `#1f1633` | `#c2ef4e` | Sentry-style |
+
+Theme preference is persisted to `localStorage` key `tv-theme`. Each theme defines: `--bg`, `--bg2`, `--panel`, `--panel2`, `--line`, `--line2`, `--txt`, `--txt2`, `--txt3`, `--accent`, `--accent2`, `--th`, `--vn`, `--signed`, `--delivered`, `--transit`, `--port`, `--pending`, `--danger`, `--warn`, `--ok`, `--top-glow`.
+
+The rest of the CSS (layout, sizing, components) is theme-agnostic and lives outside `[data-theme]` blocks.
 
 ## IP whitelist
 
