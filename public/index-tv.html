@@ -165,10 +165,10 @@
   .legend span{display:inline-flex;align-items:center;gap:.25vw;}
   .dot{width:.8vh;height:.8vh;border-radius:50%;display:inline-block;}
 
-  .cats{display:flex;flex-direction:column;gap:.65vh;flex:1;min-height:0;overflow-y:auto;padding-right:.3vw;}
+  .cats{display:grid;grid-template-rows:minmax(0,1fr) minmax(0,1fr);gap:.55vh;flex:1;min-height:0;overflow:hidden;padding-right:.1vw;}
   .cats::-webkit-scrollbar{width:3px;}
   .cats::-webkit-scrollbar-thumb{background:var(--line);border-radius:2px;}
-  .cat{display:flex;flex-direction:column;gap:.45vh;}
+  .cat{display:flex;flex-direction:column;gap:.35vh;min-height:0;overflow:hidden;}
   .cat-head{display:flex;align-items:center;gap:.5vw;flex-wrap:wrap;}
   .cat-tag{display:inline-flex;align-items:center;gap:.25vw;padding:.2vh .55vw;border-radius:0.5vh;
     font-size:1.1vh;font-weight:700;letter-spacing:.04em;text-transform:uppercase;}
@@ -176,13 +176,13 @@
   .cat-tag.frozen{background:rgba(56,189,248,.1);color:#9fdcff;border:1px solid rgba(56,189,248,.2);}
   .cat-sum{font-size:1.1vh;color:var(--txt2);font-weight:400;} .cat-sum b{color:var(--txt);}
 
-  .rows{display:flex;flex-direction:column;gap:.4vh;}
+  .rows{display:flex;flex-direction:column;gap:.3vh;min-height:0;overflow:hidden;}
   .row{display:grid;grid-template-columns:12vw 1fr 5.5vw;align-items:center;gap:.7vw;}
-  .row .nm{font-size:1.2vh;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
-  .row .nm small{display:block;font-size:0.95vh;color:var(--txt3);font-weight:400;margin-top:.03vh;}
-  .row .bar{height:1.7vh;}
-  .row .cap{font-size:0.95vh;color:var(--txt3);text-align:right;white-space:nowrap;line-height:1.2;}
-  .row .cap b{color:var(--txt2);font-weight:700;} .row .seg{font-size:0.95vh;}
+  .row .nm{font-size:1.08vh;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  .row .nm small{display:block;font-size:0.84vh;color:var(--txt3);font-weight:400;margin-top:.02vh;}
+  .row .bar{height:1.48vh;}
+  .row .cap{font-size:0.84vh;color:var(--txt3);text-align:right;white-space:nowrap;line-height:1.15;}
+  .row .cap b{color:var(--txt2);font-weight:700;} .row .seg{font-size:0.88vh;}
 
   /* ---- Bottom: logistics + news ---- */
   .bottom{display:grid;grid-template-columns:1.35fr 1fr;gap:0.9vw;min-height:0;}
@@ -224,19 +224,19 @@
     border-top:0.3vh solid var(--accent);
     padding:.95vh .9vw;display:flex;flex-direction:column;gap:.5vh;overflow:hidden;backdrop-filter:blur(4px);}
   .n-head{display:flex;align-items:center;gap:.35vw;font-size:1.35vh;font-weight:800;letter-spacing:-0.01em;flex-shrink:0;}
-  .n-body-wrap{display:flex;flex-direction:column;gap:.65vh;flex:1;min-height:0;overflow-y:auto;padding-right:.25vw;}
+  .n-body-wrap{display:grid;grid-template-rows:minmax(0,1fr) minmax(0,1fr);gap:.5vh;flex:1;min-height:0;overflow:hidden;padding-right:.1vw;}
   .n-body-wrap::-webkit-scrollbar{width:3px;}
   .n-body-wrap::-webkit-scrollbar-thumb{background:var(--line);border-radius:2px;}
-  .n-section{display:flex;flex-direction:column;gap:.4vh;}
+  .n-section{display:flex;flex-direction:column;gap:.32vh;min-height:0;overflow:hidden;}
   .n-section-head{display:flex;align-items:center;gap:.35vw;font-size:1vh;font-weight:600;letter-spacing:.04em;padding:.2vh .45vw;border-radius:0.4vh;align-self:flex-start;text-transform:uppercase;}
   .n-section-head.th{background:rgba(255,255,255,0.05);color:var(--th);border:1px solid var(--line);}
   .n-section-head.vn{background:rgba(255,255,255,0.05);color:var(--vn);border:1px solid var(--line);}
-  .n-list{display:flex;flex-direction:column;gap:.45vh;}
+  .n-list{display:flex;flex-direction:column;gap:.32vh;min-height:0;overflow:hidden;}
   .n-item{display:flex;gap:.4vw;align-items:flex-start;}
-  .n-ico{font-size:1.2vh;line-height:1.3;flex-shrink:0;}
-  .n-body{line-height:1.3;min-width:0;}
-  .n-t{font-size:1.1vh;font-weight:600;color:var(--txt);}
-  .n-d{font-size:0.95vh;color:var(--txt2);} .n-d b{color:var(--accent);font-weight:700;}
+  .n-ico{font-size:1.05vh;line-height:1.22;flex-shrink:0;}
+  .n-body{line-height:1.22;min-width:0;}
+  .n-t{font-size:.98vh;font-weight:600;color:var(--txt);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  .n-d{font-size:0.84vh;color:var(--txt2);display:-webkit-box;-webkit-line-clamp:1;-webkit-box-orient:vertical;overflow:hidden;} .n-d b{color:var(--accent);font-weight:700;}
 
   /* ---- Gantt in bottom area ---- */
   #ganttWrap{flex:1;min-height:0;overflow:hidden;display:flex;flex-direction:column;}
@@ -428,8 +428,10 @@ function renderNews(el, thArr, vnArr, autoArr){
     const items = (arr||[]).map(nItem).join('')||'<div style="color:var(--txt3);font-size:0.95vh">暂无</div>';
     return `<div class="n-section"><div class="n-section-head ${cls}">${label}</div><div class="n-list">${items}</div></div>`;
   };
-  const autoSec = (autoArr||[]).length ? sec('📡 实时热点', 'th', autoArr) : '';
-  el.innerHTML = `<div class="n-head">📢 产业快讯 · NEWS</div><div class="n-body-wrap">${autoSec}${sec('🇹🇭 泰国', 'th', thArr)}${sec('🇻🇳 越南', 'vn', vnArr)}</div>`;
+  const autoByCountry = (country) => (autoArr||[]).filter(n => n.country === country).slice(0, 2);
+  const mergedTH = [...(thArr||[]), ...autoByCountry('TH')];
+  const mergedVN = [...(vnArr||[]), ...autoByCountry('VN')];
+  el.innerHTML = `<div class="n-head">📢 产业快讯 · NEWS</div><div class="n-body-wrap">${sec('🇹🇭 泰国', 'th', mergedTH)}${sec('🇻🇳 越南', 'vn', mergedVN)}</div>`;
 }
 
 // ---- Auth ----
