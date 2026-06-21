@@ -203,6 +203,12 @@
   .news-card-item .d { color: var(--txt-muted); font-size: 13px; margin-top: 4px; line-height: 1.5; }
   .news-card-item .d b { color: var(--violet-deep); font-weight: 700; }
   .news-card-item .actions { margin-top: var(--sm); }
+  .source-card { background: var(--surface2); border: 1px solid var(--hairline-cloud); border-radius: var(--r-md); padding: var(--lg); margin-bottom: var(--lg); }
+  .source-card h3 { font-size: 14px; font-weight: 600; margin-bottom: var(--md); }
+  .source-grid { display: grid; grid-template-columns: 1.4fr 1fr; gap: var(--md); }
+  .source-grid label { display: block; font-size: 11px; color: var(--txt-faint); margin-bottom: 4px; }
+  .source-grid input { width: 100%; background: var(--surface); border: 1px solid var(--hairline-cool); color: var(--ink); padding: 8px 10px; border-radius: var(--r-sm); font-size: 13px; }
+  .source-meta { display: flex; flex-wrap: wrap; gap: 8px; margin-top: var(--md); color: var(--txt-muted); font-size: 12px; }
 
   /* ============================================================
      Logistics KPI
@@ -377,6 +383,21 @@
       <div class="toolbar"><h2>新闻快讯管理</h2>
         <button class="btn primary" onclick="openNewsModal('TH')">+ 泰国</button>
         <button class="btn primary" onclick="openNewsModal('VN')">+ 越南</button>
+      </div>
+      <div class="source-card">
+        <h3>自动新闻源配置</h3>
+        <div class="source-grid">
+          <div><label>秘塔 MCP 地址</label><input id="metasoMcpUrl" placeholder="ModelScope MCP server URL"></div>
+          <div><label>秘塔 MCP Key</label><input id="metasoMcpApiKey" type="password" placeholder="留空则保留当前 Key"></div>
+          <div><label>秘塔直连 API 地址（可选）</label><input id="metasoApiUrl" placeholder="没有 MCP 时才使用"></div>
+          <div><label>秘塔直连 API Key（可选）</label><input id="metasoApiKey" type="password" placeholder="留空则保留当前 Key"></div>
+        </div>
+        <div class="source-meta">
+          <span id="newsSourceStatus">未加载</span>
+          <button class="btn sm" onclick="loadNewsSourceConfig()">读取配置</button>
+          <button class="btn primary sm" onclick="saveNewsSourceConfig()">保存并刷新</button>
+          <button class="btn sm" onclick="refreshAutoNews()">刷新自动新闻</button>
+        </div>
       </div>
       <div class="news-grid">
         <div class="news-col"><h3>🇹🇭 泰国 · 产业快讯</h3><div id="newsListTH"></div></div>
@@ -571,7 +592,7 @@
 const API = '';
 const $ = s => document.querySelector(s);
 const $$ = s => document.querySelectorAll(s);
-let orders = [], logistics = {}, news = [];
+let orders = [], logistics = {}, news = [], autoNewsInfo = null;
 
 async function api(path, method='GET', body){
   const opt = { method, headers:{'Content-Type':'application/json'} };
@@ -614,6 +635,7 @@ async function checkAuth(){
 async function loadAll(){
   try{
     [orders, logistics, news] = await Promise.all([api('/api/orders'), api('/api/logistics'), api('/api/news')]);
+    await Promise.all([loadNewsSourceConfig(false), loadAutoNewsInfo(false)]);
     setConn(true);
     renderOrders(); renderLogistics(); renderNews();
   }catch(e){
@@ -756,6 +778,11 @@ async function submitContainer(){const r={container:$('#tc_container').value.tri
 
 // ===== News =====
 function renderNews(){['TH','VN'].forEach(country=>{const list=news.filter(n=>n.country===country),el=$('#newsList'+country);el.innerHTML=list.length?list.map(n=>`<div class="news-card-item"><span class="ico">${esc(n.icon||'📌')}</span><span class="t">${esc(n.title)}</span><div class="d">${md(n.detail||'')}</div><div class="actions"><button class="btn danger sm" onclick="delNews('${n.id}')">删除</button></div></div>`).join(''):'<div class="empty">暂无</div>';});}
+function renderNewsSourceStatus(){const el=$('#newsSourceStatus');if(!el)return;const cfg=autoNewsInfo&&autoNewsInfo.config;const fetchedAt=autoNewsInfo&&autoNewsInfo.fetchedAt?new Date(autoNewsInfo.fetchedAt).toLocaleString('zh-CN'):'未刷新';const count=autoNewsInfo&&autoNewsInfo.count!=null?autoNewsInfo.count:'-';const sources=autoNewsInfo&&autoNewsInfo.sources?Object.entries(autoNewsInfo.sources).map(([k,v])=>`${k}:${v}`).join(' / '):'无';const mcp=cfg&&cfg.metasoMcpUrl?'MCP 已配置':'MCP 未配置';const key=cfg&&cfg.hasMetasoMcpApiKey?`Key ${cfg.metasoMcpApiKeyMasked}`:'Key 未配置';el.textContent=`${mcp} · ${key} · 自动新闻 ${count} 条 · 来源 ${sources} · ${fetchedAt}`;}
+async function loadAutoNewsInfo(showToast=true){try{const r=await api('/api/news/auto');autoNewsInfo={...(autoNewsInfo||{}),count:(r.data.items||[]).length,sources:r.data.sources||{},fetchedAt:r.data.fetchedAt};renderNewsSourceStatus();if(showToast)toast('自动新闻状态已更新');}catch(e){if(showToast)toast('自动新闻状态读取失败',true);}}
+async function loadNewsSourceConfig(showToast=true){try{const r=await api('/api/news/source-config');const c=r.data||{};autoNewsInfo={...(autoNewsInfo||{}),config:c};$('#metasoMcpUrl').value=c.metasoMcpUrl||'';$('#metasoApiUrl').value=c.metasoApiUrl||'';$('#metasoMcpApiKey').placeholder=c.hasMetasoMcpApiKey?`已保存：${c.metasoMcpApiKeyMasked}`:'留空则保留当前 Key';$('#metasoApiKey').placeholder=c.hasMetasoApiKey?`已保存：${c.metasoApiKeyMasked}`:'留空则保留当前 Key';renderNewsSourceStatus();if(showToast)toast('新闻源配置已读取');}catch(e){if(showToast)toast('新闻源配置读取失败',true);}}
+async function saveNewsSourceConfig(){const body={metasoMcpUrl:$('#metasoMcpUrl').value.trim(),metasoMcpApiKey:$('#metasoMcpApiKey').value.trim(),metasoApiUrl:$('#metasoApiUrl').value.trim(),metasoApiKey:$('#metasoApiKey').value.trim()};try{const r=await api('/api/news/source-config','PUT',body);autoNewsInfo={config:r.data.config,count:r.data.count,sources:r.data.sources,fetchedAt:r.data.fetchedAt};$('#metasoMcpApiKey').value='';$('#metasoApiKey').value='';renderNewsSourceStatus();await loadNewsSourceConfig(false);toast(`已保存并刷新，自动新闻 ${r.data.count} 条`);}catch(e){toast('保存新闻源失败：'+e.message,true);}}
+async function refreshAutoNews(){try{const r=await api('/api/news/auto/refresh','POST',{});await loadAutoNewsInfo(false);toast(`已刷新，自动新闻 ${r.count} 条`);}catch(e){toast('刷新自动新闻失败：'+e.message,true);}}
 async function delNews(id){if(!confirm('删除该新闻？'))return;await api('/api/news/'+id,'DELETE');news=news.filter(n=>n.id!==id);renderNews();toast('已删除');}
 function openNewsModal(country){$('#n_country').value=country;$('#newsModal').classList.add('show');}
 async function submitNews(){const n={country:$('#n_country').value,icon:$('#n_icon').value.trim()||'📌',title:$('#n_title').value.trim(),detail:$('#n_detail').value.trim()};if(!n.title){toast('请填标题',true);return;}const c=await api('/api/news','POST',n);news.push(c);closeModalById('newsModal');renderNews();toast('已新增');$('#n_title').value='';$('#n_detail').value='';$('#n_icon').value='📌';}
