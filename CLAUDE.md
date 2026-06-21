@@ -132,7 +132,8 @@ Express server (server.js)
 │   ├── db.js              # SQLite database (users/audit_logs tables, user CRUD)
 │   ├── auth.js            # JWT auth (generate/verify token, requireAuth/requireRole middleware)
 │   ├── content-store.js   # JSON store for editable board content (data/board-content.json) + seed defaults
-│   └── board-routes.js    # express.Router: /api/aggregate + orders/logistics/news CRUD; exports { router, aggregate }
+│   ├── board-routes.js    # express.Router: /api/aggregate + orders/logistics/news CRUD; exports { router, aggregate }
+│   └── news-fetcher.js    # Auto news: 新浪财经API + 水果RSS + 搜狗/头条搜索 → caches in memory, 30-min refresh
 ├── public/                # Frontend static files
 │   ├── index.html         # [Original] Dashboard: 泰越交付总览 board (dark blue/gold theme)
 │   ├── index-sentry.html  # [Sentry] Dashboard: violet-canvas marketing-page layout with lime keyword accents
@@ -170,6 +171,8 @@ Express server with static file serving from `public/`. All API routes return JS
 | `/api/aggregate` | GET | 登录 | **Dashboard board data** from `board-content.json`: `{ meta, global, th, vn, logistics, news, generatedAt }`. Raw object (NOT `{success,data}`). `no-store` |
 | `/api/dashboard` | GET | 登录 | Real temperature data from 温度记录 + **detention** from 陆运/海运明细: `{ records, stats, alerts, containers, detention }`. Query: `hours`(default 24), `limit`(200), `container` |
 | `/api/temperature/history` | GET | 登录 | Historical temperature data for charts |
+| `/api/news/auto` | GET | 登录 | Auto-fetched news from 新浪/RSS/搜索引擎: `{ success, data: { items, fetchedAt } }` |
+| `/api/news/auto/refresh` | POST | admin | Force immediate news cache refresh |
 | `/api/orders`, `/api/news` | GET·POST·PUT·DELETE | 登录读 / admin写 | Board-content order & news CRUD (`board-routes.js`). Raw object/array responses. `GET /api/orders` returns sorted by `sort` field asc. |
 | `/api/orders/reorder` | PUT | admin | Body `{ ids: [...] }` — rewrites every order's `sort` to its index in the array. Used by admin drag-and-drop. |
 | `/api/logistics`, `.../kpis`, `.../portDelays[/:id]`, `.../inTransitContainers[/:id]` | GET·PUT·POST·DELETE | 登录读 / admin写 | Board-content logistics CRUD |
@@ -217,6 +220,15 @@ Transparent retry on token expiry (errcode 40014/42001). All API calls require t
 **`board-routes.js`** — `express.Router` for the redesigned dashboard. Exports `{ router, aggregate }`. `aggregate(db)` groups orders by country (`done = TH?delivered:signed`, `rate = done/boxes`) into the `/api/aggregate` shape, sorted by each order's `sort` field. CRUD writes go through `requireRole('admin')`; reads only need the guard. **Responses are raw objects/arrays** (not the `{success,data}` envelope) so the ported template frontend works unchanged. Mounted in `server.js` via `app.use('/api', boardRouter)` *after* the auth guard.
 
 **Order sorting:** Every order has an integer `sort` field (missing = `Number.MAX_SAFE_INTEGER`, i.e. tail). `POST /api/orders` auto-assigns `sort = max+1` if not provided. `PUT /api/orders/reorder { ids: [...] }` rewrites every listed order's `sort` to its index; orders not in `ids` get pushed past the listed range. `aggregate()` calls `sortOrders()` so the dashboard's brand rows track admin order. Admin drag-and-drop persists per drop event via `reorder`; the admin frontend also has hover-revealed ↑↓ arrows that call `moveOrder()`.
+
+**`news-fetcher.js`** — Auto news scraping & aggregation. Sources (tried in parallel, any can contribute):
+1. 新浪财经 public JSON API (`feed.mix.sina.com.cn`) — free, no key, domestic-server-friendly. Filters by fruit/agriculture keywords.
+2. 国际果蔬报道 / 中国水果门户 RSS feeds — direct XML parsing (no extra deps).
+3. 搜狗/头条 search engine HTML scraping — fallback when search engines allow the IP.
+Optional: 聚合数据 (juhe.cn) news API — set `JUHE_APPKEY` in `.env` to enable. Free 50 calls/day, needs registration + real-name verification at juhe.cn.
+Cached in memory, refreshed every 30 min. Exports: `initNewsFetcher()`, `getAutoNews()`, `refreshNow()`, `stopNewsFetcher()`.
+Aggregate response includes auto news under `news.auto[]`. API: `GET /api/news/auto`, `POST /api/news/auto/refresh` (admin).
+Server IP (124.221.92.98) is known to be blocked by some search engines; if all sources return 0, register a juhe.cn AppKey.
 
 ### Frontend (`public/`)
 
@@ -291,6 +303,7 @@ Both share the exact same inline JS (CRUD, drag-drop, tfoot aggregate, data-sour
 | `TEMP_DIFF_WARNING` | Max allowed deviation between 回风 and 设定 temp before alert (default 3°C) |
 | `REFRESH_INTERVAL` | Frontend polling interval in seconds (default 30) |
 | `JWT_SECRET` | HMAC-SHA256 signing key for JWT tokens (generate via `crypto.randomBytes(64).toString('hex')`) |
+| `JUHE_APPKEY` | (Optional) 聚合数据 API key for news auto-fetching |
 | `WECOM_TOKEN` | Callback URL verification token |
 | `WECOM_ENCODING_AES_KEY` | 43-char AES key for callback encryption |
 
