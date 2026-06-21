@@ -446,7 +446,7 @@ async function parseAiImport() {
   }
   if (commit) commit.disabled = true;
   renderAiImportPreview(null);
-  setAiImportOutput('正在解析，暂不写入智能表...');
+  setAiImportOutput('正在智能解析，暂不写入智能表...');
   try {
     const resp = await apiFetch('/api/ai-import/parse', {
       method: 'POST',

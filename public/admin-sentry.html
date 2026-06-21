@@ -457,8 +457,8 @@
     </div>
 
     <div class="card">
-      <h2>🤖 AI 自动录入</h2>
-      <p style="font-size:14px;color:var(--txt-muted);margin-bottom:12px">粘贴自然语言温度信息，系统先解析并展示目标子表和字段，确认后才写入智能表。</p>
+      <h2>🤖 智能解析录入</h2>
+      <p style="font-size:14px;color:var(--txt-muted);margin-bottom:12px">粘贴自然语言温度信息，系统用规则智能解析并展示目标子表和字段，确认后才写入智能表。</p>
       <div class="form-row" style="align-items:stretch">
         <div class="form-group" style="flex:1;min-width:320px">
           <label>自然语言 / 截图文字</label>
@@ -466,7 +466,7 @@
         </div>
       </div>
       <div style="display:flex;flex-wrap:wrap;gap:8px">
-        <button class="btn btn-primary" onclick="parseAiImport()">AI 解析</button>
+        <button class="btn btn-primary" onclick="parseAiImport()">智能解析</button>
         <button class="btn" onclick="document.getElementById('aiImportImage').click()">上传截图</button>
         <input id="aiImportImage" type="file" accept="image/*" style="display:none" onchange="handleAiImportImage(this)">
         <button class="btn btn-danger" id="aiImportCommitBtn" onclick="commitAiImport()" disabled>确认写入智能表</button>

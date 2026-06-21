@@ -120,6 +120,37 @@ function formatImportDate(d) {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
 
+function setExtractedField(extracted, confidence, title, value, score) {
+  if (value === null || value === undefined || value === '') return;
+  if (extracted[title] !== undefined && (confidence[title] || 0) >= score) return;
+  extracted[title] = typeof value === 'string' ? value.trim() : value;
+  confidence[title] = score;
+}
+
+function parseRelativeImportDate(text) {
+  const now = new Date();
+  let base = null;
+  if (/前天/.test(text)) base = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 2);
+  else if (/昨天|昨日/.test(text)) base = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1);
+  else if (/今天|今日/.test(text)) base = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  if (!base) return null;
+
+  let hour = 12;
+  let minute = 0;
+  const clock = text.match(/(\d{1,2})(?::|\.|点|时)(\d{1,2})?/);
+  if (clock) {
+    hour = Number(clock[1]);
+    minute = Number(clock[2] || 0);
+  } else if (/凌晨/.test(text)) hour = 2;
+  else if (/早上|上午/.test(text)) hour = 9;
+  else if (/中午/.test(text)) hour = 12;
+  else if (/下午/.test(text)) hour = 15;
+  else if (/傍晚|黄昏/.test(text)) hour = 18;
+  else if (/晚上|晚间|夜里/.test(text)) hour = 20;
+  base.setHours(hour, minute, 0, 0);
+  return base;
+}
+
 function makeCellValue(field, rawValue) {
   const type = String(field?.field_type || field?.type || '').toUpperCase();
   const title = field?.field_title || field?.title || '';
@@ -177,9 +208,49 @@ function parseImportText(text, schema) {
     const m = all.match(/\b[A-Z]{3,4}\d{6,8}\b/i);
     if (m) { extracted.柜号 = m[0].toUpperCase(); confidence.柜号 = 0.82; }
   }
+  if (!extracted.柜号) {
+    const m = all.match(/([\u4e00-\u9fa5A-Za-z]*第\s*\d+\s*柜)/);
+    if (m) setExtractedField(extracted, confidence, '柜号', m[1].replace(/\s+/g, ''), 0.72);
+  }
   if (!extracted.品牌) {
     const m = all.match(/品牌\s*[:：]?\s*([^\n]+)/);
     if (m) { extracted.品牌 = m[1].trim(); confidence.品牌 = 0.8; }
+  }
+  if (!extracted.品牌) {
+    const m = all.match(/[“"「『']([^”"」』']{2,20})[”"」』']/);
+    if (m) setExtractedField(extracted, confidence, '品牌', m[1], 0.78);
+  }
+  if (!extracted.放柜时间 && /装柜|放柜|发出|发车|启运/.test(all)) {
+    const d = parseRelativeImportDate(all);
+    if (d) setExtractedField(extracted, confidence, '放柜时间', formatImportDate(d), 0.72);
+  }
+  if (!extracted.回风温度) {
+    const m = all.match(/回风(?:温度)?(?:控制)?(?:正常)?\s*(?:是|为|约|大概)?\s*(-?\d+(?:\.\d+)?)\s*(?:度|°C|℃|C)?/i);
+    if (m) setExtractedField(extracted, confidence, '回风温度', Number(m[1]), 0.9);
+  }
+  if (!extracted.送风温度) {
+    const m = all.match(/送风(?:温度)?\s*(?:是|为|约|大概)?\s*(-?\d+(?:\.\d+)?)\s*(?:度|°C|℃|C)?/i);
+    if (m) setExtractedField(extracted, confidence, '送风温度', Number(m[1]), 0.9);
+  }
+  if (!extracted.设定温度) {
+    const m = all.match(/设定(?:温度)?\s*(?:是|为|约|大概)?\s*(-?\d+(?:\.\d+)?)\s*(?:度|°C|℃|C)?/i);
+    if (m) setExtractedField(extracted, confidence, '设定温度', Number(m[1]), 0.9);
+  }
+  if (!extracted.当前位置) {
+    let m = all.match(/(?:目前|现在|当前位置)?(?:正)?(?:从)?([^，,。；;\n]{1,24}?)(?:往|去|到|开往)([^，,。；;\n]{1,24}?)(?:运|运输|在途|途中|路上)/);
+    if (m) setExtractedField(extracted, confidence, '当前位置', `${m[1].replace(/^从/, '').trim()}往${m[2].trim()}`, 0.82);
+    else {
+      m = all.match(/(泰国|越南|老挝|柬埔寨|马来西亚|友谊关|磨憨|凭祥|南部)[^，,。；;\n]{0,18}(?:在途|途中|运输|口岸)/);
+      if (m) setExtractedField(extracted, confidence, '当前位置', m[0], 0.7);
+    }
+  }
+  if (!extracted.关口) {
+    const m = all.match(/(友谊关|磨憨|凭祥|东兴|河口|瑞丽|勐康|金水河)(?:口岸|关)?/);
+    if (m) setExtractedField(extracted, confidence, '关口', m[1], 0.86);
+  }
+  if (!extracted.味道) {
+    const m = all.match(/(?:味道|气味|闻起来|闻着)(?:还是|是|为)?\s*([^，,。；;\n]{1,12})/);
+    if (m) setExtractedField(extracted, confidence, '味道', m[1].replace(/^(闻起来|闻着|还是|是|为)+/, '').trim(), 0.82);
   }
   if (!extracted.当前位置 && /泰国/.test(all)) { extracted.当前位置 = '泰国在途'; confidence.当前位置 = 0.55; }
   if (!extracted.更新时间) {
@@ -1719,15 +1790,21 @@ function parseLogisticsTime(raw) {
 
 // ---- 启动 ----
 
-app.listen(PORT, () => {
-  console.log(`\n🍈  榴莲温度监控看板服务已启动`);
-  console.log(`   本地访问: http://localhost:${PORT}`);
-  console.log(`   DOCID: ${DOCID || '（未配置）'}`);
-  console.log(`   温度告警阈值: ${process.env.TEMP_MIN || 2}°C ~ ${process.env.TEMP_MAX || 8}°C\n`);
+if (require.main === module) {
+  app.listen(PORT, () => {
+    console.log(`\n🍈  榴莲温度监控看板服务已启动`);
+    console.log(`   本地访问: http://localhost:${PORT}`);
+    console.log(`   DOCID: ${DOCID || '（未配置）'}`);
+    console.log(`   温度告警阈值: ${process.env.TEMP_MIN || 2}°C ~ ${process.env.TEMP_MAX || 8}°C\n`);
 
-  // 启动新闻自动抓取
-  initNewsFetcher();
-});
+    // 启动新闻自动抓取
+    initNewsFetcher();
+  });
+}
 
 // 导出供测试
+app.__test = {
+  parseImportText,
+  parseRelativeImportDate,
+};
 module.exports = app;
