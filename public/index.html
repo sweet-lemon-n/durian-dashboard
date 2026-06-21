@@ -262,42 +262,32 @@ function gotoLogin(){ window.location.href = '/login?redirect=' + encodeURICompo
 
 function renderCountry(el, info, country){
   const isTH = country==='TH';
-  const kpis = isTH ? [
-    kpi('c-th',info.orders,'总订单 / 单'), kpi('c-wht',info.boxes,'总箱量 / 柜'),
-    kpi('c-signed',info.rows.filter(r=>num(r.delivered)>0).length,'已交付 / 单'),
+  const kpis = [
+    kpi(isTH?'c-th':'c-red',info.orders,'总订单 / 单'), kpi('c-wht',info.boxes,'总箱量 / 柜'),
     kpi('c-signed',info.delivered,'已交付 / 柜'), kpi('c-transit',info.transit,'在途 / 柜'),
     kpi('c-pending',info.pending,'待发 / 柜'), kpi('c-signed',info.rate.toFixed(1)+'%','交付率')
-  ] : [
-    kpi('c-red',info.orders,'总订单 / 单'), kpi('c-wht',info.boxes,'总箱量 / 柜'),
-    kpi('c-signed',info.signed,'已签收 / 柜'), kpi('c-dlv',info.delivered,'已交付 / 柜'),
-    kpi('c-transit',info.transit,'在途 / 柜'), kpi('c-port',info.port,'口岸 / 柜'),
-    kpi('c-pending',info.pending,'待发 / 柜'), kpi('c-signed',info.rate.toFixed(1)+'%','签收率')
   ];
   const total = info.boxes||1;
-  const done = isTH ? info.delivered : info.signed;
-  const bar = seg(done/total*100,'s-signed',done) + (isTH?'':seg(info.delivered/total*100,'s-dlv',info.delivered))
-    + seg(info.transit/total*100,'s-transit',info.transit) + seg(info.port/total*100,'s-port',info.port)
+  const done = num(info.delivered);
+  const bar = seg(done/total*100,'s-signed',done)
+    + seg(info.transit/total*100,'s-transit',info.transit)
     + seg(info.pending/total*100,'s-pending',info.pending);
-  const legend = isTH
-    ? `<span><i class="dot" style="background:var(--signed)"></i>已交付</span><span><i class="dot" style="background:var(--transit)"></i>在途</span><span><i class="dot" style="background:var(--pending)"></i>待发</span>`
-    : `<span><i class="dot" style="background:var(--signed)"></i>已签收</span><span><i class="dot" style="background:var(--delivered)"></i>已交付</span><span><i class="dot" style="background:var(--transit)"></i>在途</span><span><i class="dot" style="background:var(--port)"></i>口岸</span><span><i class="dot" style="background:var(--pending)"></i>待发</span>`;
+  const legend = `<span><i class="dot" style="background:var(--signed)"></i>已交付</span><span><i class="dot" style="background:var(--transit)"></i>在途</span><span><i class="dot" style="background:var(--pending)"></i>待发</span>`;
   const catLabel = {FRESH:'🍒 鲜果 FRESH', FROZEN:'❄️ 冻肉 FROZEN'};
   const renderCat = (cat) => {
     const rows = info.rows.filter(r=>r.category===cat);
     if(!rows.length) return '';
-    const s={orders:0,boxes:0,delivered:0,signed:0,transit:0,port:0,pending:0};
+    const s={orders:0,boxes:0,delivered:0,transit:0,pending:0};
     rows.forEach(r=>Object.keys(s).forEach(k=>s[k]+=num(r[k])));
-    const sumTxt = `<b>${s.orders} 单 / ${s.boxes} 柜</b>` + (isTH
-      ? ` · 已交 ${s.delivered} · 在途 ${s.transit} · 待发 ${s.pending}`
-      : ` · 签收 ${s.signed} · 在途 ${s.transit} · 口岸 ${s.port} · 待发 ${s.pending}`);
+    const sumTxt = `<b>${s.orders} 单 / ${s.boxes} 柜</b> · 已交 ${s.delivered} · 在途 ${s.transit} · 待发 ${s.pending}`;
     const rowsHtml = rows.map(r=>{
-      const rt=r.boxes||1, rDone=isTH?num(r.delivered):num(r.signed), rRate=rDone/rt*100;
-      const b = seg(rDone/rt*100,'s-signed',rDone) + (isTH?'':seg(num(r.delivered)/rt*100,'s-dlv',r.delivered))
-        + seg(num(r.transit)/rt*100,'s-transit',r.transit) + seg(num(r.port)/rt*100,'s-port',r.port)
+      const rt=r.boxes||1, rDone=num(r.delivered), rRate=rDone/rt*100;
+      const b = seg(rDone/rt*100,'s-signed',rDone)
+        + seg(num(r.transit)/rt*100,'s-transit',r.transit)
         + seg(num(r.pending)/rt*100,'s-pending',r.pending);
       return `<div class="row"><div class="nm">${esc(r.brand)}<small>${num(r.orders)} 单 / ${num(r.boxes)} 柜</small></div>
         <div class="bar">${b||'<span class="seg s-pending" style="width:100%">'+num(r.boxes)+' 待发</span>'}</div>
-        <div class="cap">${isTH?'交付率':'签收率'} <b class="${rRate>0?'c-signed':'c-pending'}">${rRate.toFixed(1)}%</b></div></div>`;
+        <div class="cap">交付率 <b class="${rRate>0?'c-signed':'c-pending'}">${rRate.toFixed(1)}%</b></div></div>`;
     }).join('');
     return `<div class="cat"><div class="cat-head"><span class="cat-tag ${cat.toLowerCase()}">${catLabel[cat]}</span><span class="cat-sum">${sumTxt}</span></div><div class="rows">${rowsHtml}</div></div>`;
   };
@@ -354,7 +344,8 @@ async function loadUser(){
     const j = await r.json();
     if(j && j.success && j.data){
       const name = j.data.displayName || j.data.username;
-      const adminLink = j.data.role==='admin' ? ' <a class="admin" href="/admin">后台</a>' : '';
+      const canEnterAdmin = j.data.role==='admin' || (j.data.permissions||[]).length>0;
+      const adminLink = canEnterAdmin ? ' <a class="admin" href="/admin">后台</a>' : '';
       $('userbar').innerHTML = `👤 <span class="uname" title="${esc(name)}">${esc(name)}</span>${adminLink} <a id="btnLogout">退出</a>`;
       $('btnLogout').onclick = async ()=>{ try{ await fetch(API+'/api/auth/logout',{method:'POST'}); }catch(_){} gotoLogin(); };
     }
@@ -377,7 +368,7 @@ function paint(d){
   $('agg').innerHTML=`<div class="item"><span class="v num">${g.totalOrders}</span><span class="u">合计订单 / 单</span></div>
     <div class="item"><span class="v num">${g.totalBoxes}</span><span class="u">合计箱量 / 柜</span></div>
     <div class="item"><span class="v num green">${g.totalDone}</span><span class="u">累计完成 / 柜</span></div>
-    <div class="item"><span class="v num">${g.totalMoving}</span><span class="u">在途+口岸 / 柜</span></div>
+    <div class="item"><span class="v num">${g.totalMoving}</span><span class="u">在途 / 柜</span></div>
     <div class="item"><span class="v num">${g.totalPending}</span><span class="u">待发 / 柜</span></div>`;
   renderCountry($('country-th'),d.th,'TH');
   renderCountry($('country-vn'),d.vn,'VN');

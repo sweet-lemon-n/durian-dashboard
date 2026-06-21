@@ -11,13 +11,23 @@ const path = require('path');
 const cookieParser = require('cookie-parser');
 const wecom = require('./lib/wecom');
 const wecomCrypto = require('./lib/crypto');
-const { initDatabase, getDb } = require('./lib/db');
+const {
+  initDatabase,
+  getDb,
+  createUser,
+  updateUser,
+  listUsers,
+  incrementTokenVersion,
+  normalizePermissions,
+  stringifyPermissions,
+} = require('./lib/db');
 const {
   generateToken,
   setAuthCookie,
   clearAuthCookie,
   requireAuth,
   requireRole,
+  requirePermission,
 } = require('./lib/auth');
 const { router: boardRouter } = require('./lib/board-routes');
 
@@ -284,6 +294,7 @@ app.post('/api/auth/login', async (req, res) => {
         username: user.username,
         displayName: user.display_name,
         role: user.role,
+        permissions: normalizePermissions(user.role, user.permissions),
       },
     });
   } catch (err) {
@@ -310,7 +321,7 @@ app.use('/api', (req, res, next) => {
 });
 
 // ---- 看板内容 API（/api/aggregate + orders/logistics/news CRUD）----
-// 挂在鉴权 guard 之后：GET 默认登录可读，写操作在 board-routes 内各自 requireRole('admin')
+// 挂在鉴权 guard 之后：GET 默认登录可读，写操作在 board-routes 内各自检查模块权限
 app.use('/api', boardRouter);
 
 /**
@@ -324,8 +335,143 @@ app.get('/api/auth/me', (req, res) => {
       username: req.user.username,
       displayName: req.user.displayName,
       role: req.user.role,
+      permissions: req.user.permissions || [],
     },
   });
+});
+
+
+// ---- 账号管理 API ----
+
+const canManageAccounts = requireRole('admin');
+
+function publicUser(user) {
+  if (!user) return null;
+  return {
+    id: user.id,
+    username: user.username,
+    displayName: user.display_name,
+    role: user.role,
+    isActive: !!user.is_active,
+    tokenVersion: user.token_version,
+    permissions: normalizePermissions(user.role, user.permissions),
+    createdAt: user.created_at,
+    updatedAt: user.updated_at,
+  };
+}
+
+function getUserByIdSafe(db, id) {
+  return db.prepare(
+    'SELECT id, username, display_name, role, is_active, token_version, permissions, created_at, updated_at FROM users WHERE id = ?'
+  ).get(id);
+}
+
+app.get('/api/users', canManageAccounts, (req, res) => {
+  const users = listUsers(getDb()).map(user => ({
+    id: user.id,
+    username: user.username,
+    displayName: user.display_name,
+    role: user.role,
+    isActive: !!user.is_active,
+    tokenVersion: user.token_version,
+    permissions: user.permissions,
+    createdAt: user.created_at,
+    updatedAt: user.updated_at,
+  }));
+  res.json({ success: true, data: users });
+});
+
+app.post('/api/users', canManageAccounts, async (req, res) => {
+  try {
+    const { username, password, displayName, role, permissions } = req.body || {};
+    const cleanUsername = String(username || '').trim();
+    if (!cleanUsername || !password) {
+      return res.status(400).json({ success: false, error: '用户名和密码不能为空' });
+    }
+
+    const db = getDb();
+    const created = await createUser(db, {
+      username: cleanUsername,
+      password,
+      displayName: String(displayName || cleanUsername).trim(),
+      role: role === 'admin' ? 'admin' : 'viewer',
+      permissions,
+    });
+    res.status(201).json({ success: true, data: publicUser(getUserByIdSafe(db, created.id)) });
+  } catch (err) {
+    const isDuplicate = /UNIQUE constraint failed/.test(err.message);
+    res.status(isDuplicate ? 409 : 500).json({
+      success: false,
+      error: isDuplicate ? '用户名已存在' : err.message,
+    });
+  }
+});
+
+app.put('/api/users/:id', canManageAccounts, (req, res) => {
+  const userId = Number(req.params.id);
+  if (!Number.isInteger(userId)) {
+    return res.status(400).json({ success: false, error: '用户 ID 不正确' });
+  }
+
+  const db = getDb();
+  const existing = getUserByIdSafe(db, userId);
+  if (!existing) return res.status(404).json({ success: false, error: '账号不存在' });
+
+  const role = req.body.role === 'admin' ? 'admin' : 'viewer';
+  const isActive = req.body.isActive === undefined ? !!existing.is_active : !!req.body.isActive;
+  if (userId === req.user.userId && role !== 'admin') {
+    return res.status(400).json({ success: false, error: '不能取消当前登录账号的管理员身份' });
+  }
+  if (userId === req.user.userId && !isActive) {
+    return res.status(400).json({ success: false, error: '不能禁用当前登录账号' });
+  }
+
+  const fields = {
+    display_name: String(req.body.displayName || existing.display_name || existing.username).trim(),
+    role,
+    is_active: isActive ? 1 : 0,
+    permissions: stringifyPermissions(role, req.body.permissions),
+  };
+  updateUser(db, userId, fields);
+  if (role !== existing.role || isActive !== !!existing.is_active || fields.permissions !== existing.permissions) {
+    incrementTokenVersion(db, userId);
+  }
+  res.json({ success: true, data: publicUser(getUserByIdSafe(db, userId)) });
+});
+
+app.post('/api/users/:id/password', canManageAccounts, async (req, res) => {
+  try {
+    const userId = Number(req.params.id);
+    const password = req.body && req.body.password;
+    if (!Number.isInteger(userId) || !password) {
+      return res.status(400).json({ success: false, error: '用户 ID 或新密码不能为空' });
+    }
+
+    const db = getDb();
+    if (!getUserByIdSafe(db, userId)) return res.status(404).json({ success: false, error: '账号不存在' });
+    const bcrypt = require('bcryptjs');
+    const passwordHash = await bcrypt.hash(password, 12);
+    updateUser(db, userId, { password_hash: passwordHash });
+    incrementTokenVersion(db, userId);
+    res.json({ success: true, message: '密码已重置' });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+app.delete('/api/users/:id', canManageAccounts, (req, res) => {
+  const userId = Number(req.params.id);
+  if (!Number.isInteger(userId)) {
+    return res.status(400).json({ success: false, error: '用户 ID 不正确' });
+  }
+  if (userId === req.user.userId) {
+    return res.status(400).json({ success: false, error: '不能删除当前登录账号' });
+  }
+
+  const db = getDb();
+  const result = db.prepare('DELETE FROM users WHERE id = ?').run(userId);
+  if (!result.changes) return res.status(404).json({ success: false, error: '账号不存在' });
+  res.json({ success: true, message: '账号已删除' });
 });
 
 // ---- API 路由 ----
@@ -334,7 +480,7 @@ app.get('/api/auth/me', (req, res) => {
  * GET /api/config/info
  * 返回文档结构信息（子表列表、字段定义、识别结果）
  */
-app.get('/api/config/info', async (req, res) => {
+app.get('/api/config/info', requirePermission('smartsheet'), async (req, res) => {
   try {
     const schema = await getDocumentSchema();
     res.json({
@@ -789,7 +935,7 @@ app.get('/api/temperature/history', async (req, res) => {
  * POST /api/schema/refresh
  * 手动刷新 schema 缓存
  */
-app.post('/api/schema/refresh', (req, res) => {
+app.post('/api/schema/refresh', requirePermission('smartsheet'), (req, res) => {
   clearSchemaCache();
   res.json({ success: true, message: 'Schema 缓存已清除，下次请求将重新获取' });
 });
@@ -800,7 +946,7 @@ app.post('/api/schema/refresh', (req, res) => {
  * 当已有的智能表格不属于当前应用时，通过此接口创建新表格
  * 创建后自动更新 .env 文件中的 DOCID
  */
-app.post('/api/setup', requireRole('admin'), async (req, res) => {
+app.post('/api/setup', requirePermission('smartsheet'), async (req, res) => {
   try {
     const docName = (req.body && req.body.docName) || '榴莲温度监控数据';
     const sheetTitle = (req.body && req.body.sheetTitle) || '温度记录';
@@ -880,7 +1026,7 @@ app.post('/api/setup', requireRole('admin'), async (req, res) => {
  * POST /api/doc/rename
  * Body: { docid?, newName }
  */
-app.post('/api/doc/rename', requireRole('admin'), async (req, res) => {
+app.post('/api/doc/rename', requirePermission('smartsheet'), async (req, res) => {
   try {
     const { newName } = req.body || {};
     if (!newName) throw new Error('缺少 newName 参数');
@@ -896,7 +1042,7 @@ app.post('/api/doc/rename', requireRole('admin'), async (req, res) => {
  * POST /api/doc/delete
  * 删除当前文档（危险操作！）
  */
-app.post('/api/doc/delete', requireRole('admin'), async (req, res) => {
+app.post('/api/doc/delete', requirePermission('smartsheet'), async (req, res) => {
   try {
     const result = await wecom.deleteDoc(DOCID);
     if (result.errcode !== 0) throw new Error(`[${result.errcode}] ${result.errmsg}`);
@@ -913,7 +1059,7 @@ app.post('/api/doc/delete', requireRole('admin'), async (req, res) => {
  * GET /api/doc/info
  * 获取当前文档基础信息
  */
-app.get('/api/doc/info', requireRole('admin'), async (req, res) => {
+app.get('/api/doc/info', requirePermission('smartsheet'), async (req, res) => {
   try {
     const result = await wecom.getDocInfo(DOCID);
     if (result.errcode !== 0) throw new Error(`[${result.errcode}] ${result.errmsg}`);
@@ -929,7 +1075,7 @@ app.get('/api/doc/info', requireRole('admin'), async (req, res) => {
  * POST /api/smartsheet/sheet/delete
  * Body: { sheetId }
  */
-app.post('/api/smartsheet/sheet/delete', requireRole('admin'), async (req, res) => {
+app.post('/api/smartsheet/sheet/delete', requirePermission('smartsheet'), async (req, res) => {
   try {
     const { sheetId } = req.body || {};
     if (!sheetId) throw new Error('缺少 sheetId 参数');
@@ -946,7 +1092,7 @@ app.post('/api/smartsheet/sheet/delete', requireRole('admin'), async (req, res) 
  * POST /api/smartsheet/sheet/update
  * Body: { sheetId, title }
  */
-app.post('/api/smartsheet/sheet/update', requireRole('admin'), async (req, res) => {
+app.post('/api/smartsheet/sheet/update', requirePermission('smartsheet'), async (req, res) => {
   try {
     const { sheetId, title } = req.body || {};
     if (!sheetId) throw new Error('缺少 sheetId 参数');
@@ -963,7 +1109,7 @@ app.post('/api/smartsheet/sheet/update', requireRole('admin'), async (req, res) 
  * POST /api/smartsheet/sheet/add
  * Body: { title }
  */
-app.post('/api/smartsheet/sheet/add', requireRole('admin'), async (req, res) => {
+app.post('/api/smartsheet/sheet/add', requirePermission('smartsheet'), async (req, res) => {
   try {
     const { title } = req.body || {};
     if (!title) throw new Error('缺少 title 参数');
@@ -982,7 +1128,7 @@ app.post('/api/smartsheet/sheet/add', requireRole('admin'), async (req, res) => 
  * GET /api/smartsheet/records?sheetId=xxx&limit=200&offset=0
  * 通用记录查询 — 可查询任意子表，返回已解析的记录（扁平化值）
  */
-app.get('/api/smartsheet/records', async (req, res) => {
+app.get('/api/smartsheet/records', requirePermission('smartsheet'), async (req, res) => {
   try {
     const { sheetId, limit = '200', offset } = req.query;
     if (!sheetId) throw new Error('缺少 sheetId 参数');
@@ -1023,7 +1169,7 @@ app.get('/api/smartsheet/records', async (req, res) => {
  * POST /api/smartsheet/records/add
  * Body: { sheetId, records, keyType? }
  */
-app.post('/api/smartsheet/records/add', requireRole('admin'), async (req, res) => {
+app.post('/api/smartsheet/records/add', requirePermission('smartsheet'), async (req, res) => {
   try {
     const { sheetId, records, keyType } = req.body || {};
     if (!sheetId) throw new Error('缺少 sheetId 参数');
@@ -1040,7 +1186,7 @@ app.post('/api/smartsheet/records/add', requireRole('admin'), async (req, res) =
  * POST /api/smartsheet/records/delete
  * Body: { sheetId, recordIds }
  */
-app.post('/api/smartsheet/records/delete', requireRole('admin'), async (req, res) => {
+app.post('/api/smartsheet/records/delete', requirePermission('smartsheet'), async (req, res) => {
   try {
     const { sheetId, recordIds } = req.body || {};
     if (!sheetId) throw new Error('缺少 sheetId 参数');
@@ -1057,7 +1203,7 @@ app.post('/api/smartsheet/records/delete', requireRole('admin'), async (req, res
  * POST /api/smartsheet/records/update
  * Body: { sheetId, records, keyType? }
  */
-app.post('/api/smartsheet/records/update', requireRole('admin'), async (req, res) => {
+app.post('/api/smartsheet/records/update', requirePermission('smartsheet'), async (req, res) => {
   try {
     const { sheetId, records, keyType } = req.body || {};
     if (!sheetId) throw new Error('缺少 sheetId 参数');
@@ -1079,7 +1225,7 @@ app.post('/api/smartsheet/records/update', requireRole('admin'), async (req, res
  * fields 数组按正常顺序传入即可，内部自动处理企微 API 的反序添加
  * 添加完成后自动删除默认的「智能表列」
  */
-app.post('/api/smartsheet/fields/add', requireRole('admin'), async (req, res) => {
+app.post('/api/smartsheet/fields/add', requirePermission('smartsheet'), async (req, res) => {
   try {
     const { sheetId, fields } = req.body || {};
     if (!sheetId) throw new Error('缺少 sheetId 参数');
@@ -1119,7 +1265,7 @@ app.post('/api/smartsheet/fields/add', requireRole('admin'), async (req, res) =>
  * POST /api/smartsheet/fields/delete
  * Body: { sheetId, fieldIds }
  */
-app.post('/api/smartsheet/fields/delete', requireRole('admin'), async (req, res) => {
+app.post('/api/smartsheet/fields/delete', requirePermission('smartsheet'), async (req, res) => {
   try {
     const { sheetId, fieldIds } = req.body || {};
     if (!sheetId) throw new Error('缺少 sheetId 参数');
@@ -1137,7 +1283,7 @@ app.post('/api/smartsheet/fields/delete', requireRole('admin'), async (req, res)
  * POST /api/smartsheet/fields/update
  * Body: { sheetId, fields }
  */
-app.post('/api/smartsheet/fields/update', requireRole('admin'), async (req, res) => {
+app.post('/api/smartsheet/fields/update', requirePermission('smartsheet'), async (req, res) => {
   try {
     const { sheetId, fields } = req.body || {};
     if (!sheetId) throw new Error('缺少 sheetId 参数');
@@ -1156,7 +1302,7 @@ app.post('/api/smartsheet/fields/update', requireRole('admin'), async (req, res)
 /**
  * GET /api/smartsheet/views?sheetId=xxx
  */
-app.get('/api/smartsheet/views', async (req, res) => {
+app.get('/api/smartsheet/views', requirePermission('smartsheet'), async (req, res) => {
   try {
     const sheetId = req.query.sheetId;
     if (!sheetId) throw new Error('缺少 sheetId 参数');
@@ -1172,7 +1318,7 @@ app.get('/api/smartsheet/views', async (req, res) => {
  * POST /api/smartsheet/views/add
  * Body: { sheetId, viewTitle, viewType?, propertyGantt?, propertyCalendar? }
  */
-app.post('/api/smartsheet/views/add', requireRole('admin'), async (req, res) => {
+app.post('/api/smartsheet/views/add', requirePermission('smartsheet'), async (req, res) => {
   try {
     const { sheetId, viewTitle, viewType, propertyGantt, propertyCalendar } = req.body || {};
     if (!sheetId || !viewTitle) throw new Error('缺少 sheetId 或 viewTitle 参数');
@@ -1188,7 +1334,7 @@ app.post('/api/smartsheet/views/add', requireRole('admin'), async (req, res) => 
  * POST /api/smartsheet/views/delete
  * Body: { sheetId, viewIds }
  */
-app.post('/api/smartsheet/views/delete', requireRole('admin'), async (req, res) => {
+app.post('/api/smartsheet/views/delete', requirePermission('smartsheet'), async (req, res) => {
   try {
     const { sheetId, viewIds } = req.body || {};
     if (!sheetId || !viewIds) throw new Error('缺少 sheetId 或 viewIds 参数');
@@ -1204,7 +1350,7 @@ app.post('/api/smartsheet/views/delete', requireRole('admin'), async (req, res) 
  * POST /api/smartsheet/views/update
  * Body: { sheetId, viewId, viewTitle?, property? }
  */
-app.post('/api/smartsheet/views/update', requireRole('admin'), async (req, res) => {
+app.post('/api/smartsheet/views/update', requirePermission('smartsheet'), async (req, res) => {
   try {
     const { sheetId, viewId, viewTitle, property } = req.body || {};
     if (!sheetId || !viewId) throw new Error('缺少 sheetId 或 viewId 参数');
@@ -1221,7 +1367,7 @@ app.post('/api/smartsheet/views/update', requireRole('admin'), async (req, res) 
 /**
  * GET /api/smartsheet/groups?sheetId=xxx
  */
-app.get('/api/smartsheet/groups', async (req, res) => {
+app.get('/api/smartsheet/groups', requirePermission('smartsheet'), async (req, res) => {
   try {
     const sheetId = req.query.sheetId;
     if (!sheetId) throw new Error('缺少 sheetId 参数');
@@ -1237,7 +1383,7 @@ app.get('/api/smartsheet/groups', async (req, res) => {
  * POST /api/smartsheet/groups/add
  * Body: { sheetId, name, children? }
  */
-app.post('/api/smartsheet/groups/add', requireRole('admin'), async (req, res) => {
+app.post('/api/smartsheet/groups/add', requirePermission('smartsheet'), async (req, res) => {
   try {
     const { sheetId, name, children } = req.body || {};
     if (!sheetId || !name) throw new Error('缺少 sheetId 或 name 参数');
@@ -1253,7 +1399,7 @@ app.post('/api/smartsheet/groups/add', requireRole('admin'), async (req, res) =>
  * POST /api/smartsheet/groups/delete
  * Body: { sheetId, fieldGroupId }
  */
-app.post('/api/smartsheet/groups/delete', requireRole('admin'), async (req, res) => {
+app.post('/api/smartsheet/groups/delete', requirePermission('smartsheet'), async (req, res) => {
   try {
     const { sheetId, fieldGroupId } = req.body || {};
     if (!sheetId || !fieldGroupId) throw new Error('缺少 sheetId 或 fieldGroupId 参数');
@@ -1269,7 +1415,7 @@ app.post('/api/smartsheet/groups/delete', requireRole('admin'), async (req, res)
  * POST /api/smartsheet/groups/update
  * Body: { sheetId, fieldGroupId, name?, children? }
  */
-app.post('/api/smartsheet/groups/update', requireRole('admin'), async (req, res) => {
+app.post('/api/smartsheet/groups/update', requirePermission('smartsheet'), async (req, res) => {
   try {
     const { sheetId, fieldGroupId, name, children } = req.body || {};
     if (!sheetId || !fieldGroupId) throw new Error('缺少 sheetId 或 fieldGroupId 参数');
