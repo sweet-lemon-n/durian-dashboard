@@ -165,24 +165,24 @@
   .legend span{display:inline-flex;align-items:center;gap:.25vw;}
   .dot{width:.8vh;height:.8vh;border-radius:50%;display:inline-block;}
 
-  .cats{display:grid;grid-template-rows:minmax(0,1fr) minmax(0,1fr);gap:.55vh;flex:1;min-height:0;overflow:hidden;padding-right:.1vw;}
+  .cats{display:grid;grid-template-rows:minmax(0,1.25fr) minmax(0,.95fr);gap:.42vh;flex:1;min-height:0;overflow:hidden;padding-right:.1vw;}
   .cats::-webkit-scrollbar{width:3px;}
   .cats::-webkit-scrollbar-thumb{background:var(--line);border-radius:2px;}
-  .cat{display:flex;flex-direction:column;gap:.35vh;min-height:0;overflow:hidden;}
+  .cat{display:flex;flex-direction:column;gap:.24vh;min-height:0;overflow:hidden;}
   .cat-head{display:flex;align-items:center;gap:.5vw;flex-wrap:wrap;}
-  .cat-tag{display:inline-flex;align-items:center;gap:.25vw;padding:.2vh .55vw;border-radius:0.5vh;
-    font-size:1.1vh;font-weight:700;letter-spacing:.04em;text-transform:uppercase;}
+  .cat-tag{display:inline-flex;align-items:center;gap:.25vw;padding:.15vh .45vw;border-radius:0.45vh;
+    font-size:.98vh;font-weight:700;letter-spacing:.04em;text-transform:uppercase;}
   .cat-tag.fresh{background:rgba(248,113,113,.12);color:#ffb4b4;border:1px solid rgba(248,113,113,.25);}
   .cat-tag.frozen{background:rgba(56,189,248,.1);color:#9fdcff;border:1px solid rgba(56,189,248,.2);}
-  .cat-sum{font-size:1.1vh;color:var(--txt2);font-weight:400;} .cat-sum b{color:var(--txt);}
+  .cat-sum{font-size:.96vh;color:var(--txt2);font-weight:400;} .cat-sum b{color:var(--txt);}
 
-  .rows{display:flex;flex-direction:column;gap:.3vh;min-height:0;overflow:hidden;}
-  .row{display:grid;grid-template-columns:12vw 1fr 5.5vw;align-items:center;gap:.7vw;}
-  .row .nm{font-size:1.08vh;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
-  .row .nm small{display:block;font-size:0.84vh;color:var(--txt3);font-weight:400;margin-top:.02vh;}
-  .row .bar{height:1.48vh;}
-  .row .cap{font-size:0.84vh;color:var(--txt3);text-align:right;white-space:nowrap;line-height:1.15;}
-  .row .cap b{color:var(--txt2);font-weight:700;} .row .seg{font-size:0.88vh;}
+  .rows{display:flex;flex-direction:column;gap:.22vh;min-height:0;overflow:hidden;}
+  .row{display:grid;grid-template-columns:11.8vw 1fr 5.4vw;align-items:center;gap:.6vw;}
+  .row .nm{font-size:.98vh;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  .row .nm small{display:inline;font-size:0.78vh;color:var(--txt3);font-weight:400;margin-left:.22vw;}
+  .row .bar{height:1.28vh;}
+  .row .cap{font-size:0.78vh;color:var(--txt3);text-align:right;white-space:nowrap;line-height:1.05;}
+  .row .cap b{color:var(--txt2);font-weight:700;} .row .seg{font-size:0.78vh;}
 
   /* ---- Bottom: logistics + news ---- */
   .bottom{display:grid;grid-template-columns:1.35fr 1fr;gap:0.9vw;min-height:0;}
@@ -224,6 +224,7 @@
     border-top:0.3vh solid var(--accent);
     padding:.95vh .9vw;display:flex;flex-direction:column;gap:.5vh;overflow:hidden;backdrop-filter:blur(4px);}
   .n-head{display:flex;align-items:center;gap:.35vw;font-size:1.35vh;font-weight:800;letter-spacing:-0.01em;flex-shrink:0;}
+  .n-updated{margin-left:auto;font-size:.82vh;color:var(--txt3);font-weight:400;letter-spacing:0;}
   .n-body-wrap{display:grid;grid-template-rows:minmax(0,1fr) minmax(0,1fr);gap:.5vh;flex:1;min-height:0;overflow:hidden;padding-right:.1vw;}
   .n-body-wrap::-webkit-scrollbar{width:3px;}
   .n-body-wrap::-webkit-scrollbar-thumb{background:var(--line);border-radius:2px;}
@@ -422,16 +423,21 @@ function renderLogistics(el, L){
     </div>`;
 }
 
-function renderNews(el, thArr, vnArr, autoArr){
+function newsTimeText(fetchedAt){
+  if(!fetchedAt) return '等待自动更新';
+  return '最后更新 ' + new Date(fetchedAt).toLocaleString('zh-CN', {
+    month:'2-digit', day:'2-digit', hour:'2-digit', minute:'2-digit'
+  });
+}
+
+function renderNews(el, thArr, vnArr, autoArr, fetchedAt){
   const nItem = n => `<div class="n-item"><span class="n-ico">${esc(n.icon||'📌')}</span><div class="n-body"><div class="n-t">${n.url ? `<a href="${esc(n.url)}" target="_blank" style="color:inherit;text-decoration:none" title="点击查看原文">${esc(n.title)}</a>` : esc(n.title)}${n.source?' <small style="color:var(--accent)">自动</small>':''}</div><div class="n-d">${md(n.detail||'')}</div></div></div>`;
   const sec = (label, cls, arr) => {
     const items = (arr||[]).map(nItem).join('')||'<div style="color:var(--txt3);font-size:0.95vh">暂无</div>';
     return `<div class="n-section"><div class="n-section-head ${cls}">${label}</div><div class="n-list">${items}</div></div>`;
   };
-  const autoByCountry = (country) => (autoArr||[]).filter(n => n.country === country).slice(0, 2);
-  const mergedTH = [...(thArr||[]), ...autoByCountry('TH')];
-  const mergedVN = [...(vnArr||[]), ...autoByCountry('VN')];
-  el.innerHTML = `<div class="n-head">📢 产业快讯 · NEWS</div><div class="n-body-wrap">${sec('🇹🇭 泰国', 'th', mergedTH)}${sec('🇻🇳 越南', 'vn', mergedVN)}</div>`;
+  const autoByCountry = (country) => (autoArr||[]).filter(n => n.country === country).slice(0, 6);
+  el.innerHTML = `<div class="n-head">📢 自动新闻 · NEWS <span class="n-updated">${newsTimeText(fetchedAt)}</span></div><div class="n-body-wrap">${sec('🇹🇭 泰国', 'th', autoByCountry('TH'))}${sec('🇻🇳 越南', 'vn', autoByCountry('VN'))}</div>`;
 }
 
 // ---- Auth ----
@@ -472,7 +478,7 @@ function paint(d){
   renderCountry($('country-th'), d.th, 'TH');
   renderCountry($('country-vn'), d.vn, 'VN');
   renderLogistics($('logistics'), d.logistics);
-  renderNews($('news'), d.news.th, d.news.vn, d.news.auto);
+  renderNews($('news'), d.news.th, d.news.vn, d.news.auto, d.news.fetchedAt);
   const src = d._source==='wecom'?' · 企微':' · 手动';
   $('topDate').textContent = '更新 '+new Date(d.generatedAt||Date.now()).toLocaleTimeString('zh-CN')+src;
 }
