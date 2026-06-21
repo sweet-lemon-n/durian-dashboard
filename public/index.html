@@ -58,6 +58,11 @@
   .top .userbar a.admin:hover{background:var(--gold);color:#000;}
 
   .main{display:grid;grid-template-columns:1fr 1fr;gap:1.1vw;min-height:0;}
+  .main.one-col{grid-template-columns:1fr;}
+  .main.empty{display:none;}
+  [hidden]{display:none!important;}
+  .no-access{height:100vh;width:100vw;display:flex;align-items:center;justify-content:center;
+    color:var(--txt2);font-size:2vh;background:var(--bg);}
   .country{display:flex;flex-direction:column;gap:.95vh;min-height:0;
     background:var(--panel);border:1px solid var(--line);border-radius:1.3vh;
     padding:1.2vh 1.3vw 1.3vh;position:relative;overflow:hidden;}
@@ -255,6 +260,7 @@ const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s==null?'':s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 function md(s){ return esc(s).replace(/\*\*(.+?)\*\*/g,'<b>$1</b>'); }
 const num = (n) => Number(n)||0;
+let dashboardPermissions = [];
 function kpi(cls, val, label){ return `<div class="kpi"><div class="kv num ${cls}">${val}</div><div class="ku">${label}</div></div>`; }
 function seg(w,cls,txt){ return w>0.3 ? `<span class="seg ${cls}" style="width:${w}%">${txt}</span>`:''; }
 
@@ -337,12 +343,54 @@ function renderNewsCombined(el, thArr, vnArr){
     <div class="n-body-wrap">${sec('TH',thArr)}${sec('VN',vnArr)}</div>`;
 }
 
+function hideById(id, hidden){ const el=$(id); if(el) el.hidden = !!hidden; }
+function applyVisibility(v){
+  const visible = Object.assign({summary:true, th:true, vn:true, logistics:true, news:true, gantt:true}, v||{});
+  hideById('agg', !visible.summary);
+  hideById('country-th', !visible.th);
+  hideById('country-vn', !visible.vn);
+  hideById('logistics', !visible.logistics);
+  hideById('news-combined', !visible.news);
+  const main = document.querySelector('.main');
+  if(main) {
+    main.classList.toggle('one-col', visible.th !== visible.vn);
+    main.classList.toggle('empty', !visible.th && !visible.vn);
+  }
+  const bottom = document.querySelector('.bottom');
+  if(bottom) {
+    bottom.hidden = !visible.logistics && !visible.news;
+    bottom.style.gridTemplateColumns = visible.logistics && visible.news ? '2.2fr 1fr' : '1fr';
+  }
+  const gantt = document.querySelector('.gantt-section');
+  if(gantt) gantt.hidden = !visible.gantt;
+  const hasAny = Object.values(visible).some(Boolean);
+  let empty = $('noAccess');
+  if(!hasAny){
+    if(!empty){ empty = document.createElement('div'); empty.id='noAccess'; empty.className='no-access'; empty.textContent='暂无可查看的看板内容'; document.body.appendChild(empty); }
+    const board = document.querySelector('.board');
+    if(board) board.hidden = true;
+  } else {
+    if(empty) empty.remove();
+    const board = document.querySelector('.board');
+    if(board) board.hidden = false;
+  }
+}
+
 async function loadUser(){
   try{
     const r = await fetch(API+'/api/auth/me',{cache:'no-store'});
     if(r.status===401){ gotoLogin(); return false; }
     const j = await r.json();
     if(j && j.success && j.data){
+      dashboardPermissions = j.data.dashboardPermissions || [];
+      applyVisibility({
+        summary: dashboardPermissions.includes('summary'),
+        th: dashboardPermissions.includes('th'),
+        vn: dashboardPermissions.includes('vn'),
+        logistics: dashboardPermissions.includes('logistics'),
+        news: dashboardPermissions.includes('news'),
+        gantt: dashboardPermissions.includes('gantt'),
+      });
       const name = j.data.displayName || j.data.username;
       const canEnterAdmin = j.data.role==='admin' || (j.data.permissions||[]).length>0;
       const adminLink = canEnterAdmin ? ' <a class="admin" href="/admin">后台</a>' : '';
@@ -364,16 +412,19 @@ async function loadData(){
 }
 function paint(d){
   if(d.meta){ if(d.meta.title)$('title-main').textContent=d.meta.title; if(d.meta.subtitle)$('title-sub').textContent=d.meta.subtitle; }
+  applyVisibility(d.visibility);
   const g=d.global;
-  $('agg').innerHTML=`<div class="item"><span class="v num">${g.totalOrders}</span><span class="u">合计订单 / 单</span></div>
-    <div class="item"><span class="v num">${g.totalBoxes}</span><span class="u">合计箱量 / 柜</span></div>
-    <div class="item"><span class="v num green">${g.totalDone}</span><span class="u">累计完成 / 柜</span></div>
-    <div class="item"><span class="v num">${g.totalMoving}</span><span class="u">在途 / 柜</span></div>
-    <div class="item"><span class="v num">${g.totalPending}</span><span class="u">待发 / 柜</span></div>`;
-  renderCountry($('country-th'),d.th,'TH');
-  renderCountry($('country-vn'),d.vn,'VN');
-  renderLogistics($('logistics'),d.logistics);
-  renderNewsCombined($('news-combined'),d.news.th,d.news.vn);
+  if(g){
+    $('agg').innerHTML=`<div class="item"><span class="v num">${g.totalOrders}</span><span class="u">合计订单 / 单</span></div>
+      <div class="item"><span class="v num">${g.totalBoxes}</span><span class="u">合计箱量 / 柜</span></div>
+      <div class="item"><span class="v num green">${g.totalDone}</span><span class="u">累计完成 / 柜</span></div>
+      <div class="item"><span class="v num">${g.totalMoving}</span><span class="u">在途 / 柜</span></div>
+      <div class="item"><span class="v num">${g.totalPending}</span><span class="u">待发 / 柜</span></div>`;
+  }
+  if(d.th) renderCountry($('country-th'),d.th,'TH');
+  if(d.vn) renderCountry($('country-vn'),d.vn,'VN');
+  if(d.logistics) renderLogistics($('logistics'),d.logistics);
+  if(d.news) renderNewsCombined($('news-combined'),d.news.th,d.news.vn);
   const srcTag = d._source==='wecom' ? ' · 📡企微' : ' · ✏️手动';
   $('topDate').textContent='最后更新 ' + new Date(d.generatedAt||Date.now()).toLocaleTimeString('zh-CN') + srcTag;
 }

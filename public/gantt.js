@@ -13,6 +13,11 @@
       window.location.href = '/login?redirect=' + encodeURIComponent(window.location.pathname);
       throw new Error('Unauthorized');
     }
+    if (resp.status === 403) {
+      const section = document.querySelector('.gantt-section');
+      if (section) section.hidden = true;
+      throw new Error('Forbidden');
+    }
     return resp;
   }
 

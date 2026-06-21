@@ -304,7 +304,7 @@
   <div class="panel" id="panel-accounts">
     <div class="toolbar"><h2>账号管理</h2><button class="btn primary" onclick="openAccountModal()">+ 新增账号</button></div>
     <table id="accountsTable">
-      <thead><tr><th>用户名</th><th>显示名</th><th>角色</th><th>模块权限</th><th>状态</th><th>创建时间</th><th>操作</th></tr></thead>
+      <thead><tr><th>用户名</th><th>显示名</th><th>角色</th><th>后台权限</th><th>首页显示</th><th>状态</th><th>创建时间</th><th>操作</th></tr></thead>
       <tbody></tbody>
     </table>
   </div>
@@ -519,7 +519,8 @@
       <div class="form-row2"><label>初始密码</label><input id="a_password" type="password" placeholder="新增时必填，编辑时留空"></div>
       <div class="form-row2"><label>角色</label><select id="a_role" onchange="syncAccountRole()"><option value="viewer">普通账号</option><option value="admin">管理员</option></select></div>
     </div>
-    <div class="form-row2"><label>模块权限</label><div class="perm-checks" id="a_permissions"></div><div class="hint">管理员默认拥有全部权限；普通账号按勾选模块进入后台。</div></div>
+    <div class="form-row2"><label>后台模块权限</label><div class="perm-checks" id="a_permissions"></div><div class="hint">管理员默认拥有全部后台权限；普通账号按勾选模块进入后台。</div></div>
+    <div class="form-row2"><label>首页显示权限</label><div class="perm-checks" id="a_dashboard_permissions"></div><div class="hint">控制首页能看到哪些板块；管理员也按这里的勾选显示。</div></div>
     <div class="form-row2"><label><input id="a_active" type="checkbox" checked style="width:auto;margin-right:6px">账号启用</label></div>
     <div class="modal-actions"><button class="btn danger" onclick="closeModalById('accountModal')">取消</button><button class="btn primary" onclick="submitAccount()">保存</button></div>
   </div>
@@ -896,6 +897,9 @@ async function submitNews(){
 const PERMISSION_LABELS = {
   orders:'订单管理', logistics:'物流监控', news:'新闻快讯', smartsheet:'智能表格管理', accounts:'账号管理'
 };
+const DASHBOARD_LABELS = {
+  summary:'顶部合计', th:'泰国看板', vn:'越南看板', logistics:'物流监控', news:'新闻快讯', gantt:'温度甘特图'
+};
 function renderPermChecks(selected=[]){
   const chosen = new Set(selected || []);
   $('#a_permissions').innerHTML = Object.entries(PERMISSION_LABELS).map(([key,label]) =>
@@ -904,6 +908,14 @@ function renderPermChecks(selected=[]){
   syncAccountRole();
 }
 function selectedPerms(){ return Array.from($('#a_permissions').querySelectorAll('input:checked')).map(x=>x.value); }
+function renderDashboardChecks(selected){
+  const initial = selected || Object.keys(DASHBOARD_LABELS);
+  const chosen = new Set(initial);
+  $('#a_dashboard_permissions').innerHTML = Object.entries(DASHBOARD_LABELS).map(([key,label]) =>
+    `<label><input type="checkbox" value="${key}" ${chosen.has(key)?'checked':''}>${label}</label>`
+  ).join('');
+}
+function selectedDashboardPerms(){ return Array.from($('#a_dashboard_permissions').querySelectorAll('input:checked')).map(x=>x.value); }
 function syncAccountRole(){
   const isAdmin = $('#a_role').value === 'admin';
   $('#a_permissions').querySelectorAll('input').forEach(input => { input.checked = isAdmin || input.checked; input.disabled = isAdmin; });
@@ -919,9 +931,10 @@ async function loadUsers(){
 function roleLabel(role){ return role==='admin' ? '管理员' : '普通账号'; }
 function renderUsers(){
   const tb = $('#accountsTable tbody');
-  if(!accounts.length){ tb.innerHTML = '<tr><td colspan="7" class="empty">暂无账号</td></tr>'; return; }
+  if(!accounts.length){ tb.innerHTML = '<tr><td colspan="8" class="empty">暂无账号</td></tr>'; return; }
   tb.innerHTML = accounts.map(u=>{
     const perms = (u.permissions||[]).map(p=>`<span class="perm-tag">${PERMISSION_LABELS[p]||p}</span>`).join('') || '<span class="hint">无后台模块</span>';
+    const dashPerms = (u.dashboardPermissions||[]).map(p=>`<span class="perm-tag">${DASHBOARD_LABELS[p]||p}</span>`).join('') || '<span class="hint">无首页板块</span>';
     const created = u.createdAt ? new Date(u.createdAt.replace(' ','T')+'Z').toLocaleDateString('zh-CN') : '-';
     const self = currentUser && currentUser.username === u.username;
     return `<tr>
@@ -929,6 +942,7 @@ function renderUsers(){
       <td>${esc(u.displayName||'')}</td>
       <td>${roleLabel(u.role)}</td>
       <td><div class="perm-list">${perms}</div></td>
+      <td><div class="perm-list">${dashPerms}</div></td>
       <td><span class="status-dot ${u.isActive?'on':'off'}">${u.isActive?'启用':'禁用'}</span></td>
       <td>${created}</td>
       <td><div class="row-actions">
@@ -952,6 +966,7 @@ function openAccountModal(id){
   $('#a_role').value = u ? u.role : 'viewer';
   $('#a_active').checked = u ? !!u.isActive : true;
   renderPermChecks(u ? u.permissions : ['orders']);
+  renderDashboardChecks(u ? u.dashboardPermissions : null);
   $('#accountModal').classList.add('show');
 }
 async function submitAccount(){
@@ -962,6 +977,7 @@ async function submitAccount(){
     role: $('#a_role').value,
     isActive: $('#a_active').checked,
     permissions: selectedPerms(),
+    dashboardPermissions: selectedDashboardPerms(),
   };
   const password = $('#a_password').value;
   if(!id) body.password = password;
@@ -985,7 +1001,7 @@ async function resetPassword(id){
 async function toggleUser(id){
   const u = accounts.find(x=>String(x.id)===String(id)); if(!u) return;
   try{
-    const r = await api('/api/users/'+id,'PUT',{displayName:u.displayName,role:u.role,permissions:u.permissions,isActive:!u.isActive});
+    const r = await api('/api/users/'+id,'PUT',{displayName:u.displayName,role:u.role,permissions:u.permissions,dashboardPermissions:u.dashboardPermissions,isActive:!u.isActive});
     Object.assign(u, r.data); renderUsers(); toast(u.isActive?'账号已启用':'账号已禁用');
   }catch(e){ toast('状态更新失败', true); }
 }

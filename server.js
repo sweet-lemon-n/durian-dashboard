@@ -20,6 +20,8 @@ const {
   incrementTokenVersion,
   normalizePermissions,
   stringifyPermissions,
+  normalizeDashboardPermissions,
+  stringifyDashboardPermissions,
 } = require('./lib/db');
 const {
   generateToken,
@@ -295,6 +297,7 @@ app.post('/api/auth/login', async (req, res) => {
         displayName: user.display_name,
         role: user.role,
         permissions: normalizePermissions(user.role, user.permissions),
+        dashboardPermissions: normalizeDashboardPermissions(user.dashboard_permissions),
       },
     });
   } catch (err) {
@@ -336,6 +339,7 @@ app.get('/api/auth/me', (req, res) => {
       displayName: req.user.displayName,
       role: req.user.role,
       permissions: req.user.permissions || [],
+      dashboardPermissions: req.user.dashboardPermissions || [],
     },
   });
 });
@@ -355,6 +359,7 @@ function publicUser(user) {
     isActive: !!user.is_active,
     tokenVersion: user.token_version,
     permissions: normalizePermissions(user.role, user.permissions),
+    dashboardPermissions: normalizeDashboardPermissions(user.dashboard_permissions),
     createdAt: user.created_at,
     updatedAt: user.updated_at,
   };
@@ -362,7 +367,7 @@ function publicUser(user) {
 
 function getUserByIdSafe(db, id) {
   return db.prepare(
-    'SELECT id, username, display_name, role, is_active, token_version, permissions, created_at, updated_at FROM users WHERE id = ?'
+    'SELECT id, username, display_name, role, is_active, token_version, permissions, dashboard_permissions, created_at, updated_at FROM users WHERE id = ?'
   ).get(id);
 }
 
@@ -375,6 +380,7 @@ app.get('/api/users', canManageAccounts, (req, res) => {
     isActive: !!user.is_active,
     tokenVersion: user.token_version,
     permissions: user.permissions,
+    dashboardPermissions: user.dashboardPermissions,
     createdAt: user.created_at,
     updatedAt: user.updated_at,
   }));
@@ -383,7 +389,7 @@ app.get('/api/users', canManageAccounts, (req, res) => {
 
 app.post('/api/users', canManageAccounts, async (req, res) => {
   try {
-    const { username, password, displayName, role, permissions } = req.body || {};
+    const { username, password, displayName, role, permissions, dashboardPermissions } = req.body || {};
     const cleanUsername = String(username || '').trim();
     if (!cleanUsername || !password) {
       return res.status(400).json({ success: false, error: '用户名和密码不能为空' });
@@ -396,6 +402,7 @@ app.post('/api/users', canManageAccounts, async (req, res) => {
       displayName: String(displayName || cleanUsername).trim(),
       role: role === 'admin' ? 'admin' : 'viewer',
       permissions,
+      dashboardPermissions,
     });
     res.status(201).json({ success: true, data: publicUser(getUserByIdSafe(db, created.id)) });
   } catch (err) {
@@ -431,6 +438,7 @@ app.put('/api/users/:id', canManageAccounts, (req, res) => {
     role,
     is_active: isActive ? 1 : 0,
     permissions: stringifyPermissions(role, req.body.permissions),
+    dashboard_permissions: stringifyDashboardPermissions(req.body.dashboardPermissions),
   };
   updateUser(db, userId, fields);
   if (role !== existing.role || isActive !== !!existing.is_active || fields.permissions !== existing.permissions) {
@@ -521,6 +529,10 @@ app.get('/api/config/info', requirePermission('smartsheet'), async (req, res) =>
  */
 app.get('/api/dashboard', async (req, res) => {
   try {
+    if (!(req.user.dashboardPermissions || []).includes('gantt')) {
+      return res.status(403).json({ success: false, error: '无温度甘特图查看权限' });
+    }
+
     const schema = await getDocumentSchema();
     const { tempSheet, infoSheet } = schema.detected;
 
