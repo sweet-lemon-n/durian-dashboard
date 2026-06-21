@@ -1509,16 +1509,8 @@ app.listen(PORT, () => {
   console.log(`   DOCID: ${DOCID || '（未配置）'}`);
   console.log(`   温度告警阈值: ${process.env.TEMP_MIN || 2}°C ~ ${process.env.TEMP_MAX || 8}°C\n`);
 
-  // 启动新闻自动抓取（数据驱动 + 外部源）
-  try {
-    const { read } = require('./lib/content-store');
-    const { aggregate } = require('./lib/board-routes');
-    const db = read();
-    initNewsFetcher(aggregate(db));
-  } catch (e) {
-    console.warn('[server] 新闻抓取初始化失败（不影响主服务）:', e.message);
-    initNewsFetcher(null);
-  }
+  // 启动新闻自动抓取
+  initNewsFetcher();
 });
 
 // 导出供测试
