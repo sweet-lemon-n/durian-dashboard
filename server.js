@@ -77,6 +77,12 @@ function parseImportDate(value) {
   return Number.isNaN(d.getTime()) ? null : d;
 }
 
+function formatImportDate(d) {
+  if (!d || Number.isNaN(d.getTime())) return '';
+  const pad = n => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
 function makeCellValue(field, rawValue) {
   const type = String(field?.field_type || field?.type || '').toUpperCase();
   const title = field?.field_title || field?.title || '';
@@ -170,23 +176,30 @@ async function parseImportWithAi(text, schema) {
   const fieldMap = {};
   (sheet.fields || []).forEach(f => { fieldMap[f.field_title] = f; });
   const values = {};
-  const previewFields = [];
+  const aiFieldMap = {};
   const aiFields = Array.isArray(ai.fields) ? ai.fields : [];
   aiFields.forEach(item => {
     const title = String(item.title || '').trim();
     const field = fieldMap[title];
     if (!field || item.value === undefined || item.value === null || item.value === '') return;
-    const cellValue = makeCellValue(field, item.value);
-    if (cellValue === undefined) return;
-    values[title] = cellValue;
-    previewFields.push({
+    aiFieldMap[title] = item;
+  });
+  const previewFields = (sheet.fields || []).map(field => {
+    const title = field.field_title;
+    const item = aiFieldMap[title];
+    const value = item ? item.value : (title === '更新时间' ? formatImportDate(new Date()) : '');
+    const cellValue = makeCellValue(field, value);
+    if (cellValue !== undefined) values[title] = cellValue;
+    return {
       title,
-      value: item.value,
+      value,
       fieldId: field.field_id,
       fieldType: field.field_type,
-      confidence: Number(item.confidence) || 0.75,
-      reason: String(item.reason || ''),
-    });
+      confidence: item ? (Number(item.confidence) || 0.75) : (title === '更新时间' ? 0.5 : 0),
+      reason: item ? String(item.reason || '') : (title === '更新时间' ? '未提供更新时间，默认当前时间，可手动修改' : '未识别，可手动补充'),
+      inferred: !item && title === '更新时间',
+      missing: !item && title !== '更新时间',
+    };
   });
   return {
     sheet: { sheetId: sheet.sheet_id, title: sheet.title },

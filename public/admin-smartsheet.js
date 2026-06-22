@@ -483,7 +483,7 @@ function renderAiImportPreview(data) {
       <div>解析器：<b>${escHtml(data.parser || 'deepseek')}</b></div>
       <div>目标子表：<b>${escHtml(data.sheet.title)}</b> <span style="color:var(--text-muted)">(${escHtml(data.sheet.sheetId)})</span></div>
       <table>
-        <thead><tr><th>字段</th><th>识别值（可修改）</th><th>字段类型</th><th>置信度</th></tr></thead>
+        <thead><tr><th>字段</th><th>识别/补充值（可修改）</th><th>字段类型</th><th>置信度</th></tr></thead>
         <tbody>${rows || '<tr><td colspan="4">暂无可写入字段</td></tr>'}</tbody>
       </table>
       ${warnings}
