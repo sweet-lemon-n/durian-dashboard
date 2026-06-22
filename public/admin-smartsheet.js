@@ -75,6 +75,47 @@ async function ensureSheetsLoaded() {
   return cachedSheets;
 }
 
+async function refreshSheetsForImport() {
+  await apiFetch('/api/schema/refresh', { method: 'POST' });
+  cachedSheets = [];
+  await ensureSheetsLoaded();
+  await populateSheetSelects();
+  return cachedSheets;
+}
+
+function fieldTypeLabel(type) {
+  const t = String(type || '').toUpperCase();
+  if (t.includes('TEXT')) return '文本';
+  if (t.includes('NUMBER')) return '数字';
+  if (t.includes('DATE')) return '日期时间';
+  if (t.includes('SINGLE_SELECT')) return '单选';
+  if (t.includes('MULTI_SELECT')) return '多选';
+  if (t.includes('RECORD') || t.includes('RELATION') || t.includes('LINK')) return '关联记录';
+  if (t.includes('USER')) return '人员';
+  if (t.includes('CHECKBOX')) return '勾选';
+  if (t.includes('PHONE')) return '电话';
+  if (t.includes('URL')) return '链接';
+  return type ? String(type).replace(/^FIELD_TYPE_/, '') : '未知';
+}
+
+function isDateField(type, title) {
+  const t = String(type || '').toUpperCase();
+  return t.includes('DATE') || (!t && ['放柜时间', '更新时间'].includes(title));
+}
+
+function isUnsupportedImportField(type) {
+  const t = String(type || '').toUpperCase();
+  return t.includes('RECORD') || t.includes('RELATION') || t.includes('LINK') || t.includes('USER') || t.includes('CHECKBOX');
+}
+
+function toDatetimeLocalValue(value) {
+  if (!value) return '';
+  const d = new Date(String(value).replace(' ', 'T'));
+  if (isNaN(d.getTime())) return '';
+  const pad = n => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
 async function populateSheetSelects() {
   const sheets = await ensureSheetsLoaded();
   ['recSheetId', 'fldSheetId', 'viewSheetId', 'grpSheetId', 'aiImportSheetId'].forEach(selId => {
@@ -472,14 +513,21 @@ function renderAiImportPreview(data) {
   if (sheet) sheet.value = data.sheet.sheetId || '';
   if (mode) mode.value = data.mode === 'update' ? 'update' : 'add';
   if (recordId && data.recordId) recordId.value = data.recordId;
-  const rows = (data.fields || []).map(f => `
-    <tr>
-      <td>${escHtml(f.title)} <small style="color:var(--text-muted)">(${escHtml(f.fieldType || '-')})</small></td>
-      <td><input data-ai-field="${escAttr(f.title)}" value="${escAttr(f.value)}"></td>
-      <td><code>${escHtml(f.fieldType || '-')}</code></td>
-      <td>${Math.round((f.confidence || 0) * 100)}%${f.reason ? `<br><small>${escHtml(f.reason)}</small>` : ''}</td>
-    </tr>
-  `).join('');
+  const rows = (data.fields || []).map(f => {
+    const typeText = fieldTypeLabel(f.fieldType);
+    const unsupported = isUnsupportedImportField(f.fieldType);
+    const inputHtml = isDateField(f.fieldType, f.title)
+      ? `<input data-ai-field="${escAttr(f.title)}" type="datetime-local" value="${escAttr(toDatetimeLocalValue(f.value))}"><input data-ai-field-manual="${escAttr(f.title)}" value="${escAttr(f.value)}" placeholder="也可手动输入 yyyy-mm-dd hh:mm" style="margin-top:4px">`
+      : `<input data-ai-field="${escAttr(f.title)}" value="${escAttr(f.value)}" ${unsupported ? 'disabled' : ''}>`;
+    return `
+      <tr>
+        <td>${escHtml(f.title)} <small style="color:var(--text-muted)">(${escHtml(typeText)})</small></td>
+        <td>${inputHtml}${unsupported ? '<div style="color:var(--warning);font-size:12px;margin-top:4px">关联/特殊字段暂不支持 API 直接写入，请在智能表内维护</div>' : ''}</td>
+        <td><code>${escHtml(typeText)}</code></td>
+        <td>${Math.round((f.confidence || 0) * 100)}%${f.reason ? `<br><small>${escHtml(f.reason)}</small>` : ''}</td>
+      </tr>
+    `;
+  }).join('');
   const warnings = data.warnings && data.warnings.length
     ? `<div style="color:var(--warning);margin-top:8px">${data.warnings.map(escHtml).join('<br>')}</div>`
     : '';
@@ -506,6 +554,7 @@ function formatLocalDateTime(d) {
 
 async function buildManualAiImportPreview() {
   const { sheet, mode } = getAiImportEls();
+  await refreshSheetsForImport();
   const sheetId = sheet && sheet.value;
   if (!sheetId) {
     setAiImportOutput('请先选择目标子表', true);
@@ -547,6 +596,7 @@ async function parseAiImport() {
   renderAiImportPreview(null);
   setAiImportOutput('正在调用 DeepSeek 解析，暂不写入智能表...');
   try {
+    await refreshSheetsForImport();
     const resp = await apiFetch('/api/ai-import/parse', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -574,7 +624,9 @@ async function commitAiImport() {
   const values = {};
   document.querySelectorAll('[data-ai-field]').forEach(input => {
     const key = input.getAttribute('data-ai-field');
-    const val = input.value.trim();
+    const manual = Array.from(document.querySelectorAll('[data-ai-field-manual]'))
+      .find(el => el.getAttribute('data-ai-field-manual') === key);
+    const val = (manual && manual.value.trim()) || input.value.trim();
     if (key && val) values[key] = val;
   });
   if (!Object.keys(values).length) {

@@ -83,15 +83,23 @@ function formatImportDate(d) {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
 
+function isKnownWritableField(field, rawValue) {
+  const type = String(field?.field_type || field?.type || '').toUpperCase();
+  const title = field?.field_title || field?.title || '';
+  if (!type) return ['设定温度', '送风温度', '回风温度', '放柜时间', '更新时间'].includes(title) || rawValue !== '';
+  return type.includes('TEXT') || type.includes('NUMBER') || type.includes('DATE') || type.includes('SELECT');
+}
+
 function makeCellValue(field, rawValue) {
   const type = String(field?.field_type || field?.type || '').toUpperCase();
   const title = field?.field_title || field?.title || '';
   if (rawValue === null || rawValue === undefined || rawValue === '') return undefined;
-  if (type.includes('NUMBER') || ['设定温度', '送风温度', '回风温度'].includes(title)) {
+  if (!isKnownWritableField(field, rawValue)) return undefined;
+  if (type.includes('NUMBER') || (!type && ['设定温度', '送风温度', '回风温度'].includes(title))) {
     const n = Number(rawValue);
     return Number.isFinite(n) ? n : undefined;
   }
-  if (type.includes('DATE') || ['放柜时间', '更新时间'].includes(title)) {
+  if (type.includes('DATE') || (!type && ['放柜时间', '更新时间'].includes(title))) {
     const d = rawValue instanceof Date ? rawValue : parseImportDate(rawValue);
     return d && !Number.isNaN(d.getTime()) ? String(d.getTime()) : undefined;
   }
@@ -195,6 +203,7 @@ async function parseImportWithAi(text, schema, options = {}) {
     const item = aiFieldMap[title];
     const value = item ? item.value : (title === '更新时间' ? formatImportDate(new Date()) : '');
     const cellValue = makeCellValue(field, value);
+    const writable = value === '' || cellValue !== undefined;
     if (cellValue !== undefined) values[title] = cellValue;
     return {
       title,
@@ -205,6 +214,7 @@ async function parseImportWithAi(text, schema, options = {}) {
       reason: item ? String(item.reason || '') : (title === '更新时间' ? '未提供更新时间，默认当前时间，可手动修改' : '未识别，可手动补充'),
       inferred: !item && title === '更新时间',
       missing: !item && title !== '更新时间',
+      writable,
     };
   });
   return {
@@ -1331,6 +1341,7 @@ app.post('/api/ai-import/parse', requirePermission('smartsheet'), async (req, re
       throw new Error('截图识别需要先配置 OCR/视觉 AI 服务；当前请把截图文字复制到文本框后解析');
     }
     if (!String(text || '').trim()) throw new Error('请粘贴需要识别的文本');
+    clearSchemaCache();
     const schema = await getDocumentSchema();
     const preview = await parseImportWithAi(text, schema, { sheetId, mode });
     res.json({ success: true, data: preview });
@@ -1349,6 +1360,7 @@ app.post('/api/ai-import/commit', requirePermission('smartsheet'), async (req, r
     if (!sheetId) throw new Error('缺少 sheetId');
     if (!values || typeof values !== 'object' || Array.isArray(values)) throw new Error('缺少待写入字段');
     if (mode === 'update' && !recordId) throw new Error('修改模式缺少 recordId');
+    clearSchemaCache();
     const schema = await getDocumentSchema();
     const sheet = (schema.sheets || []).find(s => s.sheet_id === sheetId);
     if (!sheet) throw new Error('目标子表不存在或无权限访问');
