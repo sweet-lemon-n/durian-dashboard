@@ -52,6 +52,9 @@ let schemaCache = {
 };
 
 const SCHEMA_CACHE_TTL = 5 * 60 * 1000; // 5 分钟
+const COUNTRY_NAME_MAP = { TH: '泰国', VN: '越南' };
+const CATEGORY_LABEL_MAP = { FRESH: ['鲜果', '鲜'], FROZEN: ['冻果', '冻肉', '冻'] };
+const DRILL_CONTAINER_SHEETS = ['温度记录', '陆运明细', '海运明细', '分柜明细表', '国内段明细', '海运国内', '订单主表'];
 
 function normalizeImportText(text) {
   return String(text || '')
@@ -514,6 +517,167 @@ app.use('/api', (req, res, next) => {
 // ---- 看板内容 API（/api/aggregate + orders/logistics/news CRUD）----
 // 挂在鉴权 guard 之后：GET 默认登录可读，写操作在 board-routes 内各自检查模块权限
 app.use('/api', boardRouter);
+
+/**
+ * GET /api/drilldown/order
+ * 按看板订单行读取智能表中的订单主表 + 分柜明细表明细。
+ */
+app.get('/api/drilldown/order', async (req, res) => {
+  try {
+    const country = String(req.query.country || '').toUpperCase();
+    const category = String(req.query.category || '').toUpperCase();
+    const brand = String(req.query.brand || '').trim();
+    const factory = extractFactoryFromBrand(brand);
+
+    if (!country || !category || !factory) {
+      return res.status(400).json({ success: false, error: '缺少 country、category 或 brand 参数' });
+    }
+
+    clearSchemaCache();
+    const schema = await getDocumentSchema();
+    const orderSheet = findSheetByTitle(schema.sheets, '订单主表');
+    const detailSheet = findSheetByTitle(schema.sheets, '分柜明细表');
+    if (!orderSheet || !detailSheet) {
+      return res.json({
+        success: true,
+        data: {
+          type: 'order',
+          source: 'smart_sheet',
+          query: { country, category, brand, factory },
+          orders: [],
+          containers: [],
+          summary: { orders: 0, boxes: 0, containers: 0 },
+          message: '未找到订单主表或分柜明细表',
+        },
+      });
+    }
+
+    const [orderRecords, detailRecords] = await Promise.all([
+      wecom.getAllRecords(DOCID, orderSheet.sheet_id),
+      wecom.getAllRecords(DOCID, detailSheet.sheet_id),
+    ]);
+
+    const wantedCountry = COUNTRY_NAME_MAP[country] || country;
+    const orderNoField = findFieldStrict(orderSheet.fieldTitles, ['订单编号', '订单号', 'order']);
+    const countryField = findFieldStrict(orderSheet.fieldTitles, ['国家', '产地', 'country']);
+    const freshField = findFieldStrict(orderSheet.fieldTitles, ['鲜果(柜数)', '鲜果', 'fresh']);
+    const frozenField = findFieldStrict(orderSheet.fieldTitles, ['冻果(柜数)', '冻果', '冻肉', 'frozen']);
+    const countField = category === 'FROZEN' ? frozenField : freshField;
+    if (!orderNoField || !countryField || !countField) {
+      throw new Error('订单主表缺少订单编号、国家或对应品类柜数字段');
+    }
+
+    const matchedOrdersRaw = orderRecords.filter(record => {
+      const orderNo = String(wecom.getRecordValue(record, orderNoField) || '');
+      const recordCountry = String(wecom.getRecordValue(record, countryField) || '');
+      const boxes = Number(wecom.getRecordValue(record, countField) || 0);
+      return orderNo.startsWith(`${factory}-`) && recordCountry.includes(wantedCountry) && boxes > 0;
+    });
+    const matchedOrderNos = new Set(matchedOrdersRaw.map(r => String(wecom.getRecordValue(r, orderNoField) || '')).filter(Boolean));
+
+    const detailOrderNoField = findFieldStrict(detailSheet.fieldTitles, ['订单编号', '订单号', 'order']);
+    const detailCategoryField = findFieldStrict(detailSheet.fieldTitles, ['产品品类', '品类', 'category']);
+    if (!detailOrderNoField || !detailCategoryField) {
+      throw new Error('分柜明细表缺少订单编号或产品品类字段');
+    }
+    const labels = CATEGORY_LABEL_MAP[category] || [];
+    const matchedDetailsRaw = detailRecords.filter(record => {
+      const orderNo = String(wecom.getRecordValue(record, detailOrderNoField) || '');
+      const catText = String(wecom.getRecordValue(record, detailCategoryField) || '');
+      return matchedOrderNos.has(orderNo) && labels.some(label => catText.includes(label));
+    });
+
+    const boxTotal = matchedOrdersRaw.reduce((sum, record) => sum + Number(wecom.getRecordValue(record, countField) || 0), 0);
+
+    res.set('Cache-Control', 'no-store');
+    res.json({
+      success: true,
+      data: {
+        type: 'order',
+        source: 'smart_sheet',
+        query: { country, category, brand, factory },
+        sheets: [
+          sheetMetaForDrilldown(orderSheet),
+          sheetMetaForDrilldown(detailSheet),
+        ],
+        orders: matchedOrdersRaw.map(r => flattenRecordForDrilldown(r, orderSheet.fields)),
+        containers: matchedDetailsRaw.map(r => flattenRecordForDrilldown(r, detailSheet.fields)),
+        summary: {
+          orders: matchedOrdersRaw.length,
+          boxes: boxTotal,
+          containers: matchedDetailsRaw.length,
+        },
+      },
+    });
+  } catch (err) {
+    console.error('[drilldown/order] 错误:', err);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+/**
+ * GET /api/drilldown/container
+ * 按柜号读取温度、物流、分柜等智能表明细。
+ */
+app.get('/api/drilldown/container', async (req, res) => {
+  try {
+    const container = String(req.query.container || '').trim();
+    if (!container || container === '-') {
+      return res.status(400).json({ success: false, error: '缺少 container 参数' });
+    }
+
+    clearSchemaCache();
+    const schema = await getDocumentSchema();
+    const targetSheets = schema.sheets.filter(sheet => DRILL_CONTAINER_SHEETS.includes(sheet.title));
+
+    const sections = [];
+    for (const sheet of targetSheets) {
+      const containerField = findFieldStrict(sheet.fieldTitles, ['柜号', '柜编号', '箱号', 'container']);
+      if (!containerField) continue;
+
+      try {
+        const records = await wecom.getAllRecords(DOCID, sheet.sheet_id);
+        const matched = records
+          .filter(record => drillValueMatches(wecom.getRecordValue(record, containerField), container))
+          .slice(0, 100);
+        if (matched.length) {
+          sections.push({
+            sheetTitle: sheet.title,
+            sheetId: sheet.sheet_id,
+            fields: sheet.fields.map(fieldMetaForDrilldown),
+            records: matched.map(r => flattenRecordForDrilldown(r, sheet.fields)),
+          });
+        }
+      } catch (err) {
+        sections.push({
+          sheetTitle: sheet.title,
+          sheetId: sheet.sheet_id,
+          fields: sheet.fields.map(fieldMetaForDrilldown),
+          records: [],
+          error: err.message,
+        });
+      }
+    }
+
+    res.set('Cache-Control', 'no-store');
+    res.json({
+      success: true,
+      data: {
+        type: 'container',
+        source: 'smart_sheet',
+        container,
+        sections,
+        summary: {
+          sheets: sections.length,
+          records: sections.reduce((sum, section) => sum + (section.records || []).length, 0),
+        },
+      },
+    });
+  } catch (err) {
+    console.error('[drilldown/container] 错误:', err);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
 
 /**
  * GET /api/auth/me
@@ -1695,6 +1859,65 @@ app.post('/api/smartsheet/groups/update', requirePermission('smartsheet'), async
 });
 
 // ---- 辅助函数 ----
+
+function findSheetByTitle(sheets, title) {
+  return (sheets || []).find(s => s.title === title) || null;
+}
+
+function findFieldStrict(fieldTitles, keywords) {
+  const titles = fieldTitles || [];
+  for (const kw of keywords) {
+    const match = titles.find(t => String(t).toLowerCase().includes(String(kw).toLowerCase()));
+    if (match) return match;
+  }
+  return null;
+}
+
+function extractFactoryFromBrand(brand) {
+  const first = String(brand || '').trim().split(/\s+/)[0] || '';
+  const cleaned = first.replace(/[^\w-]/g, '').toUpperCase();
+  return cleaned || null;
+}
+
+function fieldMetaForDrilldown(field) {
+  return {
+    fieldId: field.field_id,
+    title: field.field_title,
+    type: field.field_type,
+  };
+}
+
+function sheetMetaForDrilldown(sheet) {
+  return {
+    sheetId: sheet.sheet_id,
+    title: sheet.title,
+    fields: (sheet.fields || []).map(fieldMetaForDrilldown),
+  };
+}
+
+function flattenRecordForDrilldown(record, fields) {
+  const values = {};
+  (fields || []).forEach(field => {
+    const title = field.field_title;
+    values[title] = wecom.getRecordValue(record, title);
+  });
+  return {
+    recordId: record.record_id,
+    values,
+  };
+}
+
+function drillValueMatches(value, query) {
+  const q = String(query || '').trim().toLowerCase();
+  if (!q) return false;
+  if (Array.isArray(value)) {
+    return value.some(v => drillValueMatches(v, query));
+  }
+  if (value && typeof value === 'object') {
+    return Object.values(value).some(v => drillValueMatches(v, query));
+  }
+  return String(value == null ? '' : value).trim().toLowerCase().includes(q);
+}
 
 /**
  * 在字段标题列表中按关键词优先级查找匹配字段

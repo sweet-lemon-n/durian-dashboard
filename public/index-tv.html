@@ -256,6 +256,28 @@
   #ganttContainer table.gantt-table td{padding:6px 4px;text-align:center;font-size:1.15vh;font-weight:600;border-bottom:1px solid var(--line2);min-width:44px;}
   #ganttContainer .gantt-row-label{text-align:left;font-weight:700;color:var(--txt);background:var(--panel);position:sticky;left:0;white-space:nowrap;}
   #ganttContainer .gantt-empty-cell{color:var(--txt3);background:transparent;font-weight:400;}
+  .drill-link{appearance:none;border:0;background:transparent;color:#7dd3fc;font:inherit;font-weight:900;
+    padding:0;text-decoration:underline;text-decoration-thickness:1px;text-underline-offset:3px;cursor:pointer;}
+  .drill-link:hover{color:#bae6fd;text-shadow:0 0 10px rgba(125,211,252,.35);}
+  .drill-mask{position:fixed;inset:0;background:rgba(2,6,23,.74);z-index:120;display:none;align-items:center;justify-content:center;padding:3vh 3vw;}
+  .drill-mask.show{display:flex;}
+  .drill-modal{width:min(1180px,94vw);max-height:88vh;background:var(--panel);border:1px solid var(--line);
+    border-radius:1vh;box-shadow:0 24px 80px rgba(0,0,0,.55);display:flex;flex-direction:column;overflow:hidden;}
+  .drill-head{display:flex;align-items:center;gap:1vw;padding:1.2vh 1.1vw;border-bottom:1px solid var(--line);background:var(--panel2);}
+  .drill-title{font-size:1.5vh;font-weight:900;color:var(--txt);}
+  .drill-sub{margin-left:auto;color:var(--txt3);font-size:1vh;}
+  .drill-close{border:1px solid var(--line);background:rgba(255,255,255,.05);color:var(--txt);border-radius:.5vh;width:3vh;height:3vh;cursor:pointer;font-size:1.7vh;}
+  .drill-body{padding:1.2vh 1.1vw;overflow:auto;color:var(--txt);}
+  .drill-summary{display:flex;gap:.6vw;flex-wrap:wrap;margin-bottom:1vh;}
+  .drill-chip{border:1px solid var(--line);background:rgba(125,211,252,.08);color:#bae6fd;border-radius:.5vh;padding:.45vh .6vw;font-size:1.05vh;}
+  .drill-section{margin-top:1vh;}
+  .drill-section h3{font-size:1.22vh;margin:0 0 .55vh;color:var(--accent);display:flex;gap:.45vw;align-items:center;}
+  .drill-table-wrap{overflow:auto;border:1px solid var(--line);border-radius:.7vh;background:rgba(255,255,255,.02);}
+  .drill-table{width:100%;border-collapse:collapse;min-width:720px;}
+  .drill-table th,.drill-table td{padding:.6vh .5vw;border-bottom:1px solid var(--line2);font-size:1.04vh;text-align:left;vertical-align:top;}
+  .drill-table th{color:var(--txt2);font-weight:800;background:rgba(255,255,255,.04);white-space:nowrap;}
+  .drill-table td{color:var(--txt);max-width:240px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  .drill-empty{color:var(--txt3);font-size:1.2vh;text-align:center;padding:3vh 1vw;}
 
   /* ---- Loader ---- */
   #loader{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;
@@ -269,6 +291,12 @@
 <body data-theme="amber">
 
 <div id="loader"><div class="spin"></div><div>Loading…</div></div>
+<div class="drill-mask" id="drillMask" onclick="if(event.target===this)closeDrillModal()">
+  <div class="drill-modal">
+    <div class="drill-head"><div class="drill-title" id="drillTitle">明细</div><div class="drill-sub" id="drillSub">智能表实时数据</div><button class="drill-close" onclick="closeDrillModal()" title="关闭">×</button></div>
+    <div class="drill-body" id="drillBody"></div>
+  </div>
+</div>
 
 <div class="board">
   <div class="top">
@@ -322,6 +350,9 @@ const esc = s => String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&l
 function md(s){ return esc(s).replace(/\*\*(.+?)\*\*/g,'<b>$1</b>'); }
 const num = n => Number(n)||0;
 const gotoLogin = () => { window.location.href = '/login?redirect=' + encodeURIComponent(window.location.pathname); };
+function jsArg(v){ return JSON.stringify(String(v==null?'':v)); }
+function orderDrillLink(country, category, brand){ return `<button class="drill-link" onclick="openOrderDrill(${jsArg(country)},${jsArg(category)},${jsArg(brand)})">${esc(brand)}</button>`; }
+function containerDrillLink(container){ const c=String(container||''); return c && c !== '-' ? `<button class="drill-link mono" onclick="openContainerDrill(${jsArg(c)})">${esc(c)}</button>` : esc(c||'-'); }
 
 // ---- Theme switcher ----
 (function(){
@@ -382,7 +413,7 @@ function renderCountry(el, info, country){
       const b = seg(rDone/rt*100,'s-signed',rDone)+(isTH?'':seg(num(r.delivered)/rt*100,'s-dlv',r.delivered))
         +seg(num(r.transit)/rt*100,'s-transit',r.transit)+seg(num(r.port)/rt*100,'s-port',r.port)
         +seg(num(r.pending)/rt*100,'s-pending',r.pending);
-      return `<div class="row"><div class="nm">${esc(r.brand)}<small>${num(r.orders)}单/${num(r.boxes)}柜</small></div>
+      return `<div class="row"><div class="nm">${orderDrillLink(country, cat, r.brand)}<small>${num(r.orders)}单/${num(r.boxes)}柜</small></div>
         <div class="bar">${b||'<span class="seg s-pending" style="width:100%">待发</span>'}</div>
         <div class="cap">${isTH?'交付':'签收'} <b class="${rRate>0?'c-signed':'c-pending'}">${rRate.toFixed(1)}%</b></div></div>`;
     }).join('');
@@ -399,9 +430,9 @@ function renderCountry(el, info, country){
 function renderLogistics(el, L){
   const k=L.kpis||{}, pd=L.portDelays||[], tc=L.inTransitContainers||[];
   const dCls=d=>d>=3?'dev-alarm':(d>=2?'dev-warn':'dev-ok');
-  const pdRows=pd.map(r=>`<tr><td class="mono">${esc(r.container)}</td><td>${esc(r.route)}</td><td><span class="pill ${r.category==='FROZEN'?'frozen':'fresh'}">${r.category==='FROZEN'?'冻果':'鲜果'}</span></td><td class="${dCls(num(r.delayDays))}">${num(r.delayDays).toFixed(1)}天</td><td>${esc(r.reason)}</td></tr>`).join('');
+  const pdRows=pd.map(r=>`<tr><td>${containerDrillLink(r.container)}</td><td>${esc(r.route)}</td><td><span class="pill ${r.category==='FROZEN'?'frozen':'fresh'}">${r.category==='FROZEN'?'冻果':'鲜果'}</span></td><td class="${dCls(num(r.delayDays))}">${num(r.delayDays).toFixed(1)}天</td><td>${esc(r.reason)}</td></tr>`).join('');
   const sPill=(s,n)=>s==='ALARM'?'<span class="pill alarm">▲'+esc(n||'异常')+'</span>':(s==='WARN'?'<span class="pill warn">'+esc(n||'注意')+'</span>':'<span class="pill ok">'+esc(n||'正常')+'</span>');
-  const tcRows=tc.map(r=>{const dev=num(r.returnTemp)-num(r.setTemp);return`<tr><td class="mono">${esc(r.container)}</td><td>${esc(r.brand)}</td><td class="mono">${num(r.setTemp)}°/${num(r.returnTemp)}°</td><td class="${dCls(dev)}">${dev>=0?'+':''}${dev.toFixed(1)}°</td><td>${esc(r.location)}</td><td>${sPill(r.status,r.note)}</td></tr>`;}).join('');
+  const tcRows=tc.map(r=>{const dev=num(r.returnTemp)-num(r.setTemp);return`<tr><td>${containerDrillLink(r.container)}</td><td>${esc(r.brand)}</td><td class="mono">${num(r.setTemp)}°/${num(r.returnTemp)}°</td><td class="${dCls(dev)}">${dev>=0?'+':''}${dev.toFixed(1)}°</td><td>${esc(r.location)}</td><td>${sPill(r.status,r.note)}</td></tr>`;}).join('');
   const alarms=tc.filter(r=>r.status==='ALARM').length;
   el.innerHTML=`
     <div class="l-head"><span class="l-ico">🚚</span><span class="l-title">物流监控<span class="l-sub">实时 · LOGISTICS</span></span></div>
@@ -440,6 +471,54 @@ function renderNews(el, thArr, vnArr, autoArr, fetchedAt){
   const autoItems = (autoArr||[]).slice(0, 12);
   el.innerHTML = `<div class="n-head">📢 自动新闻 · NEWS <span class="n-updated">${newsTimeText(fetchedAt)}</span></div><div class="n-body-wrap">${sec('🌏 榴莲与东南亚影响', 'global', autoItems)}</div>`;
 }
+
+async function drillFetch(url){
+  const resp = await fetch(url, { cache:'no-store' });
+  if(resp.status===401) return gotoLogin();
+  const json = await resp.json();
+  if(!json.success) throw new Error(json.error || '读取明细失败');
+  return json.data;
+}
+function showDrillModal(title, sub, html){
+  $('drillTitle').textContent = title;
+  $('drillSub').textContent = sub || '智能表实时数据';
+  $('drillBody').innerHTML = html;
+  $('drillMask').classList.add('show');
+}
+function closeDrillModal(){ $('drillMask').classList.remove('show'); }
+function drillVal(v){
+  if(v==null || v==='') return '-';
+  if(Array.isArray(v)) return v.map(drillVal).join('、');
+  if(typeof v==='object') return Object.values(v).map(drillVal).filter(Boolean).join(' / ') || '-';
+  return String(v);
+}
+function drillTable(title, records){
+  if(!records || !records.length) return `<div class="drill-section"><h3>${esc(title)}</h3><div class="drill-empty">暂无匹配记录</div></div>`;
+  const keys = Array.from(new Set(records.flatMap(r => Object.keys(r.values || {})))).filter(k => records.some(r => drillVal((r.values||{})[k]) !== '-'));
+  const head = keys.map(k => `<th>${esc(k)}</th>`).join('');
+  const rows = records.map(r => `<tr>${keys.map(k => `<td title="${esc(drillVal((r.values||{})[k]))}">${esc(drillVal((r.values||{})[k]))}</td>`).join('')}</tr>`).join('');
+  return `<div class="drill-section"><h3>${esc(title)} <span class="drill-chip">${records.length} 条</span></h3><div class="drill-table-wrap"><table class="drill-table"><thead><tr>${head}</tr></thead><tbody>${rows}</tbody></table></div></div>`;
+}
+async function openOrderDrill(country, category, brand){
+  showDrillModal(`${brand} 订单明细`, '正在从智能表读取...', '<div class="drill-empty">加载中...</div>');
+  try{
+    const data = await drillFetch(`/api/drilldown/order?${new URLSearchParams({ country, category, brand }).toString()}`);
+    const s = data.summary || {};
+    const html = `<div class="drill-summary"><span class="drill-chip">来源：智能表</span><span class="drill-chip">订单 ${num(s.orders)} 单</span><span class="drill-chip">计划 ${num(s.boxes)} 柜</span><span class="drill-chip">分柜 ${num(s.containers)} 条</span></div>${drillTable('订单主表', data.orders)}${drillTable('分柜明细表', data.containers)}`;
+    showDrillModal(`${brand} 订单明细`, `${country} · ${category}`, html);
+  }catch(err){ showDrillModal(`${brand} 订单明细`, '读取失败', `<div class="drill-empty">${esc(err.message)}</div>`); }
+}
+async function openContainerDrill(container){
+  showDrillModal(`${container} 柜号明细`, '正在从智能表读取...', '<div class="drill-empty">加载中...</div>');
+  try{
+    const data = await drillFetch(`/api/drilldown/container?${new URLSearchParams({ container }).toString()}`);
+    const sections = data.sections || [];
+    const html = `<div class="drill-summary"><span class="drill-chip">来源：智能表</span><span class="drill-chip">子表 ${num((data.summary||{}).sheets)} 张</span><span class="drill-chip">记录 ${num((data.summary||{}).records)} 条</span></div>`
+      + (sections.length ? sections.map(sec => drillTable(sec.sheetTitle + (sec.error ? `（${sec.error}）` : ''), sec.records)).join('') : '<div class="drill-empty">智能表里暂未找到这个柜号的明细</div>');
+    showDrillModal(`${container} 柜号明细`, '温度 / 物流 / 分柜记录', html);
+  }catch(err){ showDrillModal(`${container} 柜号明细`, '读取失败', `<div class="drill-empty">${esc(err.message)}</div>`); }
+}
+window.openContainerDrill = openContainerDrill;
 
 // ---- Auth ----
 async function loadUser(){

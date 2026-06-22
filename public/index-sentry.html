@@ -275,6 +275,28 @@
   #ganttContainer table.gantt-table td { padding: 10px 8px; text-align: center; font-size: 14px; font-weight: 600; border-bottom: 1px solid var(--hairline-subtle); min-width: 58px; }
   #ganttContainer .gantt-row-label { text-align: left; font-weight: 700; color: var(--txt); background: var(--night); position: sticky; left: 0; white-space: nowrap; }
   #ganttContainer .gantt-empty-cell { color: var(--txt-faint); background: transparent; font-weight: 400; }
+  .drill-link { appearance: none; border: 0; background: transparent; color: #7dd3fc; font: inherit; font-weight: 700;
+    padding: 0; text-decoration: underline; text-decoration-thickness: 1px; text-underline-offset: 3px; cursor: pointer; }
+  .drill-link:hover { color: #bae6fd; text-shadow: 0 0 12px rgba(125,211,252,0.32); }
+  .drill-mask { position: fixed; inset: 0; background: rgba(8,7,15,0.78); z-index: 120; display: none; align-items: center; justify-content: center; padding: 32px; }
+  .drill-mask.show { display: flex; }
+  .drill-modal { width: min(1180px, 94vw); max-height: 88vh; background: var(--night); border: 1px solid var(--hairline);
+    border-radius: var(--r-xl); box-shadow: 0 24px 90px rgba(0,0,0,0.55); display: flex; flex-direction: column; overflow: hidden; }
+  .drill-head { display: flex; align-items: center; gap: 16px; padding: 18px 20px; border-bottom: 1px solid var(--hairline); background: rgba(255,255,255,0.03); }
+  .drill-title { font-family: "Space Grotesk", "Rubik", sans-serif; font-size: 20px; font-weight: 700; color: var(--txt); }
+  .drill-sub { margin-left: auto; color: var(--txt-faint); font-size: 13px; }
+  .drill-close { border: 1px solid var(--hairline); background: rgba(255,255,255,0.04); color: var(--txt); border-radius: var(--r-sm); width: 34px; height: 34px; cursor: pointer; font-size: 20px; }
+  .drill-body { padding: 18px 20px; overflow: auto; color: var(--txt); }
+  .drill-summary { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 16px; }
+  .drill-chip { border: 1px solid var(--hairline); background: rgba(125,211,252,0.08); color: #bae6fd; border-radius: var(--r-sm); padding: 6px 10px; font-size: 12px; }
+  .drill-section { margin-top: 16px; }
+  .drill-section h3 { font-size: 15px; margin: 0 0 8px; color: var(--lime); display: flex; gap: 8px; align-items: center; }
+  .drill-table-wrap { overflow: auto; border: 1px solid var(--hairline); border-radius: var(--r-md); background: rgba(255,255,255,0.015); }
+  .drill-table { width: 100%; border-collapse: collapse; min-width: 720px; }
+  .drill-table th, .drill-table td { padding: 8px 10px; border-bottom: 1px solid var(--hairline-subtle); font-size: 13px; text-align: left; vertical-align: top; }
+  .drill-table th { color: var(--txt-muted); font-weight: 700; background: rgba(255,255,255,0.035); white-space: nowrap; }
+  .drill-table td { color: var(--txt); max-width: 260px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .drill-empty { color: var(--txt-faint); font-size: 14px; text-align: center; padding: 34px 12px; }
 
   /* ============================================================
      Footer squiggle divider
@@ -302,6 +324,12 @@
 <body>
 
 <div id="loader"><div class="spin"></div><div>Loading data…</div></div>
+<div class="drill-mask" id="drillMask" onclick="if(event.target===this)closeDrillModal()">
+  <div class="drill-modal">
+    <div class="drill-head"><div class="drill-title" id="drillTitle">明细</div><div class="drill-sub" id="drillSub">智能表实时数据</div><button class="drill-close" onclick="closeDrillModal()" title="关闭">×</button></div>
+    <div class="drill-body" id="drillBody"></div>
+  </div>
+</div>
 
 <!-- ============================================================
      NAV BAR
@@ -388,6 +416,9 @@ const esc = s => String(s==null?'':s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':
 function md(s) { return esc(s).replace(/\*\*(.+?)\*\*/g, '<b>$1</b>'); }
 const num = n => Number(n) || 0;
 const gotoLogin = () => { window.location.href = '/login?redirect=' + encodeURIComponent(window.location.pathname); };
+function jsArg(v) { return JSON.stringify(String(v==null?'':v)); }
+function orderDrillLink(country, category, brand) { return `<button class="drill-link" onclick="openOrderDrill(${jsArg(country)},${jsArg(category)},${jsArg(brand)})">${esc(brand)}</button>`; }
+function containerDrillLink(container) { const c = String(container || ''); return c && c !== '-' ? `<button class="drill-link mono" onclick="openContainerDrill(${jsArg(c)})">${esc(c)}</button>` : esc(c || '-'); }
 
 // ---- Hero stats ----
 function paintHero(g) {
@@ -474,7 +505,7 @@ function paintCountry(el, info, country) {
         + seg(num(r.port)/rt*100, 'seg-port', r.port)
         + seg(num(r.pending)/rt*100, 'seg-pending', r.pending);
       return `<div class="brand-row">
-        <div class="brand-name">${esc(r.brand)}<span class="brand-meta">${num(r.orders)}单 / ${num(r.boxes)}柜</span></div>
+        <div class="brand-name">${orderDrillLink(country, cat, r.brand)}<span class="brand-meta">${num(r.orders)}单 / ${num(r.boxes)}柜</span></div>
         <div class="brand-bar">${b || '<span class="seg seg-pending" style="width:100%">待发</span>'}</div>
         <div class="brand-rate ${rRate > 0 ? '' : 'num'}" style="color:${rRate > 0 ? 'var(--signed)' : 'var(--txt-faint)'}">${rRate.toFixed(1)}%</div>
       </div>`;
@@ -517,7 +548,7 @@ function paintLogistics(el, L) {
     : (s === 'WARN' ? '<span class="pill warn">' + esc(n || '注意') + '</span>' : '<span class="pill ok">' + esc(n || '正常') + '</span>');
 
   const pdRows = pd.map(r => `<tr>
-    <td class="mono">${esc(r.container)}</td><td>${esc(r.route)}</td>
+    <td>${containerDrillLink(r.container)}</td><td>${esc(r.route)}</td>
     <td><span class="pill ${r.category==='FROZEN'?'frozen':'fresh'}">${r.category==='FROZEN'?'冻果':'鲜果'}</span></td>
     <td style="${devStyle(num(r.delayDays))};font-weight:700">${num(r.delayDays).toFixed(1)}天</td>
     <td>${esc(r.reason)}</td></tr>`).join('');
@@ -526,7 +557,7 @@ function paintLogistics(el, L) {
   const tcRows = tc.map(r => {
     const dev = num(r.returnTemp) - num(r.setTemp);
     return `<tr>
-      <td class="mono">${esc(r.container)}</td><td>${esc(r.brand)}</td>
+      <td>${containerDrillLink(r.container)}</td><td>${esc(r.brand)}</td>
       <td class="mono">${num(r.setTemp)}° / ${num(r.returnTemp)}°</td>
       <td style="${devStyle(dev)};font-weight:700">${dev >= 0 ? '+' : ''}${dev.toFixed(1)}°</td>
       <td>${esc(r.location)}</td><td>${statusPill(r.status, r.note)}</td></tr>`;
@@ -594,6 +625,58 @@ function paintNews(el, thArr, vnArr, autoArr, fetchedAt) {
     <div style="font-size:12px;color:var(--txt-faint);text-transform:uppercase;letter-spacing:0.2px;margin-top:-8px">Industry News · ${newsTimeText(fetchedAt)}</div>
     ${sec('🌏 榴莲与东南亚影响', 'global', autoItems)}`;
 }
+
+async function drillFetch(url) {
+  const resp = await fetch(url, { cache: 'no-store' });
+  if (resp.status === 401) return gotoLogin();
+  const json = await resp.json();
+  if (!json.success) throw new Error(json.error || '读取明细失败');
+  return json.data;
+}
+function showDrillModal(title, sub, html) {
+  $('drillTitle').textContent = title;
+  $('drillSub').textContent = sub || '智能表实时数据';
+  $('drillBody').innerHTML = html;
+  $('drillMask').classList.add('show');
+}
+function closeDrillModal() { $('drillMask').classList.remove('show'); }
+function drillVal(v) {
+  if (v == null || v === '') return '-';
+  if (Array.isArray(v)) return v.map(drillVal).join('、');
+  if (typeof v === 'object') return Object.values(v).map(drillVal).filter(Boolean).join(' / ') || '-';
+  return String(v);
+}
+function drillTable(title, records) {
+  if (!records || !records.length) return `<div class="drill-section"><h3>${esc(title)}</h3><div class="drill-empty">暂无匹配记录</div></div>`;
+  const keys = Array.from(new Set(records.flatMap(r => Object.keys(r.values || {})))).filter(k => records.some(r => drillVal((r.values || {})[k]) !== '-'));
+  const head = keys.map(k => `<th>${esc(k)}</th>`).join('');
+  const rows = records.map(r => `<tr>${keys.map(k => `<td title="${esc(drillVal((r.values || {})[k]))}">${esc(drillVal((r.values || {})[k]))}</td>`).join('')}</tr>`).join('');
+  return `<div class="drill-section"><h3>${esc(title)} <span class="drill-chip">${records.length} 条</span></h3><div class="drill-table-wrap"><table class="drill-table"><thead><tr>${head}</tr></thead><tbody>${rows}</tbody></table></div></div>`;
+}
+async function openOrderDrill(country, category, brand) {
+  showDrillModal(`${brand} 订单明细`, '正在从智能表读取...', '<div class="drill-empty">加载中...</div>');
+  try {
+    const data = await drillFetch(`/api/drilldown/order?${new URLSearchParams({ country, category, brand }).toString()}`);
+    const s = data.summary || {};
+    const html = `<div class="drill-summary"><span class="drill-chip">来源：智能表</span><span class="drill-chip">订单 ${num(s.orders)} 单</span><span class="drill-chip">计划 ${num(s.boxes)} 柜</span><span class="drill-chip">分柜 ${num(s.containers)} 条</span></div>${drillTable('订单主表', data.orders)}${drillTable('分柜明细表', data.containers)}`;
+    showDrillModal(`${brand} 订单明细`, `${country} · ${category}`, html);
+  } catch (err) {
+    showDrillModal(`${brand} 订单明细`, '读取失败', `<div class="drill-empty">${esc(err.message)}</div>`);
+  }
+}
+async function openContainerDrill(container) {
+  showDrillModal(`${container} 柜号明细`, '正在从智能表读取...', '<div class="drill-empty">加载中...</div>');
+  try {
+    const data = await drillFetch(`/api/drilldown/container?${new URLSearchParams({ container }).toString()}`);
+    const sections = data.sections || [];
+    const html = `<div class="drill-summary"><span class="drill-chip">来源：智能表</span><span class="drill-chip">子表 ${num((data.summary || {}).sheets)} 张</span><span class="drill-chip">记录 ${num((data.summary || {}).records)} 条</span></div>`
+      + (sections.length ? sections.map(sec => drillTable(sec.sheetTitle + (sec.error ? `（${sec.error}）` : ''), sec.records)).join('') : '<div class="drill-empty">智能表里暂未找到这个柜号的明细</div>');
+    showDrillModal(`${container} 柜号明细`, '温度 / 物流 / 分柜记录', html);
+  } catch (err) {
+    showDrillModal(`${container} 柜号明细`, '读取失败', `<div class="drill-empty">${esc(err.message)}</div>`);
+  }
+}
+window.openContainerDrill = openContainerDrill;
 
 // ---- Auth ----
 async function loadUser() {

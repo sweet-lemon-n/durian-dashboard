@@ -6,6 +6,7 @@
 (function () {
   const $ = (id) => document.getElementById(id);
   const escHtml = (s) => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+  const jsArg = (s) => JSON.stringify(String(s == null ? '' : s));
 
   async function ganttFetch(url) {
     const resp = await fetch(url, { cache: 'no-store' });
@@ -99,7 +100,10 @@
     days.forEach(d => { html += `<th>${d.label}<br><small>周${d.dayOfWeek}</small></th>`; });
     html += '</tr></thead><tbody>';
     sortedContainers.forEach(cNo => {
-      html += `<tr><td class="gantt-row-label">${escHtml(cNo)}</td>`;
+      const label = window.openContainerDrill
+        ? `<button class="drill-link" onclick="window.openContainerDrill(${jsArg(cNo)})">${escHtml(cNo)}</button>`
+        : escHtml(cNo);
+      html += `<tr><td class="gantt-row-label">${label}</td>`;
       days.forEach(d => {
         const cell = ganttData[cNo] && ganttData[cNo][d.key];
         if (cell && cell.value !== undefined) {
