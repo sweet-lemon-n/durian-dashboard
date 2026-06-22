@@ -87,7 +87,7 @@ function isKnownWritableField(field, rawValue) {
   const type = String(field?.field_type || field?.type || '').toUpperCase();
   const title = field?.field_title || field?.title || '';
   if (!type) return ['设定温度', '送风温度', '回风温度', '放柜时间', '更新时间'].includes(title) || rawValue !== '';
-  return type.includes('TEXT') || type.includes('NUMBER') || type.includes('DATE') || type.includes('SELECT');
+  return type.includes('TEXT') || type.includes('NUMBER') || type.includes('DATE') || type.includes('SELECT') || type.includes('REFERENCE');
 }
 
 function makeCellValue(field, rawValue) {
@@ -95,6 +95,10 @@ function makeCellValue(field, rawValue) {
   const title = field?.field_title || field?.title || '';
   if (rawValue === null || rawValue === undefined || rawValue === '') return undefined;
   if (!isKnownWritableField(field, rawValue)) return undefined;
+  if (type.includes('REFERENCE')) {
+    const ids = String(rawValue).split(/[,，\s]+/).map(s => s.trim()).filter(Boolean);
+    return ids.length ? ids.map(record_id => ({ record_id })) : undefined;
+  }
   if (type.includes('NUMBER') || (!type && ['设定温度', '送风温度', '回风温度'].includes(title))) {
     const n = Number(rawValue);
     return Number.isFinite(n) ? n : undefined;
@@ -139,6 +143,7 @@ async function callDeepSeekImport(text, schema, options = {}) {
     '同时判断这是新增记录还是修改已有记录：如果用户明确说修改、更新、更正、补充某条记录，则建议 update，否则建议 add。',
     '只能从提供的 sheets[].fields[].title 中选择字段，不能编造字段；只能从 sheets[].sheetId 中选择目标子表。',
     '如果用户提到“第10柜/南部第10柜”但没有标准海运柜号，也可以把它作为“柜号”的值。',
+    '如果字段类型是 FIELD_TYPE_REFERENCE，只能填写被引用记录的 record_id；如果原文只有显示文本而没有 record_id，请留空并在 warnings 说明需要人工选择引用记录。',
     '相对日期要结合 currentDate 解析，例如“昨天傍晚”可推断为昨天 18:00。',
     '温度字段返回数字，日期时间返回 yyyy-MM-dd HH:mm，文本字段返回字符串。',
     '必须只返回 json，不要返回 markdown。',

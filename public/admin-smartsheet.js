@@ -90,6 +90,7 @@ function fieldTypeLabel(type) {
   if (t.includes('DATE')) return '日期时间';
   if (t.includes('SINGLE_SELECT')) return '单选';
   if (t.includes('MULTI_SELECT')) return '多选';
+  if (t.includes('REFERENCE')) return '引用';
   if (t.includes('RECORD') || t.includes('RELATION') || t.includes('LINK')) return '关联记录';
   if (t.includes('USER')) return '人员';
   if (t.includes('CHECKBOX')) return '勾选';
@@ -105,7 +106,7 @@ function isDateField(type, title) {
 
 function isUnsupportedImportField(type) {
   const t = String(type || '').toUpperCase();
-  return t.includes('RECORD') || t.includes('RELATION') || t.includes('LINK') || t.includes('USER') || t.includes('CHECKBOX');
+  return !t.includes('REFERENCE') && (t.includes('RECORD') || t.includes('RELATION') || t.includes('LINK') || t.includes('USER') || t.includes('CHECKBOX'));
 }
 
 function toDatetimeLocalValue(value) {
@@ -516,13 +517,14 @@ function renderAiImportPreview(data) {
   const rows = (data.fields || []).map(f => {
     const typeText = fieldTypeLabel(f.fieldType);
     const unsupported = isUnsupportedImportField(f.fieldType);
+    const isReference = String(f.fieldType || '').toUpperCase().includes('REFERENCE');
     const inputHtml = isDateField(f.fieldType, f.title)
       ? `<input data-ai-field="${escAttr(f.title)}" type="datetime-local" value="${escAttr(toDatetimeLocalValue(f.value))}"><input data-ai-field-manual="${escAttr(f.title)}" value="${escAttr(f.value)}" placeholder="也可手动输入 yyyy-mm-dd hh:mm" style="margin-top:4px">`
-      : `<input data-ai-field="${escAttr(f.title)}" value="${escAttr(f.value)}" ${unsupported ? 'disabled' : ''}>`;
+      : `<input data-ai-field="${escAttr(f.title)}" value="${escAttr(f.value)}" ${unsupported ? 'disabled' : ''} placeholder="${isReference ? '填写关联记录 ID，多个用逗号分隔' : ''}">`;
     return `
       <tr>
         <td>${escHtml(f.title)} <small style="color:var(--text-muted)">(${escHtml(typeText)})</small></td>
-        <td>${inputHtml}${unsupported ? '<div style="color:var(--warning);font-size:12px;margin-top:4px">关联/特殊字段暂不支持 API 直接写入，请在智能表内维护</div>' : ''}</td>
+        <td>${inputHtml}${isReference ? '<div style="color:var(--warning);font-size:12px;margin-top:4px">引用字段将尝试按 record_id 写入；需填被引用表记录 ID，不是显示文本</div>' : ''}${unsupported ? '<div style="color:var(--warning);font-size:12px;margin-top:4px">特殊字段暂不支持 API 直接写入，请在智能表内维护</div>' : ''}</td>
         <td><code>${escHtml(typeText)}</code></td>
         <td>${Math.round((f.confidence || 0) * 100)}%${f.reason ? `<br><small>${escHtml(f.reason)}</small>` : ''}</td>
       </tr>
