@@ -91,7 +91,7 @@ function isKnownWritableField(field, rawValue) {
   const type = String(field?.field_type || field?.type || '').toUpperCase();
   const title = field?.field_title || field?.title || '';
   if (!type) return ['设定温度', '送风温度', '回风温度', '放柜时间', '更新时间'].includes(title) || rawValue !== '';
-  return type.includes('TEXT') || type.includes('NUMBER') || type.includes('DATE') || type.includes('SELECT') || type.includes('REFERENCE');
+  return type.includes('TEXT') || type.includes('NUMBER') || type.includes('DATE') || type.includes('SELECT') || type.includes('REFERENCE') || type.includes('RECORD') || type.includes('RELATION');
 }
 
 function makeCellValue(field, rawValue) {
@@ -99,7 +99,7 @@ function makeCellValue(field, rawValue) {
   const title = field?.field_title || field?.title || '';
   if (rawValue === null || rawValue === undefined || rawValue === '') return undefined;
   if (!isKnownWritableField(field, rawValue)) return undefined;
-  if (type.includes('REFERENCE')) {
+  if (type.includes('REFERENCE') || type.includes('RECORD') || type.includes('RELATION')) {
     const ids = String(rawValue).split(/[,，\s]+/).map(s => s.trim()).filter(Boolean);
     return ids.length ? ids.map(record_id => ({ record_id })) : undefined;
   }
@@ -113,6 +113,13 @@ function makeCellValue(field, rawValue) {
   }
   if (type.includes('SELECT')) return [{ text: String(rawValue).trim() }];
   return [{ type: 'text', text: String(rawValue).trim() }];
+}
+
+function makeEmptyCellValue(field) {
+  const type = String(field?.field_type || field?.type || '').toUpperCase();
+  if (type.includes('NUMBER')) return null;
+  if (type.includes('REFERENCE') || type.includes('RECORD') || type.includes('RELATION') || type.includes('SELECT')) return [];
+  return '';
 }
 
 function buildAiImportSchema(schema) {
@@ -1552,12 +1559,77 @@ app.post('/api/ai-import/parse', requirePermission('smartsheet'), async (req, re
 });
 
 /**
+ * GET /api/ai-import/record-options?sheetId=xxx
+ * 返回某个子表的记录选项，用于修改模式选择 record_id。
+ */
+app.get('/api/ai-import/record-options', requirePermission('smartsheet'), async (req, res) => {
+  try {
+    const { sheetId, limit = '200' } = req.query;
+    if (!sheetId) throw new Error('缺少 sheetId');
+    const schema = await getDocumentSchema();
+    const sheet = (schema.sheets || []).find(s => s.sheet_id === sheetId);
+    if (!sheet) throw new Error('目标子表不存在或无权限访问');
+    const records = await wecom.getAllRecords(DOCID, sheetId, { limit: Math.min(parseInt(limit) || 200, 500) });
+    const options = records.map(record => recordOptionForUi(record, sheet.fields));
+    res.json({ success: true, data: { sheet: { sheetId, title: sheet.title }, options } });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+/**
+ * GET /api/ai-import/reference-options?sheetId=xxx&fieldTitle=xxx
+ * 返回引用字段可选记录。若无法从字段属性识别被引用子表，则返回所有子表候选分组。
+ */
+app.get('/api/ai-import/reference-options', requirePermission('smartsheet'), async (req, res) => {
+  try {
+    const { sheetId, fieldTitle, limit = '200' } = req.query;
+    if (!sheetId || !fieldTitle) throw new Error('缺少 sheetId 或 fieldTitle');
+    const schema = await getDocumentSchema();
+    const sheet = (schema.sheets || []).find(s => s.sheet_id === sheetId);
+    if (!sheet) throw new Error('目标子表不存在或无权限访问');
+    const field = (sheet.fields || []).find(f => f.field_title === fieldTitle);
+    if (!field) throw new Error('字段不存在');
+
+    const referencedIds = findReferencedSheetIds(field, schema.sheets);
+    const candidateSheets = referencedIds.length
+      ? schema.sheets.filter(s => referencedIds.includes(s.sheet_id))
+      : schema.sheets.filter(s => s.sheet_id !== sheetId);
+
+    const groups = [];
+    for (const candidate of candidateSheets) {
+      try {
+        const records = await wecom.getAllRecords(DOCID, candidate.sheet_id, { limit: Math.min(parseInt(limit) || 200, 500) });
+        groups.push({
+          sheetId: candidate.sheet_id,
+          title: candidate.title,
+          options: records.map(record => recordOptionForUi(record, candidate.fields)),
+        });
+      } catch (err) {
+        groups.push({ sheetId: candidate.sheet_id, title: candidate.title, options: [], error: err.message });
+      }
+    }
+
+    res.json({
+      success: true,
+      data: {
+        field: fieldMetaForDrilldown(field),
+        resolved: referencedIds.length > 0,
+        groups,
+      },
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+/**
  * POST /api/ai-import/commit
  * 人员确认后写入智能表。values 使用字段标题作为 key，服务端会二次校验字段存在并转换单元格格式。
  */
 app.post('/api/ai-import/commit', requirePermission('smartsheet'), async (req, res) => {
   try {
-    const { sheetId, values, mode = 'add', recordId } = req.body || {};
+    const { sheetId, values, mode = 'add', recordId, clearFields } = req.body || {};
     if (!sheetId) throw new Error('缺少 sheetId');
     if (!values || typeof values !== 'object' || Array.isArray(values)) throw new Error('缺少待写入字段');
     if (mode === 'update' && !recordId) throw new Error('修改模式缺少 recordId');
@@ -1574,11 +1646,17 @@ app.post('/api/ai-import/commit', requirePermission('smartsheet'), async (req, r
       const cellValue = makeCellValue(field, value);
       if (cellValue !== undefined) normalizedValues[title] = cellValue;
     });
+    (Array.isArray(clearFields) ? clearFields : []).forEach(title => {
+      const field = fieldMap[title];
+      if (!field) return;
+      normalizedValues[title] = makeEmptyCellValue(field);
+    });
     if (!Object.keys(normalizedValues).length) throw new Error('没有有效字段可写入');
     const result = mode === 'update'
       ? await wecom.updateRecords(DOCID, sheetId, [{ record_id: recordId, values: normalizedValues }], 'CELL_VALUE_KEY_TYPE_FIELD_TITLE')
       : await wecom.addRecords(DOCID, sheetId, [{ values: normalizedValues }], 'CELL_VALUE_KEY_TYPE_FIELD_TITLE');
     if (result.errcode !== 0) throw new Error(`[${result.errcode}] ${result.errmsg}`);
+    wecomCache.refreshNow(DOCID).catch(err => console.warn('[ai-import] 写入后刷新企微缓存失败:', err.message));
     res.json({ success: true, data: { mode, recordId: recordId || '', sheet: { sheetId, title: sheet.title }, fields: Object.keys(normalizedValues), result } });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
@@ -1937,6 +2015,50 @@ function flattenRecordForDrilldown(record, fields) {
     recordId: record.record_id,
     values,
   };
+}
+
+function recordOptionForUi(record, fields) {
+  const values = {};
+  (fields || []).forEach(field => {
+    values[field.field_title] = wecom.getRecordValue(record, field.field_title);
+  });
+  const priority = ['柜号', '订单编号', '品牌', '产品品类', '国家', '当前位置', '更新时间', '放柜时间', '客户', '目的地'];
+  const labelParts = priority
+    .map(title => values[title])
+    .filter(v => v !== null && v !== undefined && v !== '')
+    .map(v => String(v))
+    .slice(0, 5);
+  const fallback = Object.values(values).filter(v => v !== null && v !== undefined && v !== '').map(v => String(v)).slice(0, 4);
+  const label = (labelParts.length ? labelParts : fallback).join(' / ') || record.record_id;
+  return {
+    recordId: record.record_id,
+    label,
+    values,
+  };
+}
+
+function findReferencedSheetIds(field, sheets) {
+  const found = new Set();
+  const sheetIds = new Set((sheets || []).map(s => s.sheet_id));
+  const walk = (value) => {
+    if (!value) return;
+    if (typeof value === 'string') {
+      if (sheetIds.has(value)) found.add(value);
+      return;
+    }
+    if (Array.isArray(value)) return value.forEach(walk);
+    if (typeof value === 'object') {
+      Object.entries(value).forEach(([key, val]) => {
+        const k = String(key).toLowerCase();
+        if ((k.includes('sheet') || k.includes('table')) && typeof val === 'string' && sheetIds.has(val)) {
+          found.add(val);
+        }
+        walk(val);
+      });
+    }
+  };
+  walk(field);
+  return Array.from(found);
 }
 
 function drillValueMatches(value, query) {

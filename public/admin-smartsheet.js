@@ -106,7 +106,7 @@ function isDateField(type, title) {
 
 function isUnsupportedImportField(type) {
   const t = String(type || '').toUpperCase();
-  return !t.includes('REFERENCE') && (t.includes('RECORD') || t.includes('RELATION') || t.includes('LINK') || t.includes('USER') || t.includes('CHECKBOX'));
+  return t.includes('LINK') || t.includes('USER') || t.includes('CHECKBOX');
 }
 
 function toDatetimeLocalValue(value) {
@@ -442,12 +442,99 @@ function getAiImportEls() {
   };
 }
 
+function isReferenceFieldType(type) {
+  const t = String(type || '').toUpperCase();
+  return t.includes('REFERENCE') || t.includes('RECORD') || t.includes('RELATION');
+}
+
+function cssEscapeValue(value) {
+  if (window.CSS && typeof window.CSS.escape === 'function') return window.CSS.escape(value);
+  return String(value).replace(/["\\]/g, '\\$&');
+}
+
 function setAiImportOutput(message, isError = false) {
   const { out } = getAiImportEls();
   if (!out) return;
   out.style.display = message ? 'block' : 'none';
   out.className = 'output' + (isError ? ' error' : '');
   out.textContent = message || '';
+}
+
+async function refreshAiImportRecordOptions(selectedRecordId = '') {
+  const { sheet, mode, recordId } = getAiImportEls();
+  if (!recordId) return;
+  const isUpdate = mode && mode.value === 'update';
+  const sheetId = sheet && sheet.value;
+  recordId.disabled = !isUpdate || !sheetId;
+  if (!isUpdate) {
+    recordId.innerHTML = '<option value="">新增模式不需要选择记录</option>';
+    return;
+  }
+  if (!sheetId) {
+    recordId.innerHTML = '<option value="">先选择目标子表</option>';
+    return;
+  }
+  recordId.innerHTML = '<option value="">正在加载记录...</option>';
+  try {
+    const resp = await apiFetch('/api/ai-import/record-options?sheetId=' + encodeURIComponent(sheetId));
+    const json = await resp.json();
+    if (!json.success) throw new Error(json.error || '记录加载失败');
+    const opts = json.data.options || [];
+    recordId.innerHTML = '<option value="">请选择要修改的记录</option>' + opts.map(o => (
+      `<option value="${escAttr(o.recordId)}" title="${escAttr(o.recordId)}">${escHtml(o.label)} ｜ ${escHtml(o.recordId)}</option>`
+    )).join('');
+    if (selectedRecordId) recordId.value = selectedRecordId;
+  } catch (e) {
+    recordId.innerHTML = `<option value="">记录加载失败：${escAttr(e.message)}</option>`;
+  }
+}
+
+async function chooseAiReferenceRecord(fieldTitle) {
+  const { sheet } = getAiImportEls();
+  const sheetId = sheet && sheet.value;
+  if (!sheetId) {
+    setAiImportOutput('请先选择目标子表', true);
+    return;
+  }
+  setAiImportOutput(`正在加载「${fieldTitle}」可引用记录...`);
+  try {
+    const url = '/api/ai-import/reference-options?sheetId=' + encodeURIComponent(sheetId) + '&fieldTitle=' + encodeURIComponent(fieldTitle);
+    const resp = await apiFetch(url);
+    const json = await resp.json();
+    if (!json.success) throw new Error(json.error || '引用记录加载失败');
+    const groups = json.data.groups || [];
+    const choices = [];
+    groups.forEach(group => {
+      (group.options || []).forEach(opt => {
+        choices.push({
+          recordId: opt.recordId,
+          text: `${group.title}｜${opt.label}｜${opt.recordId}`,
+        });
+      });
+    });
+    if (!choices.length) {
+      setAiImportOutput('没有可选引用记录，请确认被引用子表已有数据', true);
+      return;
+    }
+    const lines = choices.slice(0, 80).map((c, i) => `${i + 1}. ${c.text}`).join('\n');
+    const ans = prompt(`选择「${fieldTitle}」引用记录：\n输入序号，或直接粘贴 record_id\n\n${lines}`);
+    if (!ans) {
+      setAiImportOutput('');
+      return;
+    }
+    const idx = Number(ans);
+    const recordId = Number.isInteger(idx) && idx >= 1 && idx <= choices.length
+      ? choices[idx - 1].recordId
+      : ans.trim();
+    const input = document.querySelector(`[data-ai-field="${cssEscapeValue(fieldTitle)}"]`);
+    if (input) {
+      const current = input.value.trim();
+      input.value = current ? `${current},${recordId}` : recordId;
+    }
+    setAiImportOutput(`已选择引用记录：${recordId}`);
+  } catch (e) {
+    setAiImportOutput('引用记录加载失败: ' + e.message, true);
+  }
 }
 
 function setAiImportConfigStatus(message) {
@@ -502,7 +589,28 @@ async function saveAiImportConfig() {
   }
 }
 
-function renderAiImportPreview(data) {
+function renderAiImportInput(f, unsupported, isUpdate) {
+  const isReference = isReferenceFieldType(f.fieldType);
+  const value = f.value == null ? '' : String(f.value);
+  let inputHtml = '';
+  if (isDateField(f.fieldType, f.title)) {
+    inputHtml = `<input data-ai-field="${escAttr(f.title)}" type="datetime-local" value="${escAttr(toDatetimeLocalValue(value))}" ${unsupported ? 'disabled' : ''}>`;
+  } else {
+    inputHtml = `<input data-ai-field="${escAttr(f.title)}" value="${escAttr(value)}" ${unsupported ? 'disabled' : ''} placeholder="${isReference ? '选择或填写记录 ID，多个用逗号分隔' : ''}">`;
+  }
+  const clearHtml = isUpdate && !unsupported
+    ? `<label style="display:inline-flex;align-items:center;gap:4px;margin-left:8px;color:var(--text-muted);font-size:12px"><input type="checkbox" data-ai-clear="${escAttr(f.title)}">清空该字段</label>`
+    : '';
+  const refHtml = isReference && !unsupported
+    ? `<div style="margin-top:6px;display:flex;gap:8px;align-items:center;flex-wrap:wrap"><button type="button" class="btn btn-sm" onclick="chooseAiReferenceRecord('${escAttr(f.title)}')">选择引用记录</button><span style="color:var(--warning);font-size:12px">系统会写入所选记录的 record_id</span></div>`
+    : '';
+  const unsupportedHtml = unsupported
+    ? '<div style="color:var(--warning);font-size:12px;margin-top:4px">该字段类型暂不支持 API 直接写入，请在智能表内维护</div>'
+    : '';
+  return `${inputHtml}${clearHtml}${refHtml}${unsupportedHtml}`;
+}
+
+async function renderAiImportPreview(data) {
   const { preview, commit, sheet, mode, recordId } = getAiImportEls();
   if (!preview) return;
   aiImportPreview = data;
@@ -513,18 +621,17 @@ function renderAiImportPreview(data) {
   }
   if (sheet) sheet.value = data.sheet.sheetId || '';
   if (mode) mode.value = data.mode === 'update' ? 'update' : 'add';
+  await refreshAiImportRecordOptions(data.recordId || '');
   if (recordId && data.recordId) recordId.value = data.recordId;
+  const isUpdate = data.mode === 'update';
   const rows = (data.fields || []).map(f => {
     const typeText = fieldTypeLabel(f.fieldType);
     const unsupported = isUnsupportedImportField(f.fieldType);
-    const isReference = String(f.fieldType || '').toUpperCase().includes('REFERENCE');
-    const inputHtml = isDateField(f.fieldType, f.title)
-      ? `<input data-ai-field="${escAttr(f.title)}" type="datetime-local" value="${escAttr(toDatetimeLocalValue(f.value))}"><input data-ai-field-manual="${escAttr(f.title)}" value="${escAttr(f.value)}" placeholder="也可手动输入 yyyy-mm-dd hh:mm" style="margin-top:4px">`
-      : `<input data-ai-field="${escAttr(f.title)}" value="${escAttr(f.value)}" ${unsupported ? 'disabled' : ''} placeholder="${isReference ? '填写关联记录 ID，多个用逗号分隔' : ''}">`;
+    const inputHtml = renderAiImportInput(f, unsupported, isUpdate);
     return `
       <tr>
         <td>${escHtml(f.title)} <small style="color:var(--text-muted)">(${escHtml(typeText)})</small></td>
-        <td>${inputHtml}${isReference ? '<div style="color:var(--warning);font-size:12px;margin-top:4px">引用字段将尝试按 record_id 写入；需填被引用表记录 ID，不是显示文本</div>' : ''}${unsupported ? '<div style="color:var(--warning);font-size:12px;margin-top:4px">特殊字段暂不支持 API 直接写入，请在智能表内维护</div>' : ''}</td>
+        <td>${inputHtml}</td>
         <td><code>${escHtml(typeText)}</code></td>
         <td>${Math.round((f.confidence || 0) * 100)}%${f.reason ? `<br><small>${escHtml(f.reason)}</small>` : ''}</td>
       </tr>
@@ -538,6 +645,7 @@ function renderAiImportPreview(data) {
       <h3>待确认写入信息</h3>
       <div>解析器：<b>${escHtml(data.parser || 'deepseek')}</b></div>
       <div>建议模式：<b>${data.mode === 'update' ? '修改记录' : '新增记录'}</b>${data.recordHint ? ` <span style="color:var(--text-muted)">(${escHtml(data.recordHint)})</span>` : ''}</div>
+      ${data.mode === 'update' ? '<div style="color:var(--text-muted)">修改模式默认只更新有值字段；如果要把某个字段改为空，请勾选该字段旁边的「清空该字段」。</div>' : ''}
       <div>目标子表：<b>${escHtml(data.sheet.title)}</b> <span style="color:var(--text-muted)">(${escHtml(data.sheet.sheetId)})</span></div>
       <table>
         <thead><tr><th>字段</th><th>识别/补充值（可修改）</th><th>字段类型</th><th>置信度</th></tr></thead>
@@ -560,14 +668,14 @@ async function buildManualAiImportPreview() {
   const sheetId = sheet && sheet.value;
   if (!sheetId) {
     setAiImportOutput('请先选择目标子表', true);
-    renderAiImportPreview(null);
+    await renderAiImportPreview(null);
     return;
   }
   const sheets = await ensureSheetsLoaded();
   const selected = sheets.find(s => s.sheet_id === sheetId);
   if (!selected) {
     setAiImportOutput('目标子表不存在', true);
-    renderAiImportPreview(null);
+    await renderAiImportPreview(null);
     return;
   }
   const fields = (selected.fields || []).map(f => ({
@@ -578,7 +686,7 @@ async function buildManualAiImportPreview() {
     confidence: f.field_title === '更新时间' ? 0.5 : 0,
     reason: f.field_title === '更新时间' ? '默认当前时间，可手动修改' : '手工录入',
   }));
-  renderAiImportPreview({
+  await renderAiImportPreview({
     sheet: { sheetId: selected.sheet_id, title: selected.title },
     mode: mode && mode.value === 'update' ? 'update' : 'add',
     fields,
@@ -595,7 +703,7 @@ async function parseAiImport() {
     return;
   }
   if (commit) commit.disabled = true;
-  renderAiImportPreview(null);
+  await renderAiImportPreview(null);
   setAiImportOutput('正在调用 DeepSeek 解析，暂不写入智能表...');
   try {
     await refreshSheetsForImport();
@@ -606,10 +714,23 @@ async function parseAiImport() {
     });
     const json = await resp.json();
     if (!json.success) throw new Error(json.error || '解析失败');
-    renderAiImportPreview(json.data);
+    await renderAiImportPreview(json.data);
     setAiImportOutput('DeepSeek 解析完成，请核对目标子表和字段值，确认后再写入。');
   } catch (e) {
     setAiImportOutput('解析失败: ' + e.message, true);
+  }
+}
+
+async function handleAiImportSheetChange() {
+  await buildManualAiImportPreview();
+  await refreshAiImportRecordOptions();
+}
+
+async function handleAiImportModeChange() {
+  await refreshAiImportRecordOptions();
+  if (aiImportPreview && aiImportPreview.sheet) {
+    aiImportPreview.mode = getAiImportEls().mode?.value === 'update' ? 'update' : 'add';
+    await renderAiImportPreview(aiImportPreview);
   }
 }
 
@@ -626,16 +747,21 @@ async function commitAiImport() {
   const values = {};
   document.querySelectorAll('[data-ai-field]').forEach(input => {
     const key = input.getAttribute('data-ai-field');
-    const manual = Array.from(document.querySelectorAll('[data-ai-field-manual]'))
-      .find(el => el.getAttribute('data-ai-field-manual') === key);
-    const val = (manual && manual.value.trim()) || input.value.trim();
+    const clear = document.querySelector(`[data-ai-clear="${cssEscapeValue(key)}"]`);
+    if (clear && clear.checked) return;
+    const val = input.value.trim();
     if (key && val) values[key] = val;
   });
-  if (!Object.keys(values).length) {
+  const clearFields = Array.from(document.querySelectorAll('[data-ai-clear]:checked'))
+    .map(input => input.getAttribute('data-ai-clear'))
+    .filter(Boolean);
+  if (!Object.keys(values).length && !clearFields.length) {
     setAiImportOutput('没有可写入字段', true);
     return;
   }
-  const ok = confirm(`确认${mode === 'update' ? '修改' : '新增'}「${aiImportPreview.sheet.title}」？\n字段：${Object.keys(values).join('、')}${mode === 'update' ? `\n记录 ID：${recordId}` : ''}`);
+  const updateLine = mode === 'update' ? `\n修改记录：${els.recordId.options[els.recordId.selectedIndex]?.text || recordId}` : '';
+  const clearLine = clearFields.length ? `\n清空字段：${clearFields.join('、')}` : '';
+  const ok = confirm(`确认${mode === 'update' ? '修改' : '新增'}「${aiImportPreview.sheet.title}」？\n写入字段：${Object.keys(values).join('、') || '无'}${clearLine}${updateLine}`);
   if (!ok) return;
   const committedSheetId = aiImportPreview.sheet.sheetId;
   setAiImportOutput('正在写入智能表...');
@@ -643,12 +769,12 @@ async function commitAiImport() {
     const resp = await apiFetch('/api/ai-import/commit', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ sheetId: aiImportPreview.sheet.sheetId, mode, recordId, values }),
+      body: JSON.stringify({ sheetId: aiImportPreview.sheet.sheetId, mode, recordId, values, clearFields }),
     });
     const json = await resp.json();
     if (!json.success) throw new Error(json.error || '写入失败');
     setAiImportOutput(`${mode === 'update' ? '修改' : '新增'}成功：${json.data.sheet.title}\n字段：${json.data.fields.join('、')}`);
-    renderAiImportPreview(null);
+    await renderAiImportPreview(null);
     await clearCacheAndReload();
     const currentSheet = document.getElementById('recSheetId');
     if (currentSheet && currentSheet.value === committedSheetId) loadRecords();
