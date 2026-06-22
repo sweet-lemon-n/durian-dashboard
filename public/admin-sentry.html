@@ -476,8 +476,14 @@
           <textarea class="form-input" id="aiImportText" placeholder="南部 第11柜&#10;品牌：烨荣&#10;柜号：LYGU0023499&#10;放柜时间：6/21 12.15&#10;设定温度：13.0°C&#10;送风温度：13.0°C&#10;回风温度：14.8°C&#10;风口设定：30%&#10;当前位置：泰国在途&#10;口岸：友谊关&#10;味道：无"></textarea>
         </div>
       </div>
+      <div class="form-row">
+        <div class="form-group"><label>目标子表</label><select id="aiImportSheetId" class="form-input" style="width:240px" onchange="buildManualAiImportPreview()"></select></div>
+        <div class="form-group"><label>写入模式</label><select id="aiImportMode" class="form-input" style="width:120px"><option value="add">新增记录</option><option value="update">修改记录</option></select></div>
+        <div class="form-group"><label>修改记录 ID</label><input class="form-input" id="aiImportRecordId" placeholder="修改模式必填" style="width:220px"></div>
+      </div>
       <div style="display:flex;flex-wrap:wrap;gap:8px">
         <button class="btn btn-primary" onclick="parseAiImport()">智能解析</button>
+        <button class="btn" onclick="buildManualAiImportPreview()">手工录入</button>
         <button class="btn" onclick="document.getElementById('aiImportImage').click()">上传截图</button>
         <input id="aiImportImage" type="file" accept="image/*" style="display:none" onchange="handleAiImportImage(this)">
         <button class="btn btn-danger" id="aiImportCommitBtn" onclick="commitAiImport()" disabled>确认写入智能表</button>

@@ -77,7 +77,7 @@ async function ensureSheetsLoaded() {
 
 async function populateSheetSelects() {
   const sheets = await ensureSheetsLoaded();
-  ['recSheetId', 'fldSheetId', 'viewSheetId', 'grpSheetId'].forEach(selId => {
+  ['recSheetId', 'fldSheetId', 'viewSheetId', 'grpSheetId', 'aiImportSheetId'].forEach(selId => {
     const sel = document.getElementById(selId);
     if (!sel) return;
     const currentVal = sel.value;
@@ -394,6 +394,9 @@ function getAiImportEls() {
     out: document.getElementById('aiImportOutput'),
     preview: document.getElementById('aiImportPreview'),
     commit: document.getElementById('aiImportCommitBtn'),
+    sheet: document.getElementById('aiImportSheetId'),
+    mode: document.getElementById('aiImportMode'),
+    recordId: document.getElementById('aiImportRecordId'),
   };
 }
 
@@ -458,7 +461,7 @@ async function saveAiImportConfig() {
 }
 
 function renderAiImportPreview(data) {
-  const { preview, commit } = getAiImportEls();
+  const { preview, commit, sheet, mode, recordId } = getAiImportEls();
   if (!preview) return;
   aiImportPreview = data;
   if (!data || !data.sheet) {
@@ -466,11 +469,14 @@ function renderAiImportPreview(data) {
     if (commit) commit.disabled = true;
     return;
   }
+  if (sheet) sheet.value = data.sheet.sheetId || '';
+  if (mode) mode.value = data.mode === 'update' ? 'update' : 'add';
+  if (recordId && data.recordId) recordId.value = data.recordId;
   const rows = (data.fields || []).map(f => `
     <tr>
-      <td>${escHtml(f.title)}</td>
+      <td>${escHtml(f.title)} <small style="color:var(--text-muted)">(${escHtml(f.fieldType || '-')})</small></td>
       <td><input data-ai-field="${escAttr(f.title)}" value="${escAttr(f.value)}"></td>
-      <td>${escHtml(f.fieldType || '-')}</td>
+      <td><code>${escHtml(f.fieldType || '-')}</code></td>
       <td>${Math.round((f.confidence || 0) * 100)}%${f.reason ? `<br><small>${escHtml(f.reason)}</small>` : ''}</td>
     </tr>
   `).join('');
@@ -481,6 +487,7 @@ function renderAiImportPreview(data) {
     <div class="ai-preview">
       <h3>待确认写入信息</h3>
       <div>解析器：<b>${escHtml(data.parser || 'deepseek')}</b></div>
+      <div>建议模式：<b>${data.mode === 'update' ? '修改记录' : '新增记录'}</b>${data.recordHint ? ` <span style="color:var(--text-muted)">(${escHtml(data.recordHint)})</span>` : ''}</div>
       <div>目标子表：<b>${escHtml(data.sheet.title)}</b> <span style="color:var(--text-muted)">(${escHtml(data.sheet.sheetId)})</span></div>
       <table>
         <thead><tr><th>字段</th><th>识别/补充值（可修改）</th><th>字段类型</th><th>置信度</th></tr></thead>
@@ -492,8 +499,46 @@ function renderAiImportPreview(data) {
   if (commit) commit.disabled = !(data.fields && data.fields.length);
 }
 
+function formatLocalDateTime(d) {
+  const pad = n => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
+async function buildManualAiImportPreview() {
+  const { sheet, mode } = getAiImportEls();
+  const sheetId = sheet && sheet.value;
+  if (!sheetId) {
+    setAiImportOutput('请先选择目标子表', true);
+    renderAiImportPreview(null);
+    return;
+  }
+  const sheets = await ensureSheetsLoaded();
+  const selected = sheets.find(s => s.sheet_id === sheetId);
+  if (!selected) {
+    setAiImportOutput('目标子表不存在', true);
+    renderAiImportPreview(null);
+    return;
+  }
+  const fields = (selected.fields || []).map(f => ({
+    title: f.field_title,
+    value: f.field_title === '更新时间' ? formatLocalDateTime(new Date()) : '',
+    fieldId: f.field_id,
+    fieldType: f.field_type,
+    confidence: f.field_title === '更新时间' ? 0.5 : 0,
+    reason: f.field_title === '更新时间' ? '默认当前时间，可手动修改' : '手工录入',
+  }));
+  renderAiImportPreview({
+    sheet: { sheetId: selected.sheet_id, title: selected.title },
+    mode: mode && mode.value === 'update' ? 'update' : 'add',
+    fields,
+    warnings: [],
+    parser: 'manual',
+  });
+  setAiImportOutput('已生成手工录入表，可直接填写后确认写入。');
+}
+
 async function parseAiImport() {
-  const { text, commit } = getAiImportEls();
+  const { text, commit, sheet, mode } = getAiImportEls();
   if (!text || !text.value.trim()) {
     setAiImportOutput('请先粘贴自然语言文本或截图 OCR 后的文字', true);
     return;
@@ -505,7 +550,7 @@ async function parseAiImport() {
     const resp = await apiFetch('/api/ai-import/parse', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ text: text.value }),
+      body: JSON.stringify({ text: text.value, sheetId: sheet && sheet.value, mode: mode && mode.value }),
     });
     const json = await resp.json();
     if (!json.success) throw new Error(json.error || '解析失败');
@@ -517,8 +562,13 @@ async function parseAiImport() {
 }
 
 async function commitAiImport() {
-  if (!aiImportPreview || !aiImportPreview.sheet) {
-    setAiImportOutput('请先解析并确认信息', true);
+  const els = getAiImportEls();
+  if (!aiImportPreview || !aiImportPreview.sheet) { await buildManualAiImportPreview(); }
+  if (!aiImportPreview || !aiImportPreview.sheet) return;
+  const mode = els.mode && els.mode.value === 'update' ? 'update' : 'add';
+  const recordId = (els.recordId && els.recordId.value.trim()) || '';
+  if (mode === 'update' && !recordId) {
+    setAiImportOutput('修改模式需要填写记录 ID', true);
     return;
   }
   const values = {};
@@ -531,7 +581,7 @@ async function commitAiImport() {
     setAiImportOutput('没有可写入字段', true);
     return;
   }
-  const ok = confirm(`确认写入「${aiImportPreview.sheet.title}」？\n字段：${Object.keys(values).join('、')}`);
+  const ok = confirm(`确认${mode === 'update' ? '修改' : '新增'}「${aiImportPreview.sheet.title}」？\n字段：${Object.keys(values).join('、')}${mode === 'update' ? `\n记录 ID：${recordId}` : ''}`);
   if (!ok) return;
   const committedSheetId = aiImportPreview.sheet.sheetId;
   setAiImportOutput('正在写入智能表...');
@@ -539,11 +589,11 @@ async function commitAiImport() {
     const resp = await apiFetch('/api/ai-import/commit', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ sheetId: aiImportPreview.sheet.sheetId, values }),
+      body: JSON.stringify({ sheetId: aiImportPreview.sheet.sheetId, mode, recordId, values }),
     });
     const json = await resp.json();
     if (!json.success) throw new Error(json.error || '写入失败');
-    setAiImportOutput(`写入成功：${json.data.sheet.title}\n字段：${json.data.fields.join('、')}`);
+    setAiImportOutput(`${mode === 'update' ? '修改' : '新增'}成功：${json.data.sheet.title}\n字段：${json.data.fields.join('、')}`);
     renderAiImportPreview(null);
     await clearCacheAndReload();
     const currentSheet = document.getElementById('recSheetId');

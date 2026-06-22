@@ -120,7 +120,7 @@ function extractJsonObject(text) {
   return JSON.parse(m[0]);
 }
 
-async function callDeepSeekImport(text, schema) {
+async function callDeepSeekImport(text, schema, options = {}) {
   const cfg = getAiImportConfig();
   if (!cfg.apiKey) throw new Error('请先在后台配置 DeepSeek API Key');
   const sheets = buildAiImportSchema(schema);
@@ -128,6 +128,7 @@ async function callDeepSeekImport(text, schema) {
   const systemPrompt = [
     '你是榴莲运输温度监控看板的数据录入助手。',
     '请根据用户提供的自然语言或截图文字，判断应该写入哪张智能表子表，以及应填写哪些字段。',
+    '同时判断这是新增记录还是修改已有记录：如果用户明确说修改、更新、更正、补充某条记录，则建议 update，否则建议 add。',
     '只能从提供的 sheets[].fields[].title 中选择字段，不能编造字段；只能从 sheets[].sheetId 中选择目标子表。',
     '如果用户提到“第10柜/南部第10柜”但没有标准海运柜号，也可以把它作为“柜号”的值。',
     '相对日期要结合 currentDate 解析，例如“昨天傍晚”可推断为昨天 18:00。',
@@ -136,11 +137,15 @@ async function callDeepSeekImport(text, schema) {
   ].join('\n');
   const userPayload = {
     currentDate: new Date().toISOString(),
+    preferredSheetId: options.sheetId || '',
+    preferredMode: options.mode || '',
     sheets,
     text: normalizeImportText(text),
     outputJsonShape: {
       sheetId: '目标子表ID',
       sheetTitle: '目标子表标题',
+      mode: 'add 或 update',
+      recordHint: '若能从文本看出要修改哪条记录，写简短提示；否则空字符串',
       fields: [
         { title: '字段标题', value: '字段值', confidence: 0.9, reason: '简短依据' },
       ],
@@ -165,11 +170,12 @@ async function callDeepSeekImport(text, schema) {
   return extractJsonObject(resp.data?.choices?.[0]?.message?.content);
 }
 
-async function parseImportWithAi(text, schema) {
-  const ai = await callDeepSeekImport(text, schema);
+async function parseImportWithAi(text, schema, options = {}) {
+  const ai = await callDeepSeekImport(text, schema, options);
   const sheets = buildAiImportSchema(schema);
   const sheet = (schema.sheets || []).find(s => s.sheet_id === ai.sheetId)
     || (schema.sheets || []).find(s => s.title === ai.sheetTitle)
+    || (schema.sheets || []).find(s => s.sheet_id === options.sheetId)
     || schema.detected?.tempSheet
     || (schema.sheets || [])[0];
   if (!sheet) throw new Error('DeepSeek 未能选择有效子表');
@@ -203,6 +209,8 @@ async function parseImportWithAi(text, schema) {
   });
   return {
     sheet: { sheetId: sheet.sheet_id, title: sheet.title },
+    mode: ai.mode === 'update' ? 'update' : 'add',
+    recordHint: String(ai.recordHint || ''),
     fields: previewFields,
     values,
     rawText: normalizeImportText(text),
@@ -1318,13 +1326,13 @@ app.put('/api/ai-import/config', requirePermission('smartsheet'), (req, res) => 
  */
 app.post('/api/ai-import/parse', requirePermission('smartsheet'), async (req, res) => {
   try {
-    const { text, imageData } = req.body || {};
+    const { text, imageData, sheetId, mode } = req.body || {};
     if (imageData && !String(text || '').trim()) {
       throw new Error('截图识别需要先配置 OCR/视觉 AI 服务；当前请把截图文字复制到文本框后解析');
     }
     if (!String(text || '').trim()) throw new Error('请粘贴需要识别的文本');
     const schema = await getDocumentSchema();
-    const preview = await parseImportWithAi(text, schema);
+    const preview = await parseImportWithAi(text, schema, { sheetId, mode });
     res.json({ success: true, data: preview });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
@@ -1337,9 +1345,10 @@ app.post('/api/ai-import/parse', requirePermission('smartsheet'), async (req, re
  */
 app.post('/api/ai-import/commit', requirePermission('smartsheet'), async (req, res) => {
   try {
-    const { sheetId, values } = req.body || {};
+    const { sheetId, values, mode = 'add', recordId } = req.body || {};
     if (!sheetId) throw new Error('缺少 sheetId');
     if (!values || typeof values !== 'object' || Array.isArray(values)) throw new Error('缺少待写入字段');
+    if (mode === 'update' && !recordId) throw new Error('修改模式缺少 recordId');
     const schema = await getDocumentSchema();
     const sheet = (schema.sheets || []).find(s => s.sheet_id === sheetId);
     if (!sheet) throw new Error('目标子表不存在或无权限访问');
@@ -1353,9 +1362,11 @@ app.post('/api/ai-import/commit', requirePermission('smartsheet'), async (req, r
       if (cellValue !== undefined) normalizedValues[title] = cellValue;
     });
     if (!Object.keys(normalizedValues).length) throw new Error('没有有效字段可写入');
-    const result = await wecom.addRecords(DOCID, sheetId, [{ values: normalizedValues }], 'CELL_VALUE_KEY_TYPE_FIELD_TITLE');
+    const result = mode === 'update'
+      ? await wecom.updateRecords(DOCID, sheetId, [{ record_id: recordId, values: normalizedValues }], 'CELL_VALUE_KEY_TYPE_FIELD_TITLE')
+      : await wecom.addRecords(DOCID, sheetId, [{ values: normalizedValues }], 'CELL_VALUE_KEY_TYPE_FIELD_TITLE');
     if (result.errcode !== 0) throw new Error(`[${result.errcode}] ${result.errmsg}`);
-    res.json({ success: true, data: { sheet: { sheetId, title: sheet.title }, fields: Object.keys(normalizedValues), result } });
+    res.json({ success: true, data: { mode, recordId: recordId || '', sheet: { sheetId, title: sheet.title }, fields: Object.keys(normalizedValues), result } });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
   }
