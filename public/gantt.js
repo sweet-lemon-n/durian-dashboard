@@ -6,7 +6,7 @@
 (function () {
   const $ = (id) => document.getElementById(id);
   const escHtml = (s) => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
-  const jsArg = (s) => JSON.stringify(String(s == null ? '' : s));
+  const jsArg = (s) => escHtml(String(s == null ? '' : s).replace(/\\/g, '\\\\').replace(/'/g, "\\'"));
 
   async function ganttFetch(url) {
     const resp = await fetch(url, { cache: 'no-store' });
@@ -101,7 +101,7 @@
     html += '</tr></thead><tbody>';
     sortedContainers.forEach(cNo => {
       const label = window.openContainerDrill
-        ? `<button class="drill-link" onclick="window.openContainerDrill(${jsArg(cNo)})">${escHtml(cNo)}</button>`
+        ? `<button class="drill-link" onclick="window.openContainerDrill('${jsArg(cNo)}')">${escHtml(cNo)}</button>`
         : escHtml(cNo);
       html += `<tr><td class="gantt-row-label">${label}</td>`;
       days.forEach(d => {

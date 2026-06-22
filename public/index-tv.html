@@ -350,9 +350,9 @@ const esc = s => String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&l
 function md(s){ return esc(s).replace(/\*\*(.+?)\*\*/g,'<b>$1</b>'); }
 const num = n => Number(n)||0;
 const gotoLogin = () => { window.location.href = '/login?redirect=' + encodeURIComponent(window.location.pathname); };
-function jsArg(v){ return JSON.stringify(String(v==null?'':v)); }
-function orderDrillLink(country, category, brand){ return `<button class="drill-link" onclick="openOrderDrill(${jsArg(country)},${jsArg(category)},${jsArg(brand)})">${esc(brand)}</button>`; }
-function containerDrillLink(container){ const c=String(container||''); return c && c !== '-' ? `<button class="drill-link mono" onclick="openContainerDrill(${jsArg(c)})">${esc(c)}</button>` : esc(c||'-'); }
+function jsArg(v){ return esc(String(v==null?'':v).replace(/\\/g,'\\\\').replace(/'/g,"\\'")); }
+function orderDrillLink(country, category, brand){ return `<button class="drill-link" onclick="openOrderDrill('${jsArg(country)}','${jsArg(category)}','${jsArg(brand)}')">${esc(brand)}</button>`; }
+function containerDrillLink(container){ const c=String(container||''); return c && c !== '-' ? `<button class="drill-link mono" onclick="openContainerDrill('${jsArg(c)}')">${esc(c)}</button>` : esc(c||'-'); }
 
 // ---- Theme switcher ----
 (function(){
