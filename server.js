@@ -34,6 +34,7 @@ const {
 } = require('./lib/auth');
 const { router: boardRouter } = require('./lib/board-routes');
 const { initNewsFetcher } = require('./lib/news-fetcher');
+const wecomCache = require('./lib/wecom-cache');
 const { getAiImportConfig, getPublicAiImportConfig, updateAiImportConfig } = require('./lib/runtime-config');
 
 const app = express();
@@ -533,10 +534,9 @@ app.get('/api/drilldown/order', async (req, res) => {
       return res.status(400).json({ success: false, error: '缺少 country、category 或 brand 参数' });
     }
 
-    clearSchemaCache();
-    const schema = await getDocumentSchema();
-    const orderSheet = findSheetByTitle(schema.sheets, '订单主表');
-    const detailSheet = findSheetByTitle(schema.sheets, '分柜明细表');
+    const snapshot = await wecomCache.getSnapshotOrRefresh(DOCID);
+    const orderSheet = findSheetByTitle(snapshot.sheets, '订单主表');
+    const detailSheet = findSheetByTitle(snapshot.sheets, '分柜明细表');
     if (!orderSheet || !detailSheet) {
       return res.json({
         success: true,
@@ -552,10 +552,8 @@ app.get('/api/drilldown/order', async (req, res) => {
       });
     }
 
-    const [orderRecords, detailRecords] = await Promise.all([
-      wecom.getAllRecords(DOCID, orderSheet.sheet_id),
-      wecom.getAllRecords(DOCID, detailSheet.sheet_id),
-    ]);
+    const orderRecords = orderSheet.records || [];
+    const detailRecords = detailSheet.records || [];
 
     const wantedCountry = COUNTRY_NAME_MAP[country] || country;
     const orderNoField = findFieldStrict(orderSheet.fieldTitles, ['订单编号', '订单号', 'order']);
@@ -595,6 +593,7 @@ app.get('/api/drilldown/order', async (req, res) => {
       data: {
         type: 'order',
         source: 'smart_sheet',
+        cache: { fetchedAt: snapshot.fetchedAt, ageMs: Date.now() - new Date(snapshot.fetchedAt).getTime() },
         query: { country, category, brand, factory },
         sheets: [
           sheetMetaForDrilldown(orderSheet),
@@ -626,9 +625,8 @@ app.get('/api/drilldown/container', async (req, res) => {
       return res.status(400).json({ success: false, error: '缺少 container 参数' });
     }
 
-    clearSchemaCache();
-    const schema = await getDocumentSchema();
-    const targetSheets = schema.sheets.filter(sheet => DRILL_CONTAINER_SHEETS.includes(sheet.title));
+    const snapshot = await wecomCache.getSnapshotOrRefresh(DOCID);
+    const targetSheets = snapshot.sheets.filter(sheet => DRILL_CONTAINER_SHEETS.includes(sheet.title));
 
     const sections = [];
     for (const sheet of targetSheets) {
@@ -636,7 +634,7 @@ app.get('/api/drilldown/container', async (req, res) => {
       if (!containerField) continue;
 
       try {
-        const records = await wecom.getAllRecords(DOCID, sheet.sheet_id);
+        const records = sheet.records || [];
         const matched = records
           .filter(record => drillValueMatches(wecom.getRecordValue(record, containerField), container))
           .slice(0, 100);
@@ -665,6 +663,7 @@ app.get('/api/drilldown/container', async (req, res) => {
       data: {
         type: 'container',
         source: 'smart_sheet',
+        cache: { fetchedAt: snapshot.fetchedAt, ageMs: Date.now() - new Date(snapshot.fetchedAt).getTime() },
         container,
         sections,
         summary: {
@@ -694,6 +693,26 @@ app.get('/api/auth/me', (req, res) => {
       dashboardPermissions: req.user.dashboardPermissions || [],
     },
   });
+});
+
+app.get('/api/wecom-cache/status', (req, res) => {
+  res.json({ success: true, data: wecomCache.getStatus() });
+});
+
+app.post('/api/wecom-cache/refresh', requirePermission('smartsheet'), async (req, res) => {
+  try {
+    const snapshot = await wecomCache.refreshNow(DOCID);
+    res.json({
+      success: true,
+      data: {
+        fetchedAt: snapshot.fetchedAt,
+        durationMs: snapshot.durationMs,
+        recordCounts: snapshot.recordCounts,
+      },
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message, data: wecomCache.getStatus() });
+  }
 });
 
 
@@ -885,8 +904,10 @@ app.get('/api/dashboard', async (req, res) => {
       return res.status(403).json({ success: false, error: '无温度甘特图查看权限' });
     }
 
-    const schema = await getDocumentSchema();
-    const { tempSheet, infoSheet } = schema.detected;
+    const snapshot = await wecomCache.getSnapshotOrRefresh(DOCID);
+    const tempSheet = findSheetByTitle(snapshot.sheets, '温度记录') || snapshot.sheets.find(s => String(s.title).includes('温度'));
+    const infoSheet = snapshot.sheets.find(s => s !== tempSheet) || null;
+    const schema = { sheets: snapshot.sheets, detected: { tempSheet, infoSheet } };
 
     if (!tempSheet) {
       return res.json({
@@ -949,8 +970,19 @@ app.get('/api/dashboard', async (req, res) => {
       }
     }
 
-    // 查询温度记录
-    const records = await wecom.getAllRecords(DOCID, tempSheet.sheet_id, queryOpts);
+    // 查询温度记录：优先使用企微内存快照，只有无缓存 records 时才回退实时查询
+    let records = tempSheet.records || await wecom.getAllRecords(DOCID, tempSheet.sheet_id, queryOpts);
+    if (container && containerField) {
+      records = records.filter(r => drillValueMatches(wecom.getRecordValue(r, containerField), container));
+    }
+    if (timeField) {
+      records = records.slice().sort((a, b) => {
+        const ta = parseLogisticsTime(wecom.getRecordValue(a, timeField))?.getTime() || 0;
+        const tb = parseLogisticsTime(wecom.getRecordValue(b, timeField))?.getTime() || 0;
+        return tb - ta;
+      });
+    }
+    records = records.slice(0, recordLimit);
 
     // 解析记录
     const tempMin = parseFloat(process.env.TEMP_MIN || 2);
@@ -1063,7 +1095,7 @@ app.get('/api/dashboard', async (req, res) => {
       // 读取陆运明细
       if (landSheet) {
         console.log('[dashboard] 读取陆运明细...');
-        const landRecords = await wecom.getAllRecords(DOCID, landSheet.sheet_id, { limit: 500 });
+        const landRecords = landSheet.records || await wecom.getAllRecords(DOCID, landSheet.sheet_id, { limit: 500 });
         landRecords.forEach(r => {
           const cNo = wecom.getRecordValue(r, '柜号');
           if (!cNo) return;
@@ -1100,7 +1132,7 @@ app.get('/api/dashboard', async (req, res) => {
       // 读取海运明细
       if (seaSheet) {
         console.log('[dashboard] 读取海运明细...');
-        const seaRecords = await wecom.getAllRecords(DOCID, seaSheet.sheet_id, { limit: 500 });
+        const seaRecords = seaSheet.records || await wecom.getAllRecords(DOCID, seaSheet.sheet_id, { limit: 500 });
         seaRecords.forEach(r => {
           const cNo = wecom.getRecordValue(r, '柜号');
           if (!cNo) return;
