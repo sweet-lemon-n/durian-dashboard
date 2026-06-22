@@ -134,6 +134,88 @@ function buildAiImportSchema(schema) {
   }));
 }
 
+function recordSearchText(option) {
+  return [
+    option.recordId,
+    option.label,
+    ...Object.values(option.values || {}).map(v => Array.isArray(v) ? v.join(' ') : String(v == null ? '' : v)),
+  ].join(' ').toLowerCase();
+}
+
+function inferRecordMatch(fields, options, hintText) {
+  const candidates = [];
+  const text = normalizeImportText(hintText).toLowerCase();
+  const addNeedle = (needle, weight) => {
+    const s = String(needle == null ? '' : needle).trim();
+    if (!s || s === '-') return;
+    candidates.push({ needle: s.toLowerCase(), weight });
+  };
+
+  addNeedle(text, 1);
+  (fields || []).forEach(field => {
+    const title = String(field.title || '');
+    const value = field.value;
+    if (['柜号', '订单编号', '品牌', '当前位置', '关口', '口岸'].some(k => title.includes(k))) {
+      addNeedle(value, 6);
+    } else {
+      addNeedle(value, 2);
+    }
+  });
+
+  let best = null;
+  (options || []).forEach(option => {
+    const hay = recordSearchText(option);
+    let score = 0;
+    candidates.forEach(c => {
+      if (c.needle && hay.includes(c.needle)) score += c.weight;
+    });
+    if (!best || score > best.score) best = { ...option, score };
+  });
+  return best && best.score > 0 ? best : null;
+}
+
+async function getRecordsForAiImport(sheet) {
+  const snapshot = wecomCache.getSnapshot();
+  const cached = snapshot && (snapshot.sheets || []).find(s => s.sheet_id === sheet.sheet_id);
+  if (cached && Array.isArray(cached.records)) return cached.records.slice(0, 200);
+  if (!snapshot) return [];
+  return wecom.getAllRecords(DOCID, sheet.sheet_id, { limit: 200 });
+}
+
+async function buildAiImportRecordContext(schema, preferredSheetId, text) {
+  const snapshot = wecomCache.getSnapshot();
+  if (!snapshot && !preferredSheetId) return { recordOptionsBySheet: {}, recordCandidates: [] };
+  const selectedSheets = (schema.sheets || [])
+    .filter(s => !preferredSheetId || s.sheet_id === preferredSheetId)
+    .slice(0, preferredSheetId ? 1 : 5);
+  const recordOptionsBySheet = {};
+  const recordCandidates = [];
+  const query = normalizeImportText(text).toLowerCase();
+
+  for (const sheet of selectedSheets) {
+    try {
+      const records = await getRecordsForAiImport(sheet);
+      const options = records.map(record => recordOptionForUi(record, sheet.fields));
+      recordOptionsBySheet[sheet.sheet_id] = options;
+      const ranked = options
+        .map(option => ({ option, score: query ? (recordSearchText(option).includes(query) ? 2 : 0) : 0 }))
+        .sort((a, b) => b.score - a.score)
+        .slice(0, 30)
+        .map(x => ({
+          sheetId: sheet.sheet_id,
+          sheetTitle: sheet.title,
+          recordId: x.option.recordId,
+          label: x.option.label,
+        }));
+      recordCandidates.push(...ranked);
+    } catch (err) {
+      console.warn('[ai-import] 构建记录候选失败:', sheet.title, err.message);
+    }
+  }
+
+  return { recordOptionsBySheet, recordCandidates };
+}
+
 function extractJsonObject(text) {
   const raw = String(text || '').trim();
   if (!raw) throw new Error('DeepSeek 未返回内容');
@@ -164,12 +246,14 @@ async function callDeepSeekImport(text, schema, options = {}) {
     preferredSheetId: options.sheetId || '',
     preferredMode: options.mode || '',
     sheets,
+    recordCandidates: options.recordCandidates || [],
     text: normalizeImportText(text),
     outputJsonShape: {
       sheetId: '目标子表ID',
       sheetTitle: '目标子表标题',
       mode: 'add 或 update',
       recordHint: '若能从文本看出要修改哪条记录，写简短提示；否则空字符串',
+      recordId: '如果 recordCandidates 中有明显匹配的既有记录，返回它的 recordId；否则空字符串',
       fields: [
         { title: '字段标题', value: '字段值', confidence: 0.9, reason: '简短依据' },
       ],
@@ -233,9 +317,16 @@ async function parseImportWithAi(text, schema, options = {}) {
       writable,
     };
   });
+  const recordOptions = options.recordOptionsBySheet?.[sheet.sheet_id] || [];
+  const matchedRecord = ai.recordId
+    ? recordOptions.find(o => o.recordId === ai.recordId)
+    : inferRecordMatch(previewFields, recordOptions, `${ai.recordHint || ''}\n${text}`);
+  const resolvedMode = ai.mode === 'update' || matchedRecord ? 'update' : 'add';
   return {
     sheet: { sheetId: sheet.sheet_id, title: sheet.title },
-    mode: ai.mode === 'update' ? 'update' : 'add',
+    mode: resolvedMode,
+    recordId: matchedRecord ? matchedRecord.recordId : String(ai.recordId || ''),
+    recordLabel: matchedRecord ? matchedRecord.label : '',
     recordHint: String(ai.recordHint || ''),
     fields: previewFields,
     values,
@@ -1551,7 +1642,13 @@ app.post('/api/ai-import/parse', requirePermission('smartsheet'), async (req, re
     if (!String(text || '').trim()) throw new Error('请粘贴需要识别的文本');
     clearSchemaCache();
     const schema = await getDocumentSchema();
-    const preview = await parseImportWithAi(text, schema, { sheetId, mode });
+    const recordContext = await buildAiImportRecordContext(schema, sheetId, text);
+    const preview = await parseImportWithAi(text, schema, {
+      sheetId,
+      mode,
+      recordCandidates: recordContext.recordCandidates,
+      recordOptionsBySheet: recordContext.recordOptionsBySheet,
+    });
     res.json({ success: true, data: preview });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
@@ -1564,13 +1661,16 @@ app.post('/api/ai-import/parse', requirePermission('smartsheet'), async (req, re
  */
 app.get('/api/ai-import/record-options', requirePermission('smartsheet'), async (req, res) => {
   try {
-    const { sheetId, limit = '200' } = req.query;
+    const { sheetId, limit = '200', q = '' } = req.query;
     if (!sheetId) throw new Error('缺少 sheetId');
     const schema = await getDocumentSchema();
     const sheet = (schema.sheets || []).find(s => s.sheet_id === sheetId);
     if (!sheet) throw new Error('目标子表不存在或无权限访问');
     const records = await wecom.getAllRecords(DOCID, sheetId, { limit: Math.min(parseInt(limit) || 200, 500) });
-    const options = records.map(record => recordOptionForUi(record, sheet.fields));
+    const query = String(q || '').trim().toLowerCase();
+    const options = records
+      .map(record => recordOptionForUi(record, sheet.fields))
+      .filter(option => !query || recordSearchText(option).includes(query));
     res.json({ success: true, data: { sheet: { sheetId, title: sheet.title }, options } });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
