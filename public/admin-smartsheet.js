@@ -580,8 +580,7 @@ function selectAiReferenceChoice(index) {
   if (!choice || !fieldTitle) return;
   const input = document.querySelector(`[data-ai-field="${cssEscapeValue(fieldTitle)}"]`);
   if (input) {
-    const current = input.value.trim();
-    input.value = current ? `${current},${choice.recordId}` : choice.recordId;
+    input.value = choice.recordId;
   }
   panel.remove();
   setAiImportOutput(`已选择「${fieldTitle}」关联记录：${choice.text}`);
@@ -652,7 +651,7 @@ function renderAiImportInput(f, unsupported, isUpdate) {
     ? `<label style="display:inline-flex;align-items:center;gap:4px;margin-left:8px;color:var(--text-muted);font-size:12px"><input type="checkbox" data-ai-clear="${escAttr(f.title)}">清空该字段</label>`
     : '';
   const refHtml = isReference && !unsupported
-    ? `<div style="margin-top:6px;display:flex;gap:8px;align-items:center;flex-wrap:wrap"><button type="button" class="btn btn-sm" onclick="chooseAiReferenceRecord('${escAttr(f.title)}')">选择引用记录</button><span style="color:var(--warning);font-size:12px">系统会写入所选记录的 record_id</span></div>`
+    ? `<div style="margin-top:6px;display:flex;gap:8px;align-items:center;flex-wrap:wrap"><button type="button" class="btn btn-sm" onclick="chooseAiReferenceRecord('${escAttr(f.title)}')">选择/重选关联记录</button><span style="color:var(--warning);font-size:12px">${value ? 'AI 已填入候选 record_id，请复核；' : ''}系统会写入所选记录的 record_id</span></div>`
     : '';
   const unsupportedHtml = unsupported
     ? '<div style="color:var(--warning);font-size:12px;margin-top:4px">该字段类型暂不支持 API 直接写入，请在智能表内维护</div>'

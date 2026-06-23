@@ -219,6 +219,47 @@ async function buildAiImportRecordContext(schema, preferredSheetId, text) {
   return { recordOptionsBySheet, recordCandidates };
 }
 
+async function buildAiImportReferenceContext(schema, preferredSheetId) {
+  const referenceCandidates = [];
+  const sheets = preferredSheetId
+    ? (schema.sheets || []).filter(s => s.sheet_id === preferredSheetId)
+    : (schema.sheets || []).slice(0, 5);
+
+  for (const sheet of sheets) {
+    const refFields = (sheet.fields || []).filter(field => {
+      const t = String(field.field_type || '').toUpperCase();
+      return t.includes('REFERENCE') || t.includes('RECORD') || t.includes('RELATION');
+    });
+    for (const field of refFields) {
+      const referencedIds = findReferencedSheetIds(field, schema.sheets);
+      const candidateSheets = referencedIds.length
+        ? (schema.sheets || []).filter(s => referencedIds.includes(s.sheet_id))
+        : (schema.sheets || []).filter(s => s.sheet_id !== sheet.sheet_id).slice(0, 3);
+      for (const candidate of candidateSheets) {
+        try {
+          const records = await getRecordsForAiImport(candidate);
+          records.slice(0, 50).forEach(record => {
+            const option = recordOptionForUi(record, candidate.fields);
+            referenceCandidates.push({
+              sheetId: sheet.sheet_id,
+              sheetTitle: sheet.title,
+              fieldTitle: field.field_title,
+              referenceSheetId: candidate.sheet_id,
+              referenceSheetTitle: candidate.title,
+              recordId: option.recordId,
+              label: option.label,
+            });
+          });
+        } catch (err) {
+          console.warn('[ai-import] 构建引用候选失败:', sheet.title, field.field_title, err.message);
+        }
+      }
+    }
+  }
+
+  return referenceCandidates.slice(0, 120);
+}
+
 function extractJsonObject(text) {
   const raw = String(text || '').trim();
   if (!raw) throw new Error('DeepSeek 未返回内容');
@@ -236,10 +277,11 @@ async function callDeepSeekImport(text, schema, options = {}) {
   const systemPrompt = [
     '你是榴莲运输温度监控看板的数据录入助手。',
     '请根据用户提供的自然语言或截图文字，判断应该写入哪张智能表子表，以及应填写哪些字段。',
-    '同时判断这是新增记录还是修改已有记录：如果用户明确说修改、更新、更正、补充某条记录，则建议 update，否则建议 add。',
+    '同时判断这是新增记录还是修改已有记录：只有用户明确说修改、更新、更正、补充、覆盖已有记录时才建议 update；否则建议 add。',
+    '如果 preferredMode 是 add，必须返回 mode=add；如果目标子表是“温度记录”且用户没有明确说修改，默认返回 add。',
     '只能从提供的 sheets[].fields[].title 中选择字段，不能编造字段；只能从 sheets[].sheetId 中选择目标子表。',
     '如果用户提到“第10柜/南部第10柜”但没有标准海运柜号，也可以把它作为“柜号”的值。',
-    '如果字段类型是 FIELD_TYPE_REFERENCE，只能填写被引用记录的 record_id；如果原文只有显示文本而没有 record_id，请留空并在 warnings 说明需要人工选择引用记录。',
+    '如果字段类型是 FIELD_TYPE_REFERENCE、FIELD_TYPE_RECORD 或 FIELD_TYPE_RELATION，请优先从 referenceCandidates 中选择最匹配的记录，并把该记录 recordId 作为字段值；无法确定时留空并在 warnings 说明需要人工复核。',
     '相对日期要结合 currentDate 解析，例如“昨天傍晚”可推断为昨天 18:00。',
     '温度字段返回数字，日期时间返回 yyyy-MM-dd HH:mm，文本字段返回字符串。',
     '必须只返回 json，不要返回 markdown。',
@@ -250,6 +292,7 @@ async function callDeepSeekImport(text, schema, options = {}) {
     preferredMode: options.mode || '',
     sheets,
     recordCandidates: options.recordCandidates || [],
+    referenceCandidates: options.referenceCandidates || [],
     text: normalizeImportText(text),
     outputJsonShape: {
       sheetId: '目标子表ID',
@@ -324,7 +367,10 @@ async function parseImportWithAi(text, schema, options = {}) {
   const matchedRecord = ai.recordId
     ? recordOptions.find(o => o.recordId === ai.recordId)
     : inferRecordMatch(previewFields, recordOptions, `${ai.recordHint || ''}\n${text}`);
-  const resolvedMode = ai.mode === 'update' || matchedRecord ? 'update' : 'add';
+  const explicitlyUpdate = /修改|更新|更正|补充|覆盖|改为|改成/.test(normalizeImportText(text));
+  const preferredAdd = options.mode === 'add';
+  const isTempSheet = String(sheet.title || '').includes('温度');
+  const resolvedMode = preferredAdd ? 'add' : ((ai.mode === 'update' && (explicitlyUpdate || options.mode === 'update')) ? 'update' : (isTempSheet && !explicitlyUpdate ? 'add' : (ai.mode === 'update' ? 'update' : 'add')));
   return {
     sheet: { sheetId: sheet.sheet_id, title: sheet.title },
     mode: resolvedMode,
@@ -1646,10 +1692,12 @@ app.post('/api/ai-import/parse', requirePermission('smartsheet'), async (req, re
     clearSchemaCache();
     const schema = await getDocumentSchema();
     const recordContext = await buildAiImportRecordContext(schema, sheetId, text);
+    const referenceCandidates = await buildAiImportReferenceContext(schema, sheetId);
     const preview = await parseImportWithAi(text, schema, {
       sheetId,
       mode,
       recordCandidates: recordContext.recordCandidates,
+      referenceCandidates,
       recordOptionsBySheet: recordContext.recordOptionsBySheet,
     });
     res.json({ success: true, data: preview });
@@ -2120,10 +2168,26 @@ function flattenRecordForDrilldown(record, fields) {
   };
 }
 
+function formatRecordOptionValue(value) {
+  if (Array.isArray(value)) return value.map(formatRecordOptionValue).join('、');
+  if (value && typeof value === 'object') return Object.values(value).map(formatRecordOptionValue).filter(Boolean).join(' / ');
+  const s = String(value == null ? '' : value).trim();
+  if (/^\d{10,13}$/.test(s)) {
+    const n = Number(s.length === 10 ? `${s}000` : s);
+    if (Number.isFinite(n) && n >= 946684800000 && n <= 4102444800000) {
+      const d = new Date(n);
+      const p = x => String(x).padStart(2, '0');
+      const base = `${String(d.getFullYear()).slice(2)}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
+      return d.getHours() || d.getMinutes() ? `${base} ${p(d.getHours())}:${p(d.getMinutes())}` : base;
+    }
+  }
+  return s;
+}
+
 function recordOptionForUi(record, fields) {
   const values = {};
   (fields || []).forEach(field => {
-    values[field.field_title] = wecom.getRecordValue(record, field.field_title);
+    values[field.field_title] = formatRecordOptionValue(wecom.getRecordValue(record, field.field_title));
   });
   const priority = ['柜号', '订单编号', '品牌', '产品品类', '国家', '当前位置', '更新时间', '放柜时间', '客户', '目的地'];
   const labelParts = priority
