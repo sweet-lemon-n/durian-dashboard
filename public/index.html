@@ -399,10 +399,20 @@ function showDrillModal(title, sub, html){
   $('drillMask').classList.add('show');
 }
 function closeDrillModal(){ $('drillMask').classList.remove('show'); }
+function drillDateText(v){
+  const s=String(v==null?'':v).trim();
+  if(!/^\d{10,13}$/.test(s)) return null;
+  const n=Number(s.length===10?s+'000':s);
+  if(!Number.isFinite(n) || n<946684800000 || n>4102444800000) return null;
+  const d=new Date(n), p=x=>String(x).padStart(2,'0');
+  const base=`${String(d.getFullYear()).slice(2)}-${p(d.getMonth()+1)}-${p(d.getDate())}`;
+  return d.getHours()||d.getMinutes()?`${base} ${p(d.getHours())}:${p(d.getMinutes())}`:base;
+}
 function drillVal(v){
   if(v==null || v==='') return '-';
   if(Array.isArray(v)) return v.map(drillVal).join('、');
   if(typeof v==='object') return Object.values(v).map(drillVal).filter(Boolean).join(' / ') || '-';
+  const dt=drillDateText(v); if(dt) return dt;
   return String(v);
 }
 function drillTable(title, records){
