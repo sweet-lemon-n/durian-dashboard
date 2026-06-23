@@ -70,8 +70,11 @@ function normalizeImportText(text) {
 function parseImportDate(value) {
   const raw = String(value || '').trim();
   if (!raw) return null;
+  const normalized = raw.replace('T', ' ');
+  let m = normalized.match(/^(\d{4})-(\d{1,2})-(\d{1,2})(?:\s+(\d{1,2}):(\d{1,2}))?$/);
+  if (m) return new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]), Number(m[4] || 0), Number(m[5] || 0));
   const now = new Date();
-  let m = raw.match(/(\d{4})[\/\-.年](\d{1,2})[\/\-.月](\d{1,2})日?\s*(\d{1,2})(?::|\.|点|时)(\d{1,2})?/);
+  m = raw.match(/(\d{4})[\/\-.年](\d{1,2})[\/\-.月](\d{1,2})日?\s*(\d{1,2})(?::|\.|点|时)(\d{1,2})?/);
   if (m) return new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]), Number(m[4]), Number(m[5] || 0));
   m = raw.match(/(\d{1,2})[\/\-.月](\d{1,2})日?\s*(\d{1,2})(?::|\.|点|时)(\d{1,2})?/);
   if (m) return new Date(now.getFullYear(), Number(m[1]) - 1, Number(m[2]), Number(m[3]), Number(m[4] || 0));
