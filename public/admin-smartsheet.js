@@ -90,7 +90,7 @@ function fieldTypeLabel(type) {
   if (t.includes('DATE')) return '日期时间';
   if (t.includes('SINGLE_SELECT')) return '单选';
   if (t.includes('MULTI_SELECT')) return '多选';
-  if (t.includes('REFERENCE') || t.includes('RECORD') || t.includes('RELATION')) return '引用/关联';
+  if (isReferenceFieldType(t)) return '引用/关联';
   if (t.includes('USER')) return '人员';
   if (t.includes('CHECKBOX')) return '勾选';
   if (t.includes('PHONE')) return '电话';
@@ -106,7 +106,7 @@ function isDateField(type, title) {
 
 function isUnsupportedImportField(type) {
   const t = String(type || '').toUpperCase();
-  return t.includes('LINK') || t.includes('USER') || t.includes('CHECKBOX');
+  return !isReferenceFieldType(t) && (t.includes('LINK') || t.includes('USER') || t.includes('CHECKBOX'));
 }
 
 function toDatetimeLocalValue(value) {

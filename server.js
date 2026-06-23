@@ -94,7 +94,12 @@ function isKnownWritableField(field, rawValue) {
   const type = String(field?.field_type || field?.type || '').toUpperCase();
   const title = field?.field_title || field?.title || '';
   if (!type) return ['设定温度', '送风温度', '回风温度', '放柜时间', '更新时间'].includes(title) || rawValue !== '';
-  return type.includes('TEXT') || type.includes('NUMBER') || type.includes('DATE') || type.includes('SELECT') || type.includes('REFERENCE') || type.includes('RECORD') || type.includes('RELATION');
+  return type.includes('TEXT') || type.includes('NUMBER') || type.includes('DATE') || type.includes('SELECT') || isReferenceLikeFieldType(type);
+}
+
+function isReferenceLikeFieldType(type) {
+  const t = String(type || '').toUpperCase();
+  return t.includes('REFERENCE') || t.includes('RECORD') || t.includes('RELATION');
 }
 
 function makeCellValue(field, rawValue) {
@@ -102,7 +107,7 @@ function makeCellValue(field, rawValue) {
   const title = field?.field_title || field?.title || '';
   if (rawValue === null || rawValue === undefined || rawValue === '') return undefined;
   if (!isKnownWritableField(field, rawValue)) return undefined;
-  if (type.includes('REFERENCE') || type.includes('RECORD') || type.includes('RELATION')) {
+  if (isReferenceLikeFieldType(type)) {
     const ids = String(rawValue).split(/[,，\s]+/).map(s => s.trim()).filter(Boolean);
     return ids.length ? ids.map(record_id => ({ record_id })) : undefined;
   }
@@ -121,7 +126,7 @@ function makeCellValue(field, rawValue) {
 function makeEmptyCellValue(field) {
   const type = String(field?.field_type || field?.type || '').toUpperCase();
   if (type.includes('NUMBER')) return null;
-  if (type.includes('REFERENCE') || type.includes('RECORD') || type.includes('RELATION') || type.includes('SELECT')) return [];
+  if (isReferenceLikeFieldType(type) || type.includes('SELECT')) return [];
   return '';
 }
 
@@ -227,8 +232,7 @@ async function buildAiImportReferenceContext(schema, preferredSheetId) {
 
   for (const sheet of sheets) {
     const refFields = (sheet.fields || []).filter(field => {
-      const t = String(field.field_type || '').toUpperCase();
-      return t.includes('REFERENCE') || t.includes('RECORD') || t.includes('RELATION');
+      return isReferenceLikeFieldType(field.field_type);
     });
     for (const field of refFields) {
       const referencedIds = findReferencedSheetIds(field, schema.sheets);
@@ -281,7 +285,7 @@ async function callDeepSeekImport(text, schema, options = {}) {
     '如果 preferredMode 是 add，必须返回 mode=add；如果目标子表是“温度记录”且用户没有明确说修改，默认返回 add。',
     '只能从提供的 sheets[].fields[].title 中选择字段，不能编造字段；只能从 sheets[].sheetId 中选择目标子表。',
     '如果用户提到“第10柜/南部第10柜”但没有标准海运柜号，也可以把它作为“柜号”的值。',
-    '如果字段类型是 FIELD_TYPE_REFERENCE、FIELD_TYPE_RECORD 或 FIELD_TYPE_RELATION，请优先从 referenceCandidates 中选择最匹配的记录，并把该记录 recordId 作为字段值；无法确定时留空并在 warnings 说明需要人工复核。',
+    '如果字段类型包含 REFERENCE、RECORD 或 RELATION（例如 FIELD_TYPE_TWOWAYLINKRECORDS），请优先从 referenceCandidates 中选择最匹配的记录，并把该记录 recordId 作为字段值；无法确定时留空并在 warnings 说明需要人工复核。',
     '相对日期要结合 currentDate 解析，例如“昨天傍晚”可推断为昨天 18:00。',
     '温度字段返回数字，日期时间返回 yyyy-MM-dd HH:mm，文本字段返回字符串。',
     '必须只返回 json，不要返回 markdown。',
