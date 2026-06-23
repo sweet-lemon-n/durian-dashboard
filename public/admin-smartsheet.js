@@ -527,25 +527,64 @@ async function chooseAiReferenceRecord(fieldTitle) {
       setAiImportOutput('没有可选引用记录，请确认被引用子表已有数据', true);
       return;
     }
-    const lines = choices.slice(0, 80).map((c, i) => `${i + 1}. ${c.text}`).join('\n');
-    const ans = prompt(`选择「${fieldTitle}」引用记录：\n输入序号，或直接粘贴 record_id\n\n${lines}`);
-    if (!ans) {
-      setAiImportOutput('');
-      return;
-    }
-    const idx = Number(ans);
-    const recordId = Number.isInteger(idx) && idx >= 1 && idx <= choices.length
-      ? choices[idx - 1].recordId
-      : ans.trim();
-    const input = document.querySelector(`[data-ai-field="${cssEscapeValue(fieldTitle)}"]`);
-    if (input) {
-      const current = input.value.trim();
-      input.value = current ? `${current},${recordId}` : recordId;
-    }
-    setAiImportOutput(`已选择引用记录：${recordId}`);
+    renderAiReferenceChooser(fieldTitle, choices);
+    setAiImportOutput(`请选择「${fieldTitle}」要关联的记录。`);
   } catch (e) {
     setAiImportOutput('引用记录加载失败: ' + e.message, true);
   }
+}
+
+function renderAiReferenceChooser(fieldTitle, choices) {
+  const preview = document.getElementById('aiImportPreview');
+  if (!preview) return;
+  let panel = document.getElementById('aiReferenceChooser');
+  if (!panel) {
+    panel = document.createElement('div');
+    panel.id = 'aiReferenceChooser';
+    panel.className = 'ai-preview';
+    panel.style.marginTop = '12px';
+    preview.appendChild(panel);
+  }
+  panel._choices = choices;
+  panel._fieldTitle = fieldTitle;
+  const rows = choices.slice(0, 80).map((choice, index) => `
+    <tr data-ref-row="${index}">
+      <td>${escHtml(choice.text)}</td>
+      <td style="white-space:nowrap"><button type="button" class="btn btn-sm" onclick="selectAiReferenceChoice(${index})">选择</button></td>
+    </tr>
+  `).join('');
+  panel.innerHTML = `
+    <h3>选择「${escHtml(fieldTitle)}」关联记录</h3>
+    <input class="form-input" id="aiReferenceSearch" placeholder="搜索可关联记录" style="width:100%;margin:8px 0" oninput="filterAiReferenceChoices()">
+    <div style="max-height:320px;overflow:auto;border:1px solid rgba(148,163,184,.25);border-radius:8px">
+      <table style="width:100%;border-collapse:collapse"><tbody>${rows}</tbody></table>
+    </div>
+  `;
+}
+
+function filterAiReferenceChoices() {
+  const panel = document.getElementById('aiReferenceChooser');
+  const q = (document.getElementById('aiReferenceSearch')?.value || '').trim().toLowerCase();
+  if (!panel) return;
+  (panel._choices || []).forEach((choice, index) => {
+    const row = panel.querySelector(`[data-ref-row="${index}"]`);
+    if (row) row.style.display = !q || String(choice.text).toLowerCase().includes(q) ? '' : 'none';
+  });
+}
+
+function selectAiReferenceChoice(index) {
+  const panel = document.getElementById('aiReferenceChooser');
+  if (!panel) return;
+  const choice = (panel._choices || [])[index];
+  const fieldTitle = panel._fieldTitle;
+  if (!choice || !fieldTitle) return;
+  const input = document.querySelector(`[data-ai-field="${cssEscapeValue(fieldTitle)}"]`);
+  if (input) {
+    const current = input.value.trim();
+    input.value = current ? `${current},${choice.recordId}` : choice.recordId;
+  }
+  panel.remove();
+  setAiImportOutput(`已选择「${fieldTitle}」关联记录：${choice.text}`);
 }
 
 function setAiImportConfigStatus(message) {
