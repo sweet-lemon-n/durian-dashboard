@@ -342,6 +342,7 @@
     <div class="tab active" data-tab="orders">📦 订单管理</div>
     <div class="tab" data-tab="logistics">🚚 物流监控</div>
     <div class="tab" data-tab="news">📢 新闻快讯</div>
+    <div class="tab" data-tab="settings">📐 统计设置</div>
     <div class="tab" data-tab="smartsheet">🗄 智能表格</div>
   </div>
 
@@ -416,6 +417,24 @@
       <div class="news-grid">
         <div class="news-col"><h3>🇹🇭 泰国 · 产业快讯</h3><div id="newsListTH"></div></div>
         <div class="news-col"><h3>🇻🇳 越南 · 市场动向</h3><div id="newsListVN"></div></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== 统计设置 ===== -->
+  <div class="panel" id="panel-settings">
+    <div class="card card-sm">
+      <div class="toolbar"><h2>看板统计口径</h2></div>
+      <div class="source-card">
+        <h3>企微数据源 · 交付率计算</h3>
+        <div class="source-grid">
+          <div><label>交付率分子</label><select id="statsNumerator" class="form-input"><option value="arrived">到岸柜数（到岸时间非空）</option><option value="signed">签收柜数（签收日期非空）</option><option value="shipped">发货柜数（发货日期非空）</option><option value="detailed">分柜登记柜数</option></select></div>
+          <div><label>交付率分母</label><select id="statsDenominator" class="form-input"><option value="orderBoxes">订单总柜数（订单主表鲜果/冻果柜数）</option><option value="detailRows">分柜登记柜数（分柜明细记录数）</option></select></div>
+          <div><label>分柜明细去重方式</label><select id="statsDedup" class="form-input"><option value="categoryContainer">按品类 + 柜号去重（推荐）</option><option value="record">按记录行统计（不去重）</option></select></div>
+          <div><label>0 柜数订单行</label><select id="statsHideZero" class="form-input"><option value="true">隐藏</option><option value="false">显示</option></select></div>
+        </div>
+        <div class="source-meta"><span id="statsConfigStatus">未加载</span><button class="btn sm" onclick="loadDashboardStatsConfig()">读取配置</button><button class="btn primary sm" onclick="saveDashboardStatsConfig()">保存配置</button></div>
+        <div class="source-diagnostics">代码口径位置：lib/wecom-aggregate.js；说明文档：docs/statistics-logic.md</div>
       </div>
     </div>
   </div>
@@ -833,6 +852,9 @@ async function loadAutoNewsInfo(showToast=true){try{const r=await api('/api/news
 async function loadNewsSourceConfig(showToast=true){try{const r=await api('/api/news/source-config');const c=r.data||{};autoNewsInfo={...(autoNewsInfo||{}),config:c};$('#metasoEnabled').checked=!!c.metasoEnabled;$('#metasoMcpUrl').value=c.metasoMcpUrl||'';$('#metasoApiUrl').value=c.metasoApiUrl||'';$('#metasoDailyLimit').value=c.metasoDailyLimit||0;$('#metasoCooldownMinutes').value=c.metasoCooldownMinutes||60;$('#newsKeywords').value=(c.keywords||[]).join('\n');$('#metasoMcpApiKey').placeholder=c.hasMetasoMcpApiKey?`已保存：${c.metasoMcpApiKeyMasked}`:'留空则保留当前 Key';$('#metasoApiKey').placeholder=c.hasMetasoApiKey?`已保存：${c.metasoApiKeyMasked}`:'留空则保留当前 Key';renderNewsSourceStatus();if(showToast)toast('新闻源配置已读取');}catch(e){if(showToast)toast('新闻源配置读取失败',true);}}
 async function saveNewsSourceConfig(){const body={metasoMcpUrl:$('#metasoMcpUrl').value.trim(),metasoEnabled:$('#metasoEnabled').checked,metasoMcpApiKey:$('#metasoMcpApiKey').value.trim(),metasoApiUrl:$('#metasoApiUrl').value.trim(),metasoApiKey:$('#metasoApiKey').value.trim(),metasoDailyLimit:+$('#metasoDailyLimit').value||0,metasoCooldownMinutes:+$('#metasoCooldownMinutes').value||0,keywords:$('#newsKeywords').value.split(/\n/).map(s=>s.trim()).filter(Boolean)};try{const r=await api('/api/news/source-config','PUT',body);autoNewsInfo={config:r.data.config,count:r.data.count,sources:r.data.sources,fetchedAt:r.data.fetchedAt,diagnostics:r.data.diagnostics};$('#metasoMcpApiKey').value='';$('#metasoApiKey').value='';renderNewsSourceStatus();await loadNewsSourceConfig(false);toast(`已保存配置，当前自动新闻 ${r.data.count} 条`);}catch(e){toast('保存新闻源失败：'+e.message,true);}}
 async function refreshAutoNews(){try{const r=await api('/api/news/auto/refresh','POST',{});await loadAutoNewsInfo(false);toast(`已刷新，自动新闻 ${r.count} 条`);}catch(e){toast('刷新自动新闻失败：'+e.message,true);}}
+function renderStatsConfigStatus(c){const el=$('#statsConfigStatus');if(!el)return;const numerator={arrived:'到岸柜数',signed:'签收柜数',shipped:'发货柜数',detailed:'分柜登记柜数'}[c.deliveryNumerator]||c.deliveryNumerator;const denominator=c.deliveryDenominator==='detailRows'?'分柜登记柜数':'订单总柜数';const dedup=c.detailDedup==='record'?'按记录行统计':'按品类+柜号去重';el.textContent=`交付率 = ${numerator} / ${denominator} · ${dedup}`;}
+async function loadDashboardStatsConfig(showToast=true){try{const r=await api('/api/dashboard/stats-config');const c=r.data||{};$('#statsNumerator').value=c.deliveryNumerator||'arrived';$('#statsDenominator').value=c.deliveryDenominator||'orderBoxes';$('#statsDedup').value=c.detailDedup||'categoryContainer';$('#statsHideZero').value=String(c.hideZeroBoxRows!==false);renderStatsConfigStatus(c);if(showToast)toast('统计设置已读取');}catch(e){if(showToast)toast('统计设置读取失败：'+e.message,true);}}
+async function saveDashboardStatsConfig(){const body={deliveryNumerator:$('#statsNumerator').value,deliveryDenominator:$('#statsDenominator').value,detailDedup:$('#statsDedup').value,hideZeroBoxRows:$('#statsHideZero').value==='true'};try{const r=await api('/api/dashboard/stats-config','PUT',body);renderStatsConfigStatus(r.data||body);toast('统计设置已保存');}catch(e){toast('保存统计设置失败：'+e.message,true);}}
 async function delNews(id){if(!confirm('删除该新闻？'))return;await api('/api/news/'+id,'DELETE');news=news.filter(n=>n.id!==id);renderNews();toast('已删除');}
 function openNewsModal(country){$('#n_country').value=country;$('#newsModal').classList.add('show');}
 async function submitNews(){const n={country:$('#n_country').value,icon:$('#n_icon').value.trim()||'📌',title:$('#n_title').value.trim(),detail:$('#n_detail').value.trim()};if(!n.title){toast('请填标题',true);return;}const c=await api('/api/news','POST',n);news.push(c);closeModalById('newsModal');renderNews();toast('已新增');$('#n_title').value='';$('#n_detail').value='';$('#n_icon').value='📌';}
@@ -850,7 +872,7 @@ async function loadDataSource(){try{const r=await api('/api/data-source');$('#ds
 $('#dsSelect').onchange=async(e)=>{const v=e.target.value;if(!confirm(`切换看板数据源到「${v==='wecom'?'企微智能表':'手动后台'}」？\n切换后会立即影响所有看板访问。`)){loadDataSource();return;}try{await api('/api/data-source','PUT',{source:v});$('#dsSwitch').classList.toggle('wecom',v==='wecom');toast(`已切换至「${v==='wecom'?'企微智能表':'手动后台'}」`);}catch(e){toast('切换失败：'+e.message,true);loadDataSource();}};
 
 // Boot
-(async function(){const ok=await checkAuth();if(!ok)return;await loadDataSource();loadAll();setInterval(()=>{if(document.activeElement.tagName!=='INPUT')loadAll();},10000);})();
+(async function(){const ok=await checkAuth();if(!ok)return;await loadDataSource();loadDashboardStatsConfig(false);loadAll();setInterval(()=>{if(document.activeElement.tagName!=='INPUT')loadAll();},10000);})();
 </script>
 <script src="admin-smartsheet.js?v=1"></script>
 </body>

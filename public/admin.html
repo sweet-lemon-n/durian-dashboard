@@ -262,6 +262,7 @@
     <div class="tab" data-tab="logistics" data-permission="logistics">🚚 物流监控</div>
     <div class="tab" data-tab="news" data-permission="news">📢 新闻快讯</div>
     <div class="tab" data-tab="accounts" data-admin="true">👥 账号管理</div>
+    <div class="tab" data-tab="settings" data-admin="true">📐 统计设置</div>
     <div class="tab" data-tab="smartsheet" data-permission="smartsheet">🗄 智能表格管理</div>
   </div>
 
@@ -342,6 +343,53 @@
       <thead><tr><th>用户名</th><th>显示名</th><th>角色</th><th>后台权限</th><th>首页显示</th><th>状态</th><th>创建时间</th><th>操作</th></tr></thead>
       <tbody></tbody>
     </table>
+  </div>
+
+  <!-- ========== 统计设置 ========== -->
+  <div class="panel" id="panel-settings">
+    <div class="toolbar"><h2>看板统计口径</h2></div>
+    <div class="source-card">
+      <h3>企微数据源 · 交付率计算</h3>
+      <div class="source-grid">
+        <div>
+          <label>交付率分子</label>
+          <select id="statsNumerator" class="form-input">
+            <option value="arrived">到岸柜数（到岸时间非空）</option>
+            <option value="signed">签收柜数（签收日期非空）</option>
+            <option value="shipped">发货柜数（发货日期非空）</option>
+            <option value="detailed">分柜登记柜数</option>
+          </select>
+        </div>
+        <div>
+          <label>交付率分母</label>
+          <select id="statsDenominator" class="form-input">
+            <option value="orderBoxes">订单总柜数（订单主表鲜果/冻果柜数）</option>
+            <option value="detailRows">分柜登记柜数（分柜明细记录数）</option>
+          </select>
+        </div>
+        <div>
+          <label>分柜明细去重方式</label>
+          <select id="statsDedup" class="form-input">
+            <option value="categoryContainer">按品类 + 柜号去重（推荐）</option>
+            <option value="record">按记录行统计（不去重）</option>
+          </select>
+        </div>
+        <div>
+          <label>0 柜数订单行</label>
+          <select id="statsHideZero" class="form-input">
+            <option value="true">隐藏</option>
+            <option value="false">显示</option>
+          </select>
+        </div>
+      </div>
+      <div class="hint">当前第一版只作用于“企微智能表”数据源。保存后首页下一次刷新会按新口径计算。</div>
+      <div class="source-meta">
+        <span id="statsConfigStatus">未加载</span>
+        <button class="btn sm" onclick="loadDashboardStatsConfig()">读取配置</button>
+        <button class="btn primary sm" onclick="saveDashboardStatsConfig()">保存配置</button>
+      </div>
+      <div class="source-diagnostics">代码口径位置：lib/wecom-aggregate.js；说明文档：docs/statistics-logic.md</div>
+    </div>
   </div>
 
   <!-- ========== 智能表格管理（连接企业微信真实数据）========== -->
@@ -692,6 +740,7 @@ async function loadAll(){
       tasks.push(loadNewsSourceConfig(false));
       tasks.push(loadAutoNewsInfo(false));
     }
+    if(currentUser && currentUser.role==='admin') tasks.push(loadDashboardStatsConfig(false));
     await Promise.all(tasks);
     setConn(true);
   }catch(e){
@@ -699,6 +748,41 @@ async function loadAll(){
     if(e.message!=='Unauthorized') toast('无法连接后端，请确认服务已启动', true);
     console.error(e);
   }
+}
+
+// ===== 看板统计设置 =====
+function renderStatsConfigStatus(c){
+  const el = $('#statsConfigStatus');
+  if(!el) return;
+  const numerator = {arrived:'到岸柜数',signed:'签收柜数',shipped:'发货柜数',detailed:'分柜登记柜数'}[c.deliveryNumerator] || c.deliveryNumerator;
+  const denominator = c.deliveryDenominator === 'detailRows' ? '分柜登记柜数' : '订单总柜数';
+  const dedup = c.detailDedup === 'record' ? '按记录行统计' : '按品类+柜号去重';
+  el.textContent = `交付率 = ${numerator} / ${denominator} · ${dedup}`;
+}
+async function loadDashboardStatsConfig(showToast=true){
+  try{
+    const r = await api('/api/dashboard/stats-config');
+    const c = r.data || {};
+    $('#statsNumerator').value = c.deliveryNumerator || 'arrived';
+    $('#statsDenominator').value = c.deliveryDenominator || 'orderBoxes';
+    $('#statsDedup').value = c.detailDedup || 'categoryContainer';
+    $('#statsHideZero').value = String(c.hideZeroBoxRows !== false);
+    renderStatsConfigStatus(c);
+    if(showToast) toast('统计设置已读取');
+  }catch(e){ if(showToast) toast('统计设置读取失败：'+e.message, true); }
+}
+async function saveDashboardStatsConfig(){
+  const body = {
+    deliveryNumerator: $('#statsNumerator').value,
+    deliveryDenominator: $('#statsDenominator').value,
+    detailDedup: $('#statsDedup').value,
+    hideZeroBoxRows: $('#statsHideZero').value === 'true',
+  };
+  try{
+    const r = await api('/api/dashboard/stats-config','PUT',body);
+    renderStatsConfigStatus(r.data || body);
+    toast('统计设置已保存');
+  }catch(e){ toast('保存统计设置失败：'+e.message, true); }
 }
 
 // ===== 订单渲染（拖拽排序 + 悬停箭头 + tfoot 合计行）=====
