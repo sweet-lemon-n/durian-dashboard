@@ -253,6 +253,7 @@
   <div class="spacer"></div>
   <span class="user" id="headerUser"></span>
   <a href="/" target="_blank">📺 打开看板</a>
+  <a href="/index-flow.html" target="_blank">🔀 流向看板</a>
   <a href="#" class="logout" id="btnLogout">退出登录</a>
 </header>
 
@@ -389,6 +390,34 @@
         <button class="btn primary sm" onclick="saveDashboardStatsConfig()">保存配置</button>
       </div>
       <div class="source-diagnostics">代码口径位置：lib/wecom-aggregate.js；说明文档：docs/statistics-logic.md</div>
+    </div>
+    <div class="source-card">
+      <h3>柜量流向看板配置</h3>
+      <div class="source-grid">
+        <div><label>订单主表</label><select id="flowOrderSheet" onchange="renderFlowFieldSelectors()" class="form-input"></select></div>
+        <div><label>分柜明细表</label><select id="flowDetailSheet" onchange="renderFlowFieldSelectors()" class="form-input"></select></div>
+        <div><label>订单编号（订单主表）</label><select id="flow_orderNo" class="form-input"></select></div>
+        <div><label>鲜果柜数</label><select id="flow_freshBoxes" class="form-input"></select></div>
+        <div><label>冻果柜数</label><select id="flow_frozenBoxes" class="form-input"></select></div>
+        <div><label>订单编号（分柜明细）</label><select id="flow_detailOrderNo" class="form-input"></select></div>
+        <div><label>柜号</label><select id="flow_containerNo" class="form-input"></select></div>
+        <div><label>发货日期</label><select id="flow_shipDate" class="form-input"></select></div>
+        <div><label>到岸日期</label><select id="flow_arrivalDate" class="form-input"></select></div>
+        <div><label>国内发货时间</label><select id="flow_domesticShipDate" class="form-input"></select></div>
+        <div><label>签收日期</label><select id="flow_signedDate" class="form-input"></select></div>
+        <div><label>国家（可选）</label><select id="flow_country" class="form-input"></select></div>
+        <div><label>产品品类（可选）</label><select id="flow_category" class="form-input"></select></div>
+        <div><label>品牌（可选）</label><select id="flow_brand" class="form-input"></select></div>
+        <div><label>国外在途超时天数</label><input id="flowOverseasDays" type="number" min="0" step="1" value="7"></div>
+        <div><label>在岸待叫车超时天数</label><input id="flowOnShoreDays" type="number" min="0" step="1" value="2"></div>
+        <div><label>国内在途超时天数</label><input id="flowDomesticDays" type="number" min="0" step="1" value="2"></div>
+      </div>
+      <div class="hint">保存字段 ID，字段改名后仍按同一列统计；如果字段用途变化，请重新选择字段。</div>
+      <div class="source-meta">
+        <span id="flowConfigStatus">未加载</span>
+        <button class="btn sm" onclick="loadFlowDashboardConfig()">读取配置</button>
+        <button class="btn primary sm" onclick="saveFlowDashboardConfig()">保存配置</button>
+      </div>
     </div>
   </div>
 
@@ -655,7 +684,7 @@
 const API = '';
 const $ = (s) => document.querySelector(s);
 const $$ = (s) => document.querySelectorAll(s);
-let orders = [], logistics = {}, news = [], accounts = [], currentUser = null, autoNewsInfo = null;
+let orders = [], logistics = {}, news = [], accounts = [], currentUser = null, autoNewsInfo = null, flowSchema = null, flowConfig = null;
 
 // ===== API（带登录认证）=====
 async function api(path, method='GET', body){
@@ -740,7 +769,10 @@ async function loadAll(){
       tasks.push(loadNewsSourceConfig(false));
       tasks.push(loadAutoNewsInfo(false));
     }
-    if(currentUser && currentUser.role==='admin') tasks.push(loadDashboardStatsConfig(false));
+    if(currentUser && currentUser.role==='admin') {
+      tasks.push(loadDashboardStatsConfig(false));
+      tasks.push(loadFlowDashboardConfig(false).catch(e=>{ const el=$('#flowConfigStatus'); if(el) el.textContent='配置未加载：'+e.message; }));
+    }
     await Promise.all(tasks);
     setConn(true);
   }catch(e){
@@ -783,6 +815,120 @@ async function saveDashboardStatsConfig(){
     renderStatsConfigStatus(r.data || body);
     toast('统计设置已保存');
   }catch(e){ toast('保存统计设置失败：'+e.message, true); }
+}
+
+// ===== 柜量流向看板配置 =====
+const FLOW_FIELD_KEYS = ['orderNo','freshBoxes','frozenBoxes','detailOrderNo','containerNo','shipDate','arrivalDate','domesticShipDate','signedDate','country','category','brand'];
+const FLOW_ORDER_KEYS = ['orderNo','freshBoxes','frozenBoxes'];
+const FLOW_DETAIL_KEYS = FLOW_FIELD_KEYS.filter(k=>!FLOW_ORDER_KEYS.includes(k));
+const FLOW_HINTS = {
+  orderNo:['订单编号','订单号'], freshBoxes:['鲜果(柜数)','鲜果'], frozenBoxes:['冻果(柜数)','冻果','冻肉'],
+  detailOrderNo:['订单编号','订单号'], containerNo:['柜号','箱号'], shipDate:['发货日期','发货时间'],
+  arrivalDate:['到岸时间','到岸日期','到港时间'], domesticShipDate:['国内发货时间'],
+  signedDate:['签收日期','签收时间'], country:['国家'], category:['产品品类','品类'], brand:['品牌']
+};
+async function ensureFlowSchema(){
+  if(flowSchema) return flowSchema;
+  const r = await api('/api/config/info');
+  flowSchema = r.data;
+  return flowSchema;
+}
+function flowSheetById(id){ return (flowSchema && flowSchema.sheets || []).find(s=>s.sheet_id===id); }
+function flowFindField(sheet, key, current){
+  const fields = sheet && sheet.fields ? sheet.fields : [];
+  if(current && current.fieldId){
+    const hit = fields.find(f=>f.field_id===current.fieldId);
+    if(hit) return hit.field_id;
+  }
+  const hints = FLOW_HINTS[key] || [];
+  const hit = fields.find(f=>hints.some(h=>String(f.field_title||'').includes(h)));
+  return hit ? hit.field_id : '';
+}
+function flowFieldOptions(sheet, selected, optional=false){
+  const base = optional ? '<option value="">不使用</option>' : '<option value="">请选择字段</option>';
+  const opts = (sheet && sheet.fields || []).map(f=>`<option value="${esc(f.field_id)}" ${selected===f.field_id?'selected':''}>${esc(f.field_title)} · ${fieldTypeShort(f.field_type)}</option>`).join('');
+  return base + opts;
+}
+function fieldTypeShort(t){
+  const s = String(t||'').replace('FIELD_TYPE_','');
+  if(s.includes('DATE')) return '日期';
+  if(s.includes('NUMBER')) return '数字';
+  if(s.includes('TEXT')) return '文本';
+  if(s.includes('SELECT')) return '选项';
+  return s || '-';
+}
+function renderFlowSheetSelectors(){
+  const sheets = flowSchema && flowSchema.sheets || [];
+  const opts = sheets.map(s=>`<option value="${esc(s.sheet_id)}">${esc(s.title)}</option>`).join('');
+  $('#flowOrderSheet').innerHTML = opts;
+  $('#flowDetailSheet').innerHTML = opts;
+  const orderId = flowConfig?.orderSheetId || (sheets.find(s=>s.title==='订单主表')||{}).sheet_id || '';
+  const detailId = flowConfig?.detailSheetId || (sheets.find(s=>s.title==='分柜明细表')||{}).sheet_id || '';
+  $('#flowOrderSheet').value = orderId;
+  $('#flowDetailSheet').value = detailId;
+}
+function renderFlowFieldSelectors(){
+  if(!flowSchema) return;
+  const orderSheet = flowSheetById($('#flowOrderSheet').value);
+  const detailSheet = flowSheetById($('#flowDetailSheet').value);
+  FLOW_FIELD_KEYS.forEach(key=>{
+    const sheet = FLOW_ORDER_KEYS.includes(key) ? orderSheet : detailSheet;
+    const selected = flowFindField(sheet, key, flowConfig && flowConfig.fields && flowConfig.fields[key]);
+    const optional = ['country','category','brand'].includes(key);
+    $('#flow_'+key).innerHTML = flowFieldOptions(sheet, selected, optional);
+  });
+}
+function selectedFlowField(key){
+  const id = $('#flow_'+key).value;
+  const sheet = FLOW_ORDER_KEYS.includes(key) ? flowSheetById($('#flowOrderSheet').value) : flowSheetById($('#flowDetailSheet').value);
+  const field = (sheet && sheet.fields || []).find(f=>f.field_id===id);
+  return { fieldId:id, title: field ? field.field_title : '' };
+}
+function renderFlowConfigStatus(c){
+  const el = $('#flowConfigStatus');
+  if(!el) return;
+  el.textContent = `${c.orderSheetTitle || '订单主表'} + ${c.detailSheetTitle || '分柜明细表'} · 按订单/柜号/发货日期去重`;
+}
+async function loadFlowDashboardConfig(showToast=true){
+  try{
+    await ensureFlowSchema();
+    const r = await api('/api/flow-dashboard/config');
+    flowConfig = r.data || {};
+    renderFlowSheetSelectors();
+    renderFlowFieldSelectors();
+    $('#flowOverseasDays').value = flowConfig.thresholds?.overseasTransitDays ?? 7;
+    $('#flowOnShoreDays').value = flowConfig.thresholds?.onShoreDays ?? 2;
+    $('#flowDomesticDays').value = flowConfig.thresholds?.domesticTransitDays ?? 2;
+    renderFlowConfigStatus(flowConfig);
+    if(showToast) toast('流向看板配置已读取');
+  }catch(e){
+    const el = $('#flowConfigStatus');
+    if(el) el.textContent = '配置未加载：' + e.message;
+    if(showToast) toast('流向看板配置读取失败：'+e.message, true);
+  }
+}
+async function saveFlowDashboardConfig(){
+  try{
+    await ensureFlowSchema();
+    const orderSheet = flowSheetById($('#flowOrderSheet').value);
+    const detailSheet = flowSheetById($('#flowDetailSheet').value);
+    const body = {
+      orderSheetId: orderSheet?.sheet_id || '',
+      orderSheetTitle: orderSheet?.title || '',
+      detailSheetId: detailSheet?.sheet_id || '',
+      detailSheetTitle: detailSheet?.title || '',
+      fields: Object.fromEntries(FLOW_FIELD_KEYS.map(k=>[k, selectedFlowField(k)])),
+      thresholds: {
+        overseasTransitDays:+$('#flowOverseasDays').value || 0,
+        onShoreDays:+$('#flowOnShoreDays').value || 0,
+        domesticTransitDays:+$('#flowDomesticDays').value || 0,
+      },
+    };
+    const r = await api('/api/flow-dashboard/config','PUT',body);
+    flowConfig = r.data || body;
+    renderFlowConfigStatus(flowConfig);
+    toast('流向看板配置已保存');
+  }catch(e){ toast('保存流向看板配置失败：'+e.message, true); }
 }
 
 // ===== 订单渲染（拖拽排序 + 悬停箭头 + tfoot 合计行）=====

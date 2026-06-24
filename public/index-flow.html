@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>货柜流向看板 · 榴莲运输</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;500;700;900&family=Oswald:wght@500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{--bg:#080b10;--panel:#121821;--panel2:#182231;--line:#263448;--txt:#eef4ff;--txt2:#9aa8bd;--txt3:#64748b;--gold:#f5c451;--blue:#38bdf8;--green:#34d399;--cyan:#2dd4bf;--orange:#f59e0b;--purple:#a78bfa;--red:#fb7185;--gray:#64748b}
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{height:100vh;overflow:hidden;background:radial-gradient(circle at 35% 0%,rgba(245,196,81,.12),transparent 34%),var(--bg);color:var(--txt);font-family:"Noto Sans SC",sans-serif}
+  .num{font-family:"Oswald",sans-serif;font-weight:700;font-feature-settings:"tnum"}
+  .app{height:100vh;display:grid;grid-template-rows:58px 104px 1fr 230px;gap:14px;padding:16px}
+  header{display:flex;align-items:center;gap:18px;border:1px solid var(--line);background:rgba(18,24,33,.82);padding:0 18px;border-radius:8px}
+  h1{font-size:19px;font-weight:900;letter-spacing:0}
+  .sub{color:var(--txt2);font-size:13px}.spacer{flex:1}.pill{border:1px solid var(--line);background:var(--panel2);color:var(--txt2);border-radius:999px;padding:6px 10px;font-size:12px}
+  a{color:var(--gold);text-decoration:none}.kpis{display:grid;grid-template-columns:1.25fr repeat(5,1fr);gap:12px}
+  .kpi{border:1px solid var(--line);background:linear-gradient(180deg,rgba(255,255,255,.045),rgba(255,255,255,.015));border-radius:8px;padding:12px 14px;position:relative;overflow:hidden}
+  .kpi:before{content:"";position:absolute;left:0;top:0;bottom:0;width:4px;background:var(--c,var(--gold))}
+  .kpi .label{font-size:12px;color:var(--txt2)}.kpi .value{font-size:34px;line-height:1.05;margin-top:5px}.kpi .note{font-size:12px;color:var(--txt3);margin-top:5px}
+  .main{display:grid;grid-template-columns:1fr 320px;gap:14px;min-height:0}
+  .flow{border:1px solid var(--line);border-radius:8px;background:rgba(18,24,33,.7);position:relative;padding:18px;overflow:hidden}
+  .flow-grid{height:100%;display:grid;grid-template-columns:1.15fr 1fr 1fr 1fr;grid-template-rows:1fr 1fr 1fr;gap:18px;align-items:center}
+  .node{border:1px solid color-mix(in srgb,var(--c) 42%,var(--line));background:linear-gradient(180deg,color-mix(in srgb,var(--c) 13%,var(--panel)),rgba(18,24,33,.96));border-radius:8px;padding:15px;min-height:118px;cursor:pointer;position:relative;box-shadow:0 12px 38px rgba(0,0,0,.2)}
+  .node:hover,.node.active{border-color:var(--c);box-shadow:0 0 0 1px color-mix(in srgb,var(--c) 50%,transparent),0 18px 46px rgba(0,0,0,.28)}
+  .node.total{grid-column:1;grid-row:1 / 4;min-height:100%;display:flex;flex-direction:column;justify-content:center}
+  .node.unshipped{grid-column:2;grid-row:1}.node.shipped{grid-column:2;grid-row:2}.node.overseasTransit{grid-column:3;grid-row:1}.node.arrived{grid-column:3;grid-row:2}.node.onShore{grid-column:4;grid-row:1}.node.domesticTransfer{grid-column:4;grid-row:2}.node.domesticTransit{grid-column:3;grid-row:3}.node.signed{grid-column:4;grid-row:3}
+  .node .name{color:var(--txt2);font-size:13px}.node .count{font-size:40px;line-height:1.1;margin:6px 0}.node.total .count{font-size:70px}.node .meta{display:flex;gap:8px;flex-wrap:wrap;color:var(--txt3);font-size:12px}.node .hint{position:absolute;right:10px;top:10px;color:var(--c);font-size:11px;border:1px solid color-mix(in srgb,var(--c) 45%,transparent);border-radius:999px;padding:2px 7px}
+  .line{position:absolute;height:2px;background:linear-gradient(90deg,transparent,var(--gold),transparent);opacity:.52;transform-origin:left center}.l1{left:23%;top:31%;width:20%}.l2{left:23%;top:50%;width:20%}.l3{left:47%;top:31%;width:18%;transform:rotate(-14deg)}.l4{left:47%;top:50%;width:18%}.l5{left:70%;top:31%;width:17%}.l6{left:70%;top:50%;width:17%}.l7{left:70%;top:69%;width:17%}
+  .side{border:1px solid var(--line);border-radius:8px;background:rgba(18,24,33,.76);padding:14px;min-height:0;display:flex;flex-direction:column}
+  .side h2,.bottom h2{font-size:15px;margin-bottom:10px}.alert-list{overflow:auto;display:flex;flex-direction:column;gap:8px}.alert{border:1px solid rgba(251,113,133,.35);background:rgba(251,113,133,.08);border-radius:7px;padding:10px}.alert b{color:#fecdd3}.alert small{display:block;color:var(--txt2);margin-top:4px}
+  .bottom{display:grid;grid-template-columns:1fr 380px;gap:14px;min-height:0}
+  .table-card,.break-card{border:1px solid var(--line);border-radius:8px;background:rgba(18,24,33,.76);padding:14px;min-height:0;overflow:hidden}
+  .toolbar{display:flex;align-items:center;gap:10px;margin-bottom:10px}.toolbar h2{margin:0}.toolbar .tag{color:var(--gold)}
+  table{width:100%;border-collapse:collapse;font-size:12px}th,td{padding:7px 8px;border-bottom:1px solid rgba(255,255,255,.06);text-align:left;white-space:nowrap}th{color:var(--txt3);font-weight:700}.table-wrap{height:170px;overflow:auto}
+  .breaks{display:grid;grid-template-columns:1fr 1fr;gap:10px}.mini h3{font-size:12px;color:var(--txt2);margin-bottom:6px}.bar-row{display:grid;grid-template-columns:70px 1fr 42px;gap:8px;align-items:center;font-size:12px;margin:6px 0}.bar{height:8px;border-radius:999px;background:#243044;overflow:hidden}.bar span{display:block;height:100%;background:var(--green)}
+  .empty{color:var(--txt3);padding:24px;text-align:center}.err{color:#fecdd3}
+</style>
+</head>
+<body>
+<div class="app">
+  <header><h1>货柜流转看板</h1><span class="sub">从下单柜数到签收终端，一屏看清柜子卡在哪</span><span class="spacer"></span><span class="pill" id="updated">加载中</span><a href="/">返回总览</a></header>
+  <section class="kpis" id="kpis"></section>
+  <section class="main">
+    <div class="flow" id="flow"><div class="line l1"></div><div class="line l2"></div><div class="line l3"></div><div class="line l4"></div><div class="line l5"></div><div class="line l6"></div><div class="line l7"></div><div class="flow-grid" id="flowGrid"></div></div>
+    <aside class="side"><h2>待处理提醒</h2><div class="alert-list" id="alerts"></div></aside>
+  </section>
+  <section class="bottom">
+    <div class="table-card"><div class="toolbar"><h2>状态明细</h2><span class="tag" id="detailTitle">已发货</span><span class="spacer"></span><span class="sub" id="detailCount"></span></div><div class="table-wrap"><table><thead><tr><th>订单</th><th>柜号</th><th>发货</th><th>到岸</th><th>国内发货</th><th>签收</th><th>品类</th><th>停留</th></tr></thead><tbody id="detailRows"></tbody></table></div></div>
+    <div class="break-card"><h2>拆分概览</h2><div class="breaks"><div class="mini"><h3>国家</h3><div id="countryBreak"></div></div><div class="mini"><h3>品类</h3><div id="catBreak"></div></div></div></div>
+  </section>
+</div>
+<script>
+const $=id=>document.getElementById(id);let data=null,active='shipped';
+const colors={total:'#f5c451',unshipped:'#64748b',shipped:'#38bdf8',overseasTransit:'#60a5fa',arrived:'#34d399',onShore:'#f59e0b',domesticTransfer:'#2dd4bf',domesticTransit:'#a78bfa',signed:'#22c55e'};
+function n(v){return Number(v||0)} function pct(v){return `${n(v).toFixed(1)}%`}
+async function api(path){const r=await fetch(path,{cache:'no-store'});if(r.status===401){location.href='/login?redirect=/index-flow.html';throw new Error('未登录')}const j=await r.json();if(!r.ok||!j.success)throw new Error(j.error||'加载失败');return j.data}
+function kpi(key,label,note){const x=data.nodes[key];return `<div class="kpi" style="--c:${colors[key]}"><div class="label">${label}</div><div class="value num">${n(x.count)}</div><div class="note">${note||`占总柜数 ${pct(x.totalRate)}`}</div></div>`}
+function renderKpis(){const k=data.kpis;$('kpis').innerHTML=[kpi('total','总柜数','订单主表下单柜数'),kpi('shipped','已发货',`发货率 ${pct(k.shippedRate)}`),kpi('unshipped','未发货','尚未形成柜号'),kpi('arrived','已到岸','到岸日期非空'),kpi('signed','已签收',`签收率 ${pct(k.signedRate)}`),kpi('onShore','待处理','已到岸未叫车')].join('')}
+function renderNode(key){const x=data.nodes[key];return `<div class="node ${key} ${active===key?'active':''}" style="--c:${colors[key]}" onclick="selectNode('${key}')"><span class="hint">${x.hint||''}</span><div class="name">${x.label}</div><div class="count num">${n(x.count)}<small style="font-size:16px;color:var(--txt2)"> 柜</small></div><div class="meta"><span>占总 ${pct(x.totalRate)}</span>${key!=='total'?`<span>占上层 ${pct(x.parentRate)}</span>`:''}</div></div>`}
+function renderFlow(){const order=['total','unshipped','shipped','overseasTransit','arrived','onShore','domesticTransfer','domesticTransit','signed'];$('flowGrid').innerHTML=order.map(renderNode).join('')}
+function selectNode(key){active=key;renderFlow();renderDetails()}
+function renderDetails(){const rows=(data.details[active]||[]);$('detailTitle').textContent=data.nodes[active]?.label||active;$('detailCount').textContent=`${rows.length} 柜`;$('detailRows').innerHTML=rows.length?rows.slice(0,80).map(r=>`<tr><td>${r.orderNo||'-'}</td><td>${r.containerNo||'-'}</td><td>${r.shipDateText||'-'}</td><td>${r.arrivalDateText||'-'}</td><td>${r.domesticShipDateText||'-'}</td><td>${r.signedDateText||'-'}</td><td>${r.categoryText||r.category||'-'}</td><td>${r.dwellDays==null?'-':r.dwellDays+'天'}</td></tr>`).join(''):'<tr><td colspan="8" class="empty">暂无明细</td></tr>'}
+function renderAlerts(){const list=data.alerts||[];$('alerts').innerHTML=list.length?list.map(a=>`<div class="alert"><b>${a.alertType}</b> ${a.containerNo||'-'}<small>${a.orderNo||'-'} · ${a.dwellDays||0}天 · ${a.brand||a.categoryText||''}</small></div>`).join(''):'<div class="empty">暂无超时提醒</div>'}
+function bars(id,rows){const max=Math.max(1,...rows.map(r=>r.shipped));$(id).innerHTML=rows.slice(0,6).map(r=>`<div class="bar-row"><span>${r.label}</span><div class="bar"><span style="width:${r.shipped/max*100}%"></span></div><b class="num">${r.shipped}</b></div>`).join('')||'<div class="empty">暂无</div>'}
+function renderBreaks(){bars('countryBreak',data.breakdowns.country||[]);bars('catBreak',data.breakdowns.category||[])}
+function renderAll(){renderKpis();renderFlow();renderDetails();renderAlerts();renderBreaks();$('updated').textContent='更新 '+new Date(data.generatedAt).toLocaleTimeString('zh-CN')+(data.cache?` · 缓存 ${Math.round(data.cache.ageMs/1000)}s`:'')}
+async function load(){try{data=await api('/api/flow-dashboard');renderAll()}catch(e){$('flowGrid').innerHTML=`<div class="empty err">${e.message}</div>`;$('updated').textContent='加载失败'}}
+load();setInterval(load,30000);
+</script>
+</body>
+</html>
