@@ -56,6 +56,9 @@
   .top .userbar a:hover{color:var(--vn);border-color:var(--vn);}
   .top .userbar a.admin{color:var(--gold);border-color:rgba(245,196,81,.4);}
   .top .userbar a.admin:hover{background:var(--gold);color:#000;}
+  .flow-entry{position:relative;color:var(--gold);text-decoration:none;border:1px solid rgba(245,196,81,.42);
+    padding:.45vh .8vw;border-radius:.7vh;font-size:1.15vh;font-weight:800;white-space:nowrap;background:rgba(245,196,81,.08);}
+  .flow-entry:hover{background:var(--gold);color:#07101c;}
 
   .main{display:grid;grid-template-columns:1fr 1fr;gap:1.1vw;min-height:0;}
   .main.one-col{grid-template-columns:1fr;}
@@ -253,6 +256,7 @@
         <div class="date" id="topDate">加载中...</div>
         <div class="clock num" id="clock">--:--:--</div>
       </div>
+      <a class="flow-entry" href="/index-flow.html">货柜流向</a>
       <div class="userbar" id="userbar"></div>
     </div>
   </div>
@@ -304,7 +308,7 @@ function renderCountry(el, info, country){
   const isTH = country==='TH';
   const kpis = [
     kpi(isTH?'c-th':'c-red',info.orders,'总订单 / 单'), kpi('c-wht',info.boxes,'总箱量 / 柜'),
-    kpi('c-signed',info.delivered,'已交付 / 柜'), kpi('c-transit',info.transit,'在途 / 柜'),
+    kpi('c-dlv',info.arrived||0,'已到岸 / 柜'), kpi('c-signed',info.delivered,'已签收 / 柜'), kpi('c-transit',info.transit,'国外在途 / 柜'),
     kpi('c-pending',info.pending,'待发 / 柜'), kpi('c-signed',info.rate.toFixed(1)+'%','交付率')
   ];
   const total = info.boxes||1;
@@ -317,9 +321,9 @@ function renderCountry(el, info, country){
   const renderCat = (cat) => {
     const rows = info.rows.filter(r=>r.category===cat);
     if(!rows.length) return '';
-    const s={orders:0,boxes:0,delivered:0,transit:0,pending:0};
+    const s={orders:0,boxes:0,arrived:0,delivered:0,transit:0,pending:0};
     rows.forEach(r=>Object.keys(s).forEach(k=>s[k]+=num(r[k])));
-    const sumTxt = `<b>${s.orders} 单 / ${s.boxes} 柜</b> · 已交 ${s.delivered} · 在途 ${s.transit} · 待发 ${s.pending}`;
+    const sumTxt = `<b>${s.orders} 单 / ${s.boxes} 柜</b> · 到岸 ${s.arrived} · 签收 ${s.delivered} · 国外在途 ${s.transit} · 待发 ${s.pending}`;
     const rowsHtml = rows.map(r=>{
       const rt=r.boxes||1, rDone=num(r.delivered), rRate=rDone/rt*100;
       const b = seg(rDone/rt*100,'s-signed',rDone)
@@ -327,7 +331,7 @@ function renderCountry(el, info, country){
         + seg(num(r.pending)/rt*100,'s-pending',r.pending);
       return `<div class="row"><div class="nm">${orderDrillLink(country, cat, r.brand)}<small>${num(r.orders)} 单 / ${num(r.boxes)} 柜</small></div>
         <div class="bar">${b||'<span class="seg s-pending" style="width:100%">'+num(r.boxes)+' 待发</span>'}</div>
-        <div class="cap">交付率 <b class="${rRate>0?'c-signed':'c-pending'}">${rRate.toFixed(1)}%</b></div></div>`;
+        <div class="cap">签收率 <b class="${rRate>0?'c-signed':'c-pending'}">${rRate.toFixed(1)}%</b></div></div>`;
     }).join('');
     return `<div class="cat"><div class="cat-head"><span class="cat-tag ${cat.toLowerCase()}">${catLabel[cat]}</span><span class="cat-sum">${sumTxt}</span></div><div class="rows">${rowsHtml}</div></div>`;
   };
@@ -522,8 +526,9 @@ function paint(d){
   if(g){
     $('agg').innerHTML=`<div class="item"><span class="v num">${g.totalOrders}</span><span class="u">合计订单 / 单</span></div>
       <div class="item"><span class="v num">${g.totalBoxes}</span><span class="u">合计箱量 / 柜</span></div>
-      <div class="item"><span class="v num green">${g.totalDone}</span><span class="u">累计完成 / 柜</span></div>
-      <div class="item"><span class="v num">${g.totalMoving}</span><span class="u">在途 / 柜</span></div>
+      <div class="item"><span class="v num">${g.totalArrived||0}</span><span class="u">已到岸 / 柜</span></div>
+      <div class="item"><span class="v num green">${g.totalDone}</span><span class="u">已签收 / 柜</span></div>
+      <div class="item"><span class="v num">${g.totalMoving}</span><span class="u">国外在途 / 柜</span></div>
       <div class="item"><span class="v num">${g.totalPending}</span><span class="u">待发 / 柜</span></div>`;
   }
   if(d.th) renderCountry($('country-th'),d.th,'TH');
