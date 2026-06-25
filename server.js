@@ -32,6 +32,7 @@ const {
   requireRole,
   requirePermission,
 } = require('./lib/auth');
+const authRouter = require("./lib/routes/auth-routes");
 const { router: boardRouter } = require('./lib/board-routes');
 const { initNewsFetcher } = require('./lib/news-fetcher');
 const wecomCache = require('./lib/wecom-cache');
@@ -544,6 +545,8 @@ app.get('/login', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'login.html'));
 });
 
+// ---- 认证 API（登录/登出/当前用户）----
+app.use('/api/auth', authRouter);
 // CORS（如果前端部署在不同端口）
 app.use((req, res, next) => {
   res.header('Access-Control-Allow-Origin', '*');
@@ -591,70 +594,6 @@ app.get('/callback', (req, res) => {
 app.post('/callback', (req, res) => {
   // 企微服务器 5 秒内收不到响应会重试，所以先回空包
   // 后续如需处理智能表格变更事件，可在此解析 XML + 解密
-  console.log('[callback] 收到 POST 推送');
-  res.send('success');
-});
-
-// ---- 认证路由（无需登录） ----
-
-/**
- * POST /api/auth/login
- * Body: { username, password, rememberMe? }
- * 验证成功后设置 httpOnly JWT cookie
- */
-app.post('/api/auth/login', async (req, res) => {
-  try {
-    const { username, password, rememberMe } = req.body || {};
-
-    if (!username || !password) {
-      return res.status(400).json({ success: false, error: '请输入用户名和密码' });
-    }
-
-    const db = getDb();
-    const user = db.prepare('SELECT * FROM users WHERE username = ?').get(username);
-
-    if (!user) {
-      return res.status(401).json({ success: false, error: '用户名或密码错误' });
-    }
-
-    if (!user.is_active) {
-      return res.status(401).json({ success: false, error: '账号已被禁用，请联系管理员' });
-    }
-
-    const bcrypt = require('bcryptjs');
-    const valid = await bcrypt.compare(password, user.password_hash);
-
-    if (!valid) {
-      return res.status(401).json({ success: false, error: '用户名或密码错误' });
-    }
-
-    const token = generateToken(user, !!rememberMe);
-    setAuthCookie(res, token, !!rememberMe);
-
-    console.log(`[auth/login] 用户「${user.username}」登录成功`);
-
-    res.json({
-      success: true,
-      data: {
-        username: user.username,
-        displayName: user.display_name,
-        role: user.role,
-        permissions: normalizePermissions(user.role, user.permissions),
-        dashboardPermissions: normalizeDashboardPermissions(user.dashboard_permissions),
-      },
-    });
-  } catch (err) {
-    console.error('[auth/login] 错误:', err);
-    res.status(500).json({ success: false, error: '登录服务异常' });
-  }
-});
-
-/**
- * POST /api/auth/logout
- * 清除认证 cookie
- */
-app.post('/api/auth/logout', (req, res) => {
-  clearAuthCookie(res);
   res.json({ success: true, message: '已退出登录' });
 });
 
