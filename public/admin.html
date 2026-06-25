@@ -1281,13 +1281,23 @@ async function submitNews(){
 
 // ===== 账号管理 =====
 const PERMISSION_LABELS = {
-  orders:'订单管理', logistics:'物流监控', news:'新闻快讯', smartsheet:'智能表格管理', accounts:'账号管理'
+  overview:'运营总览', orders:'订单看板', flow:'货柜流向', temperature:'温度监控', logistics:'物流监控', news:'行业新闻', smartsheet:'智能表管理', admin:'系统管理'
 };
 const DASHBOARD_LABELS = {
-  summary:'顶部合计', th:'泰国看板', vn:'越南看板', logistics:'物流监控', news:'新闻快讯', gantt:'温度甘特图'
+  overview:'运营总览', orders:'订单看板', flow:'货柜流向', temperature:'温度监控', logistics:'物流监控', news:'行业新闻'
 };
+const PERMISSION_ALIASES = { accounts:'admin' };
+const DASHBOARD_ALIASES = { summary:'overview', th:'orders', vn:'orders', gantt:'temperature' };
+function normalizeKeys(list, aliases){
+  const out = [];
+  (list || []).forEach(key => {
+    const normalized = aliases[key] || key;
+    if(!out.includes(normalized)) out.push(normalized);
+  });
+  return out;
+}
 function renderPermChecks(selected=[]){
-  const chosen = new Set(selected || []);
+  const chosen = new Set(normalizeKeys(selected || [], PERMISSION_ALIASES));
   $('#a_permissions').innerHTML = Object.entries(PERMISSION_LABELS).map(([key,label]) =>
     `<label><input type="checkbox" value="${key}" ${chosen.has(key)?'checked':''}>${label}</label>`
   ).join('');
@@ -1296,7 +1306,7 @@ function renderPermChecks(selected=[]){
 function selectedPerms(){ return Array.from($('#a_permissions').querySelectorAll('input:checked')).map(x=>x.value); }
 function renderDashboardChecks(selected){
   const initial = selected || Object.keys(DASHBOARD_LABELS);
-  const chosen = new Set(initial);
+  const chosen = new Set(normalizeKeys(initial, DASHBOARD_ALIASES));
   $('#a_dashboard_permissions').innerHTML = Object.entries(DASHBOARD_LABELS).map(([key,label]) =>
     `<label><input type="checkbox" value="${key}" ${chosen.has(key)?'checked':''}>${label}</label>`
   ).join('');
@@ -1319,8 +1329,8 @@ function renderUsers(){
   const tb = $('#accountsTable tbody');
   if(!accounts.length){ tb.innerHTML = '<tr><td colspan="8" class="empty">暂无账号</td></tr>'; return; }
   tb.innerHTML = accounts.map(u=>{
-    const perms = (u.permissions||[]).map(p=>`<span class="perm-tag">${PERMISSION_LABELS[p]||p}</span>`).join('') || '<span class="hint">无后台模块</span>';
-    const dashPerms = (u.dashboardPermissions||[]).map(p=>`<span class="perm-tag">${DASHBOARD_LABELS[p]||p}</span>`).join('') || '<span class="hint">无首页板块</span>';
+    const perms = normalizeKeys(u.permissions||[], PERMISSION_ALIASES).map(p=>`<span class="perm-tag">${PERMISSION_LABELS[p]||p}</span>`).join('') || '<span class="hint">无后台模块</span>';
+    const dashPerms = normalizeKeys(u.dashboardPermissions||[], DASHBOARD_ALIASES).map(p=>`<span class="perm-tag">${DASHBOARD_LABELS[p]||p}</span>`).join('') || '<span class="hint">无首页板块</span>';
     const created = u.createdAt ? new Date(u.createdAt.replace(' ','T')+'Z').toLocaleDateString('zh-CN') : '-';
     const self = currentUser && currentUser.username === u.username;
     return `<tr>

@@ -596,7 +596,8 @@ app.get('/callback', (req, res) => {
 app.post('/callback', (req, res) => {
   // 企微服务器 5 秒内收不到响应会重试，所以先回空包
   // 后续如需处理智能表格变更事件，可在此解析 XML + 解密
-  res.json({ success: true, message: '已退出登录' });
+  console.log('[callback] 收到 POST 推送');
+  res.send('success');
 });
 
 // ---- 认证守卫（/api/* 除 /api/auth/* 外均需登录） ----
@@ -772,23 +773,6 @@ app.get('/api/drilldown/container', async (req, res) => {
     console.error('[drilldown/container] 错误:', err);
     res.status(500).json({ success: false, error: err.message });
   }
-});
-
-/**
- * GET /api/auth/me
- * 返回当前登录用户信息（依赖 requireAuth 中间件挂载的 req.user）
- */
-app.get('/api/auth/me', (req, res) => {
-  res.json({
-    success: true,
-    data: {
-      username: req.user.username,
-      displayName: req.user.displayName,
-      role: req.user.role,
-      permissions: req.user.permissions || [],
-      dashboardPermissions: req.user.dashboardPermissions || [],
-    },
-  });
 });
 
 app.get('/api/wecom-cache/status', (req, res) => {
