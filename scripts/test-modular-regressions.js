@@ -33,4 +33,31 @@ assert.ok(
   'dashboard permission UI must expose new module keys'
 );
 
+const overview = fs.readFileSync('public/app-overview.html', 'utf8');
+
+[
+  'id="kpiStrip"',
+  'id="flowPanel"',
+  'id="riskPanel"',
+  'id="moduleDock"',
+  'function buildViewModel',
+  'function renderKpis',
+  'function renderFlow',
+  'function renderRisks',
+  'function renderModules',
+].forEach(marker => {
+  assert.ok(overview.includes(marker), `app-overview must contain ${marker}`);
+});
+
+[
+  '/api/auth/me',
+  '/api/aggregate',
+  '/api/flow-dashboard',
+].forEach(path => {
+  assert.ok(overview.includes(path), `app-overview must consume existing API ${path}`);
+});
+
+assert.ok(!overview.includes('/api/modules/'), 'overview redesign must not depend on new modular APIs');
+assert.ok(!overview.includes('fonts.googleapis.com'), 'overview redesign must not depend on remote fonts');
+
 console.log('modular regression checks passed');

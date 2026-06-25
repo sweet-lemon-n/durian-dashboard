@@ -1,0 +1,535 @@
+# Overview Command Center Redesign Implementation Plan
+
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+
+**Goal:** Redesign `/app-overview.html` from a simple module-card page into a management-facing operations command center with strong but restrained dashboard visuals.
+
+**Architecture:** Keep the redesign isolated to the side-by-side overview page. Continue consuming the existing `/api/auth/me`, `/api/aggregate`, and `/api/flow-dashboard` endpoints; do not add new statistics logic or change production baseline pages. The page will transform existing API responses into view-model objects inside `public/app-overview.html`, then render KPI tiles, a cargo-flow summary, a risk queue, and module entry cards.
+
+**Tech Stack:** Native HTML, CSS, and JavaScript in the existing single-file frontend style; Node.js verification scripts; no new npm dependencies; no build step.
+
+## Global Constraints
+
+- Only redesign `public/app-overview.html`.
+- Do not replace or modify `/index.html`, `/index-flow.html`, `/admin.html`, or backend statistics logic.
+- Keep `/app-overview.html` as a side-by-side page; do not make it the default root page.
+- Use existing API paths only: `/api/auth/me`, `/api/aggregate`, `/api/flow-dashboard`, `/api/auth/logout`.
+- Preserve module codes: `overview`, `orders`, `flow`, `temperature`, `logistics`, `news`, `smartsheet`, `admin`.
+- Design target is management operations overview: global status, risk, progress, and module entry.
+- Visual direction is “运营指挥台 + 克制版大屏视觉”: strong numbers, dark graphite background, status colors, no decorative orbs, no map, no heavy animation.
+- Avoid new external dependencies and avoid relying on remote fonts or icon libraries.
+- Use stable layout dimensions and responsive constraints so text and cards do not overlap on desktop or mobile.
+- Every task must run its listed verification before commit.
+
+---
+
+## File Structure
+
+- Modify: `public/app-overview.html`
+  - Single source for markup, style, API loading, view-model transformation, rendering, refresh, and navigation.
+- Modify: `scripts/test-modular-regressions.js`
+  - Add static regression checks that verify the new overview page contains command-center sections and still uses only existing APIs.
+- No backend files should change.
+- No runtime `data/` files should change.
+
+---
+
+### Task 1: Add Static Regression Coverage for the New Overview Shape
+
+**Files:**
+- Modify: `scripts/test-modular-regressions.js`
+- Test: `scripts/test-modular-regressions.js`
+
+**Interfaces:**
+- Consumes: current `public/app-overview.html`.
+- Produces: regression assertions that fail until the page exposes the command-center structure and required API usage.
+
+- [ ] **Step 1: Add failing assertions**
+
+Append this block to `scripts/test-modular-regressions.js` after the existing admin permission assertions:
+
+```js
+const overview = fs.readFileSync('public/app-overview.html', 'utf8');
+
+[
+  'id="kpiStrip"',
+  'id="flowPanel"',
+  'id="riskPanel"',
+  'id="moduleDock"',
+  'function buildViewModel',
+  'function renderKpis',
+  'function renderFlow',
+  'function renderRisks',
+  'function renderModules',
+].forEach(marker => {
+  assert.ok(overview.includes(marker), `app-overview must contain ${marker}`);
+});
+
+[
+  '/api/auth/me',
+  '/api/aggregate',
+  '/api/flow-dashboard',
+].forEach(path => {
+  assert.ok(overview.includes(path), `app-overview must consume existing API ${path}`);
+});
+
+assert.ok(!overview.includes('/api/modules/'), 'overview redesign must not depend on new modular APIs');
+assert.ok(!overview.includes('fonts.googleapis.com'), 'overview redesign must not depend on remote fonts');
+```
+
+- [ ] **Step 2: Run test to verify it fails**
+
+Run:
+
+```bash
+node scripts/test-modular-regressions.js
+```
+
+Expected: FAIL with an assertion mentioning `app-overview must contain id="kpiStrip"`.
+
+- [ ] **Step 3: Commit only if Task 1 is being reviewed independently**
+
+Do not commit yet if executing Task 2 immediately in the same checkpoint. If committing this task alone:
+
+```bash
+git add scripts/test-modular-regressions.js
+git commit -m "Add overview redesign regression checks"
+```
+
+---
+
+### Task 2: Replace the Overview Page with the Command-Center Layout
+
+**Files:**
+- Modify: `public/app-overview.html`
+
+**Interfaces:**
+- Consumes:
+  - `GET /api/auth/me`, returning `{ success, data: { username, displayName, role, permissions, dashboardPermissions } }`
+  - `GET /api/aggregate`, returning legacy aggregate data with `global`, `th`, `vn`, `logistics`, `news`, `visibility`, `generatedAt`
+  - `GET /api/flow-dashboard`, returning `{ success, data: { nodes, kpis, alerts, cache } }`
+- Produces:
+  - DOM containers: `kpiStrip`, `flowPanel`, `riskPanel`, `moduleDock`
+  - JS functions: `buildViewModel`, `renderKpis`, `renderFlow`, `renderRisks`, `renderModules`
+
+- [ ] **Step 1: Replace static layout skeleton**
+
+In `public/app-overview.html`, replace the `<body>` content with this structure:
+
+```html
+<body>
+<div class="shell">
+  <header class="topbar">
+    <div class="brand-block">
+      <div class="brand-mark">OV</div>
+      <div>
+        <h1>运营总览</h1>
+        <p>Durian Operations Command Center</p>
+      </div>
+    </div>
+    <div class="top-actions">
+      <div class="refresh-state" id="refreshState">正在加载</div>
+      <div class="clock">
+        <span id="dateDisplay"></span>
+        <strong id="clockDisplay"></strong>
+      </div>
+      <div class="userbar" id="userbar"></div>
+    </div>
+  </header>
+
+  <main class="dashboard">
+    <section class="kpi-strip" id="kpiStrip" aria-label="核心指标"></section>
+
+    <section class="main-grid">
+      <section class="panel flow-panel" id="flowPanel" aria-label="货柜状态流转"></section>
+      <aside class="panel risk-panel" id="riskPanel" aria-label="风险待办"></aside>
+    </section>
+
+    <section class="module-dock" id="moduleDock" aria-label="模块入口"></section>
+  </main>
+</div>
+<script>
+/* existing script will be replaced in later steps */
+</script>
+</body>
+```
+
+- [ ] **Step 2: Replace CSS with command-center visual system**
+
+Use this CSS direction in the `<style>` block:
+
+```css
+:root{
+  --bg:#090d0b;
+  --panel:#111915;
+  --panel-2:#151f1b;
+  --line:#25362f;
+  --line-strong:#3c5a4b;
+  --text:#f2f7f1;
+  --muted:#9cab9f;
+  --faint:#66776b;
+  --green:#31d07c;
+  --gold:#f3c24f;
+  --red:#ff625f;
+  --teal:#39c7c9;
+  --blue:#6ea8ff;
+  --shadow:0 18px 50px rgba(0,0,0,.34);
+}
+*{box-sizing:border-box}
+html,body{width:100%;min-height:100%;margin:0;background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Noto Sans SC",sans-serif}
+body{overflow:hidden}
+.shell{height:100vh;display:grid;grid-template-rows:72px 1fr;padding:14px;gap:12px;background:linear-gradient(135deg,#090d0b 0%,#11140d 48%,#170f12 100%)}
+.topbar{display:flex;align-items:center;justify-content:space-between;border:1px solid var(--line);background:rgba(17,25,21,.86);border-radius:8px;padding:0 18px;box-shadow:var(--shadow);min-width:0}
+.brand-block{display:flex;align-items:center;gap:14px;min-width:0}
+.brand-mark{width:44px;height:44px;display:grid;place-items:center;border:1px solid var(--line-strong);border-radius:8px;color:var(--gold);font-weight:800;letter-spacing:.04em;background:linear-gradient(160deg,rgba(49,208,124,.14),rgba(243,194,79,.12))}
+h1{margin:0;font-size:22px;letter-spacing:0;font-weight:800}
+p{margin:0}
+.brand-block p{margin-top:3px;color:var(--muted);font-size:12px}
+.top-actions{display:flex;align-items:center;gap:14px;min-width:0}
+.refresh-state{font-size:12px;color:var(--muted);border:1px solid var(--line);border-radius:999px;padding:7px 10px;white-space:nowrap}
+.clock{display:flex;flex-direction:column;align-items:flex-end;line-height:1.1;white-space:nowrap}
+.clock span{font-size:12px;color:var(--muted)}
+.clock strong{font-size:20px}
+.userbar{display:flex;align-items:center;gap:8px;color:var(--muted);font-size:13px;white-space:nowrap}
+.userbar a{color:var(--text);border:1px solid var(--line);border-radius:6px;padding:6px 9px;text-decoration:none}
+.dashboard{min-height:0;display:grid;grid-template-rows:132px minmax(0,1fr) 142px;gap:12px}
+.kpi-strip{display:grid;grid-template-columns:repeat(8,minmax(0,1fr));gap:10px;min-width:0}
+.kpi{border:1px solid var(--line);background:linear-gradient(180deg,rgba(21,31,27,.96),rgba(17,25,21,.96));border-radius:8px;padding:14px;min-width:0;box-shadow:var(--shadow);position:relative;overflow:hidden}
+.kpi:before{content:"";position:absolute;left:0;right:0;top:0;height:2px;background:var(--accent,var(--green))}
+.kpi .label{font-size:12px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.kpi .value{margin-top:8px;font-size:34px;line-height:1;font-weight:850;letter-spacing:0;font-variant-numeric:tabular-nums}
+.kpi .sub{margin-top:8px;font-size:12px;color:var(--faint);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.main-grid{display:grid;grid-template-columns:minmax(0,1.45fr) minmax(320px,.55fr);gap:12px;min-height:0}
+.panel{border:1px solid var(--line);background:rgba(17,25,21,.9);border-radius:8px;box-shadow:var(--shadow);padding:16px;min-width:0;min-height:0}
+.panel-head{display:flex;justify-content:space-between;align-items:flex-start;gap:16px;margin-bottom:14px}
+.panel-title{font-size:16px;font-weight:800}
+.panel-note{font-size:12px;color:var(--muted)}
+.flow-stages{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:10px}
+.stage{border:1px solid var(--line);border-radius:8px;padding:14px;background:rgba(21,31,27,.78);min-height:132px;position:relative}
+.stage .name{font-size:13px;color:var(--muted)}
+.stage .count{margin-top:10px;font-size:34px;font-weight:850;font-variant-numeric:tabular-nums}
+.stage .rate{margin-top:8px;height:7px;border-radius:999px;background:#223129;overflow:hidden}
+.stage .bar{height:100%;width:0;background:var(--accent,var(--green));transition:width .35s ease}
+.risk-list{display:grid;gap:10px;overflow:auto;max-height:calc(100% - 46px);padding-right:4px}
+.risk{border:1px solid var(--line);border-left:3px solid var(--accent,var(--gold));border-radius:8px;background:rgba(21,31,27,.78);padding:12px}
+.risk .topline{display:flex;justify-content:space-between;gap:10px;font-size:13px;font-weight:750}
+.risk .meta{margin-top:6px;color:var(--muted);font-size:12px;line-height:1.45}
+.module-dock{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:10px}
+.module{border:1px solid var(--line);border-radius:8px;background:rgba(17,25,21,.88);padding:14px;text-decoration:none;color:var(--text);min-width:0}
+.module:hover{border-color:var(--line-strong);background:rgba(21,31,27,.96)}
+.module .code{font-size:11px;color:var(--faint);font-family:ui-monospace,SFMono-Regular,Menlo,monospace}
+.module .name{margin-top:8px;font-size:15px;font-weight:800}
+.module .desc{margin-top:6px;color:var(--muted);font-size:12px;line-height:1.4}
+.empty-state{color:var(--muted);border:1px dashed var(--line);border-radius:8px;padding:18px;text-align:center}
+@media (max-width:1100px){
+  body{overflow:auto}
+  .shell{height:auto;min-height:100vh}
+  .dashboard{grid-template-rows:auto auto auto}
+  .kpi-strip{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .main-grid{grid-template-columns:1fr}
+  .flow-stages{grid-template-columns:1fr}
+  .module-dock{grid-template-columns:repeat(2,minmax(0,1fr))}
+}
+@media (max-width:680px){
+  .shell{padding:10px}
+  .topbar{height:auto;align-items:flex-start;flex-direction:column;padding:14px}
+  .top-actions{width:100%;justify-content:space-between;flex-wrap:wrap}
+  .kpi-strip,.module-dock{grid-template-columns:1fr}
+}
+```
+
+Do not add decorative orbs, bokeh blobs, maps, new libraries, or nested cards.
+
+- [ ] **Step 3: Replace JavaScript data/view model**
+
+Replace the current `<script>` contents with functions using these exact names and API paths:
+
+```js
+const API = '';
+const MODULES = [
+  { code:'orders', name:'订单看板', href:'/index.html', desc:'国家、工厂、品类和柜数' },
+  { code:'flow', name:'货柜流向', href:'/index-flow.html', desc:'总柜数到签收的状态流转' },
+  { code:'logistics', name:'物流监控', href:'/index.html#logistics', desc:'在途、到岸、滞留和催办' },
+  { code:'temperature', name:'温度监控', href:'/index-tv.html', desc:'温度记录、异常和甘特图' },
+  { code:'news', name:'行业新闻', href:'/index.html#news', desc:'行业动态和新闻源诊断' },
+  { code:'smartsheet', name:'智能表管理', href:'/admin.html#smartsheet', desc:'企微字段、记录和 AI 录入' },
+  { code:'admin', name:'系统管理', href:'/admin.html#accounts', desc:'用户、权限和系统设置' },
+];
+
+function $(id){return document.getElementById(id)}
+function esc(value){return String(value == null ? '-' : value).replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]))}
+function num(value){const n=Number(value||0);return Number.isFinite(n)?n:0}
+function pct(a,b){return b?Math.round(num(a)/num(b)*1000)/10:0}
+function gotoLogin(){location.href='/login?redirect='+encodeURIComponent(location.pathname)}
+function pad(n){return String(n).padStart(2,'0')}
+
+function tick(){
+  const d=new Date();
+  const week=['日','一','二','三','四','五','六'];
+  $('dateDisplay').textContent=`${d.getFullYear()}年${d.getMonth()+1}月${d.getDate()}日 星期${week[d.getDay()]}`;
+  $('clockDisplay').textContent=`${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+}
+
+async function api(path){
+  const res=await fetch(API+path,{cache:'no-store'});
+  if(res.status===401){gotoLogin();throw new Error('未登录')}
+  const json=await res.json();
+  if(!res.ok || json.success===false) throw new Error(json.error||'加载失败');
+  return json.data || json;
+}
+
+function moduleAllowed(user, code, visibility){
+  if(user.role==='admin') return true;
+  if((user.permissions||[]).includes(code)) return true;
+  if((user.dashboardPermissions||[]).includes(code)) return true;
+  if(visibility && visibility[code]) return true;
+  return false;
+}
+
+function buildViewModel(user, aggregate, flowData){
+  const global=aggregate.global||{};
+  const logistics=(aggregate.logistics&&aggregate.logistics.kpis)||{};
+  const flow=flowData.kpis||{};
+  const nodes=flowData.nodes||{};
+  const total=num(global.totalBoxes || nodes.total?.count);
+  const shipped=num(flow.shipped || nodes.shipped?.count || (total - num(global.totalPending)));
+  const signed=num(flow.signed || nodes.signed?.count || global.totalDone);
+  const unshipped=Math.max(0,num(nodes.unshipped?.count || global.totalPending));
+  const inTransit=num(logistics.inTransit || nodes.overseasTransit?.count);
+  const portDelayed=num(logistics.portDelayed);
+  const alerts=[...(flowData.alerts||[])];
+  if(portDelayed>0) alerts.unshift({alertType:'关口滞留',containerNo:'-',dwellDays:portDelayed,summary:`${portDelayed} 个批次需要关注`});
+
+  return {
+    user,
+    aggregate,
+    flowData,
+    visibility: aggregate.visibility || {},
+    generatedAt: aggregate.generatedAt || flowData.generatedAt || '',
+    kpis: [
+      {key:'orders',label:'总订单',value:num(global.totalOrders),sub:'订单主表去重',accent:'var(--gold)'},
+      {key:'boxes',label:'总柜数',value:total,sub:'订单总柜数',accent:'var(--green)'},
+      {key:'shipped',label:'已发货',value:shipped,sub:`发货率 ${pct(shipped,total)}%`,accent:'var(--teal)'},
+      {key:'unshipped',label:'未发货',value:unshipped,sub:`待发 ${pct(unshipped,total)}%`,accent:'var(--faint)'},
+      {key:'signed',label:'已签收',value:signed,sub:`签收率 ${pct(signed,total)}%`,accent:'var(--green)'},
+      {key:'transit',label:'国外在途',value:inTransit,sub:'分柜当前状态',accent:'var(--gold)'},
+      {key:'port',label:'关口滞留',value:portDelayed,sub:portDelayed?'需要催办':'暂无滞留',accent:portDelayed?'var(--red)':'var(--green)'},
+      {key:'risk',label:'风险待办',value:alerts.length,sub:alerts.length?'请查看右侧':'暂无风险',accent:alerts.length?'var(--red)':'var(--green)'},
+    ],
+    stages: [
+      {name:'总柜数',count:total,parent:total,accent:'var(--green)'},
+      {name:'已发货',count:shipped,parent:total,accent:'var(--teal)'},
+      {name:'国外在途',count:inTransit,parent:shipped,accent:'var(--gold)'},
+      {name:'关口/到岸',count:num(nodes.onShore?.count || portDelayed),parent:shipped,accent:'var(--red)'},
+      {name:'已签收',count:signed,parent:total,accent:'var(--green)'},
+    ],
+    risks: alerts.slice(0,8),
+    modules: MODULES.filter(mod=>moduleAllowed(user,mod.code,aggregate.visibility||{})),
+  };
+}
+```
+
+- [ ] **Step 4: Add render functions**
+
+Continue the script with these render functions:
+
+```js
+function renderUser(user){
+  const name=user.displayName||user.username||'-';
+  const canAdmin=user.role==='admin'||(user.permissions||[]).length>0;
+  $('userbar').innerHTML=`<span>${esc(name)}</span>${canAdmin?'<a href="/admin">后台</a>':''}<a id="btnLogout">退出</a>`;
+  $('btnLogout').onclick=async()=>{try{await fetch('/api/auth/logout',{method:'POST'})}catch(_){}gotoLogin()};
+}
+
+function renderKpis(model){
+  $('kpiStrip').innerHTML=model.kpis.map(item=>`
+    <article class="kpi" style="--accent:${item.accent}">
+      <div class="label">${esc(item.label)}</div>
+      <div class="value">${esc(item.value)}</div>
+      <div class="sub">${esc(item.sub)}</div>
+    </article>
+  `).join('');
+}
+
+function renderFlow(model){
+  $('flowPanel').innerHTML=`
+    <div class="panel-head">
+      <div><div class="panel-title">货柜状态流转</div><div class="panel-note">复用货柜流向看板当前统计口径</div></div>
+      <div class="panel-note">${model.generatedAt?new Date(model.generatedAt).toLocaleString('zh-CN'):'实时缓存'}</div>
+    </div>
+    <div class="flow-stages">
+      ${model.stages.map(stage=>`
+        <div class="stage" style="--accent:${stage.accent}">
+          <div class="name">${esc(stage.name)}</div>
+          <div class="count">${esc(stage.count)}</div>
+          <div class="panel-note">${pct(stage.count,stage.parent)}%</div>
+          <div class="rate"><div class="bar" style="width:${Math.min(100,pct(stage.count,stage.parent))}%"></div></div>
+        </div>
+      `).join('')}
+    </div>
+  `;
+}
+
+function renderRisks(model){
+  if(!model.risks.length){
+    $('riskPanel').innerHTML='<div class="panel-head"><div><div class="panel-title">风险待办</div><div class="panel-note">关口滞留、在途偏久和异常提醒</div></div></div><div class="empty-state">当前没有需要立即处理的风险</div>';
+    return;
+  }
+  $('riskPanel').innerHTML=`
+    <div class="panel-head"><div><div class="panel-title">风险待办</div><div class="panel-note">按风险优先显示前 8 条</div></div></div>
+    <div class="risk-list">
+      ${model.risks.map(r=>`
+        <div class="risk" style="--accent:${String(r.alertType||'').includes('滞留')?'var(--red)':'var(--gold)'}">
+          <div class="topline"><span>${esc(r.alertType||'风险提醒')}</span><span>${esc(r.containerNo||r.container||'-')}</span></div>
+          <div class="meta">${esc(r.summary||r.reason||r.note||'需要业务人员关注')}${r.dwellDays?` · ${esc(r.dwellDays)} 天`:''}</div>
+        </div>
+      `).join('')}
+    </div>
+  `;
+}
+
+function renderModules(model){
+  $('moduleDock').innerHTML=model.modules.map(mod=>`
+    <a class="module" href="${esc(mod.href)}">
+      <div class="code">${esc(mod.code)}</div>
+      <div class="name">${esc(mod.name)}</div>
+      <div class="desc">${esc(mod.desc)}</div>
+    </a>
+  `).join('');
+}
+```
+
+- [ ] **Step 5: Add init and loading behavior**
+
+Finish the script with:
+
+```js
+async function init(){
+  tick();
+  setInterval(tick,1000);
+  try{
+    $('refreshState').textContent='正在加载';
+    const [user,aggregate,flowData]=await Promise.all([
+      api('/api/auth/me'),
+      api('/api/aggregate'),
+      api('/api/flow-dashboard'),
+    ]);
+    renderUser(user);
+    const model=buildViewModel(user,aggregate,flowData);
+    renderKpis(model);
+    renderFlow(model);
+    renderRisks(model);
+    renderModules(model);
+    $('refreshState').textContent='已更新 '+new Date().toLocaleTimeString('zh-CN',{hour12:false});
+  }catch(err){
+    console.warn(err);
+    $('refreshState').textContent=err.message||'加载失败';
+    $('kpiStrip').innerHTML='<div class="empty-state">运营总览加载失败，请稍后刷新</div>';
+  }
+}
+
+init();
+setInterval(init,60000);
+```
+
+- [ ] **Step 6: Run page syntax check**
+
+Run:
+
+```bash
+node scripts/test-page-syntax.js public/app-overview.html
+```
+
+Expected: PASS with `page syntax checks passed (1 scripts)`.
+
+---
+
+### Task 3: Verify Responsive Layout and Regressions
+
+**Files:**
+- Modify: `public/app-overview.html`
+- Modify: `scripts/test-modular-regressions.js`
+
+**Interfaces:**
+- Consumes: Task 2 layout and functions.
+- Produces: verified single-file page with no syntax regressions and no dependency on new APIs.
+
+- [ ] **Step 1: Run static regression checks**
+
+Run:
+
+```bash
+node scripts/test-modular-regressions.js
+```
+
+Expected: PASS with `modular regression checks passed`.
+
+- [ ] **Step 2: Run page syntax checks for all active HTML pages**
+
+Run:
+
+```bash
+node scripts/test-page-syntax.js public/index.html public/index-flow.html public/admin.html public/login.html public/app-overview.html
+```
+
+Expected: PASS with `page syntax checks passed`.
+
+- [ ] **Step 3: Run dashboard and module regressions**
+
+Run:
+
+```bash
+node scripts/test-module-registry.js
+node scripts/test-dashboard-logic.js
+node scripts/test-auth-routes.js
+node scripts/test-user-routes.js
+```
+
+Expected: all commands exit 0.
+
+- [ ] **Step 4: Run syntax and whitespace checks**
+
+Run:
+
+```bash
+node --check server.js
+node --check lib/db.js
+node --check lib/board-routes.js
+node --check lib/modules/registry.js
+git diff --check
+```
+
+Expected: all commands exit 0.
+
+- [ ] **Step 5: Optional browser verification when available**
+
+If a local server is already running, open `/app-overview.html` and verify:
+
+- Desktop width around 1440px shows topbar, 8 KPI tiles, flow panel, risk panel, and module dock without overlap.
+- Mobile width around 390px stacks KPI, panels, and modules vertically without horizontal scrolling.
+- Unauthenticated access redirects to `/login?redirect=/app-overview.html`.
+
+If no server is running and the user wants visual verification, start the app with:
+
+```bash
+npm start
+```
+
+Then inspect the page in a browser. Do not leave the server running at the end of the task unless the user asks.
+
+- [ ] **Step 6: Commit**
+
+```bash
+git add public/app-overview.html scripts/test-modular-regressions.js
+git commit -m "Redesign overview command center"
+```
+
+---
+
+## Self-Review Notes
+
+- Spec coverage: the plan implements the confirmed hybrid direction: management operations overview plus restrained large-screen visual style.
+- Scope control: only `public/app-overview.html` and `scripts/test-modular-regressions.js` change; old production pages and backend statistics remain untouched.
+- Data consistency: all KPI values come from existing `/api/aggregate` and `/api/flow-dashboard`; no new business formulas redefine current statistics.
+- Risk control: static regression checks prevent missing key sections, remote font dependency, or accidental use of new `/api/modules/*` endpoints.
+- Visual constraints: the plan uses a dark graphite palette with green/gold/red/teal accents, 8px radii, no decorative orbs, no map, no new dependency, and responsive grid constraints.

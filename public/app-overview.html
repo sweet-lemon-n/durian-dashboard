@@ -3,214 +3,296 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>运营总览 · DURIAN OVERVIEW</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=Noto+Sans+SC:wght@400;500;700;900&family=Oswald:wght@500;600;700&display=swap" rel="stylesheet">
+<title>运营总览 · DURIAN COMMAND CENTER</title>
 <style>
   :root{
-    --bg:#070b16; --bg2:#0d1426;
-    --panel:rgba(20,28,48,.72); --panel2:rgba(13,20,38,.85);
-    --line:rgba(99,124,168,.18); --line2:rgba(148,173,214,.12);
-    --txt:#eef3ff; --txt2:#9fb0cc; --txt3:#6c7e9c;
-    --gold:#f5c451; --th:#eab308; --vn:#ef4444;
-    --signed:#22c55e; --delivered:#2dd4bf; --transit:#f59e0b; --port:#fbbf24; --pending:#46556f;
-    --danger:#f87171; --warn:#fbbf24; --ok:#34d399;
-    --card-radius:1.3vh;
+    --bg:#090d0b;
+    --panel:#111915;
+    --panel-2:#151f1b;
+    --line:#25362f;
+    --line-strong:#3c5a4b;
+    --text:#f2f7f1;
+    --muted:#9cab9f;
+    --faint:#66776b;
+    --green:#31d07c;
+    --gold:#f3c24f;
+    --red:#ff625f;
+    --teal:#39c7c9;
+    --blue:#6ea8ff;
+    --shadow:0 18px 50px rgba(0,0,0,.34);
   }
-  *{box-sizing:border-box;margin:0;padding:0}
-  html,body{min-height:100%;width:100%;background:var(--bg);
-    font-family:"Noto Sans SC","Microsoft YaHei",sans-serif;color:var(--txt);}
-  .num{font-family:"Oswald","Barlow Condensed",sans-serif;font-weight:700;font-feature-settings:"tnum";}
-  .board{height:100vh;width:100vw;display:grid;grid-template-rows:6vh 1fr;gap:1.1vh;padding:1.1vh 1.1vw;
-    background:radial-gradient(1200px 600px at 12% -10%,rgba(234,179,8,.10),transparent 60%),
-      radial-gradient(1200px 600px at 88% -10%,rgba(239,68,68,.10),transparent 60%),var(--bg);}
-
-  .top{display:flex;align-items:center;gap:1.3vw;padding:0 1.3vw;border-radius:1.1vh;
-    background:linear-gradient(90deg,rgba(234,179,8,.14),rgba(239,68,68,.14));
-    border:1px solid var(--line);position:relative;overflow:hidden;min-width:0;}
-  .top::before{content:"";position:absolute;inset:0;
-    background:linear-gradient(90deg,transparent,rgba(255,255,255,.05),transparent);}
-  .brand{display:flex;align-items:center;gap:.8vw;position:relative;flex-shrink:0;}
-  .logo{font-size:3vh;line-height:1;}
-  .title-main{font-weight:900;font-size:2.2vh;letter-spacing:.08em;}
-  .title-sub{font-size:1.2vh;color:var(--txt2);letter-spacing:.06em;margin-top:.1vh;}
-  .divider-v{width:1px;height:4.4vh;background:var(--line);flex-shrink:0;}
-  .top .right{margin-left:auto;display:flex;align-items:center;gap:1vw;position:relative;flex-shrink:0;}
-  .top .clock-box{display:flex;flex-direction:column;align-items:flex-end;gap:.1vh;line-height:1.1;}
-  .top .date{font-size:1.25vh;color:var(--txt2);font-weight:500;white-space:nowrap;}
-  .top .clock{font-size:1.9vh;color:var(--txt);letter-spacing:.05em;white-space:nowrap;}
-  .top .userbar{display:flex;align-items:center;gap:.5vw;font-size:1.2vh;color:var(--txt2);white-space:nowrap;}
-  .top .userbar .uname{color:var(--gold);font-weight:700;max-width:8vw;overflow:hidden;text-overflow:ellipsis;display:inline-block;vertical-align:bottom;}
-  .top .userbar a{color:var(--txt2);text-decoration:none;border:1px solid var(--line);
-    padding:.2vh .55vw;border-radius:.5vh;cursor:pointer;transition:.15s;font-size:1.15vh;}
-  .top .userbar a:hover{color:var(--vn);border-color:var(--vn);}
-
-  .grid{display:grid;grid-template-columns:repeat(4,1fr);gap:1.1vw;align-content:start;min-height:0;overflow-y:auto;}
-  .grid::-webkit-scrollbar{width:4px;}
-  .grid::-webkit-scrollbar-thumb{background:rgba(148,173,214,.18);border-radius:2px;}
-  .card{display:flex;flex-direction:column;background:var(--panel);border:1px solid var(--line);
-    border-radius:var(--card-radius);padding:1.8vh 1.2vw 1.5vh;position:relative;overflow:hidden;cursor:pointer;transition:.15s;min-height:14vh;}
-  .card:hover{border-color:rgba(148,173,214,.35);background:rgba(20,28,48,.85);}
-  .card .icon{font-size:3.2vh;margin-bottom:.6vh;}
-  .card .label{font-size:1.5vh;font-weight:700;color:var(--txt2);letter-spacing:.04em;margin-bottom:.4vh;}
-  .card .kpi-row{display:flex;gap:.8vw;flex-wrap:wrap;margin-top:auto;}
-  .card .kpi-item{display:flex;flex-direction:column;line-height:1.1;}
-  .card .kpi-item .v{font-size:2.4vh;}
-  .card .kpi-item .u{font-size:1.05vh;color:var(--txt3);white-space:nowrap;}
-  .card a{position:absolute;inset:0;z-index:1;}
-  .card .badge{position:absolute;top:1.2vh;right:1.2vw;font-size:1.05vh;color:var(--txt3);
-    border:1px solid var(--line2);padding:.15vh .5vw;border-radius:.5vh;}
-  .card .badge.warn{color:var(--warn);border-color:rgba(251,191,36,.35);}
-  .card .badge.danger{color:var(--danger);border-color:rgba(248,113,113,.35);}
-  .no-access{height:100vh;width:100vw;display:flex;align-items:center;justify-content:center;
-    color:var(--txt2);font-size:2vh;background:var(--bg);}
+  *{box-sizing:border-box}
+  html,body{width:100%;min-height:100%;margin:0;background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Noto Sans SC",sans-serif}
+  body{overflow:hidden}
+  .shell{height:100vh;display:grid;grid-template-rows:72px 1fr;padding:14px;gap:12px;background:linear-gradient(135deg,#090d0b 0%,#11140d 48%,#170f12 100%)}
+  .topbar{display:flex;align-items:center;justify-content:space-between;border:1px solid var(--line);background:rgba(17,25,21,.86);border-radius:8px;padding:0 18px;box-shadow:var(--shadow);min-width:0}
+  .brand-block{display:flex;align-items:center;gap:14px;min-width:0}
+  .brand-mark{width:44px;height:44px;display:grid;place-items:center;border:1px solid var(--line-strong);border-radius:8px;color:var(--gold);font-weight:800;letter-spacing:.04em;background:linear-gradient(160deg,rgba(49,208,124,.14),rgba(243,194,79,.12))}
+  h1{margin:0;font-size:22px;letter-spacing:0;font-weight:800}
+  p{margin:0}
+  .brand-block p{margin-top:3px;color:var(--muted);font-size:12px}
+  .top-actions{display:flex;align-items:center;gap:14px;min-width:0}
+  .refresh-state{font-size:12px;color:var(--muted);border:1px solid var(--line);border-radius:999px;padding:7px 10px;white-space:nowrap}
+  .clock{display:flex;flex-direction:column;align-items:flex-end;line-height:1.1;white-space:nowrap}
+  .clock span{font-size:12px;color:var(--muted)}
+  .clock strong{font-size:20px}
+  .userbar{display:flex;align-items:center;gap:8px;color:var(--muted);font-size:13px;white-space:nowrap}
+  .userbar a{color:var(--text);border:1px solid var(--line);border-radius:6px;padding:6px 9px;text-decoration:none}
+  .userbar a:hover{border-color:var(--line-strong);color:var(--gold)}
+  .dashboard{min-height:0;display:grid;grid-template-rows:132px minmax(0,1fr) 142px;gap:12px}
+  .kpi-strip{display:grid;grid-template-columns:repeat(8,minmax(0,1fr));gap:10px;min-width:0}
+  .kpi{border:1px solid var(--line);background:linear-gradient(180deg,rgba(21,31,27,.96),rgba(17,25,21,.96));border-radius:8px;padding:14px;min-width:0;box-shadow:var(--shadow);position:relative;overflow:hidden}
+  .kpi:before{content:"";position:absolute;left:0;right:0;top:0;height:2px;background:var(--accent,var(--green))}
+  .kpi .label{font-size:12px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .kpi .value{margin-top:8px;font-size:34px;line-height:1;font-weight:850;letter-spacing:0;font-variant-numeric:tabular-nums}
+  .kpi .sub{margin-top:8px;font-size:12px;color:var(--faint);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .main-grid{display:grid;grid-template-columns:minmax(0,1.45fr) minmax(320px,.55fr);gap:12px;min-height:0}
+  .panel{border:1px solid var(--line);background:rgba(17,25,21,.9);border-radius:8px;box-shadow:var(--shadow);padding:16px;min-width:0;min-height:0}
+  .panel-head{display:flex;justify-content:space-between;align-items:flex-start;gap:16px;margin-bottom:14px}
+  .panel-title{font-size:16px;font-weight:800}
+  .panel-note{font-size:12px;color:var(--muted)}
+  .flow-stages{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:10px}
+  .stage{border:1px solid var(--line);border-radius:8px;padding:14px;background:rgba(21,31,27,.78);min-height:132px;position:relative}
+  .stage .name{font-size:13px;color:var(--muted)}
+  .stage .count{margin-top:10px;font-size:34px;font-weight:850;font-variant-numeric:tabular-nums}
+  .stage .rate{margin-top:8px;height:7px;border-radius:999px;background:#223129;overflow:hidden}
+  .stage .bar{height:100%;width:0;background:var(--accent,var(--green));transition:width .35s ease}
+  .risk-list{display:grid;gap:10px;overflow:auto;max-height:calc(100% - 46px);padding-right:4px}
+  .risk-list::-webkit-scrollbar{width:4px}
+  .risk-list::-webkit-scrollbar-thumb{background:var(--line-strong);border-radius:999px}
+  .risk{border:1px solid var(--line);border-left:3px solid var(--accent,var(--gold));border-radius:8px;background:rgba(21,31,27,.78);padding:12px}
+  .risk .topline{display:flex;justify-content:space-between;gap:10px;font-size:13px;font-weight:750}
+  .risk .meta{margin-top:6px;color:var(--muted);font-size:12px;line-height:1.45}
+  .module-dock{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:10px}
+  .module{border:1px solid var(--line);border-radius:8px;background:rgba(17,25,21,.88);padding:14px;text-decoration:none;color:var(--text);min-width:0}
+  .module:hover{border-color:var(--line-strong);background:rgba(21,31,27,.96)}
+  .module .code{font-size:11px;color:var(--faint);font-family:ui-monospace,SFMono-Regular,Menlo,monospace}
+  .module .name{margin-top:8px;font-size:15px;font-weight:800}
+  .module .desc{margin-top:6px;color:var(--muted);font-size:12px;line-height:1.4}
+  .empty-state{color:var(--muted);border:1px dashed var(--line);border-radius:8px;padding:18px;text-align:center}
+  @media (max-width:1100px){
+    body{overflow:auto}
+    .shell{height:auto;min-height:100vh}
+    .dashboard{grid-template-rows:auto auto auto}
+    .kpi-strip{grid-template-columns:repeat(2,minmax(0,1fr))}
+    .main-grid{grid-template-columns:1fr}
+    .flow-stages{grid-template-columns:1fr}
+    .module-dock{grid-template-columns:repeat(2,minmax(0,1fr))}
+  }
+  @media (max-width:680px){
+    .shell{padding:10px}
+    .topbar{height:auto;align-items:flex-start;flex-direction:column;padding:14px}
+    .top-actions{width:100%;justify-content:space-between;flex-wrap:wrap}
+    .kpi-strip,.module-dock{grid-template-columns:1fr}
+    .kpi .value{font-size:30px}
+  }
 </style>
 </head>
 <body>
-<div class="board">
-  <div class="top">
-    <div class="brand">
-      <div class="logo">🫕</div>
+<div class="shell">
+  <header class="topbar">
+    <div class="brand-block">
+      <div class="brand-mark">OV</div>
       <div>
-        <div class="title-main" id="titleMain">运营总览</div>
-        <div class="title-sub" id="titleSub">榴莲交付 DURIAN OVERVIEW</div>
+        <h1>运营总览</h1>
+        <p>Durian Operations Command Center</p>
       </div>
     </div>
-    <div class="right">
-      <div class="clock-box">
-        <div class="date" id="dateDisplay"></div>
-        <div class="clock" id="clockDisplay"></div>
+    <div class="top-actions">
+      <div class="refresh-state" id="refreshState">正在加载</div>
+      <div class="clock">
+        <span id="dateDisplay"></span>
+        <strong id="clockDisplay"></strong>
       </div>
       <div class="userbar" id="userbar"></div>
     </div>
-  </div>
-  <div class="grid" id="grid"></div>
+  </header>
+
+  <main class="dashboard">
+    <section class="kpi-strip" id="kpiStrip" aria-label="核心指标"></section>
+
+    <section class="main-grid">
+      <section class="panel flow-panel" id="flowPanel" aria-label="货柜状态流转"></section>
+      <aside class="panel risk-panel" id="riskPanel" aria-label="风险待办"></aside>
+    </section>
+
+    <section class="module-dock" id="moduleDock" aria-label="模块入口"></section>
+  </main>
 </div>
 <script>
 const API = '';
-function $(id){return document.getElementById(id);}
-function esc(s){const d=document.createElement('div');d.appendChild(document.createTextNode(s));return d.innerHTML;}
-function gotoLogin(){window.location.href='/login?redirect='+encodeURIComponent(window.location.pathname);}
+const MODULES = [
+  { code:'orders', name:'订单看板', href:'/index.html', desc:'国家、工厂、品类和柜数' },
+  { code:'flow', name:'货柜流向', href:'/index-flow.html', desc:'总柜数到签收的状态流转' },
+  { code:'logistics', name:'物流监控', href:'/index.html#logistics', desc:'在途、到岸、滞留和催办' },
+  { code:'temperature', name:'温度监控', href:'/index-tv.html', desc:'温度记录、异常和甘特图' },
+  { code:'news', name:'行业新闻', href:'/index.html#news', desc:'行业动态和新闻源诊断' },
+  { code:'smartsheet', name:'智能表管理', href:'/admin.html#smartsheet', desc:'企微字段、记录和 AI 录入' },
+  { code:'admin', name:'系统管理', href:'/admin.html#accounts', desc:'用户、权限和系统设置' },
+];
 
+function $(id){return document.getElementById(id)}
+function esc(value){return String(value == null ? '-' : value).replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]))}
+function num(value){const n=Number(value||0);return Number.isFinite(n)?n:0}
+function pct(a,b){return b?Math.round(num(a)/num(b)*1000)/10:0}
+function gotoLogin(){location.href='/login?redirect='+encodeURIComponent(location.pathname)}
 function pad(n){return String(n).padStart(2,'0')}
+
 function tick(){
   const d=new Date();
   const week=['日','一','二','三','四','五','六'];
-  $('dateDisplay').textContent=d.getFullYear()+'年'+(d.getMonth()+1)+'月'+d.getDate()+'日 星期'+week[d.getDay()];
-  $('clockDisplay').textContent=pad(d.getHours())+':'+pad(d.getMinutes())+':'+pad(d.getSeconds());
+  $('dateDisplay').textContent=`${d.getFullYear()}年${d.getMonth()+1}月${d.getDate()}日 星期${week[d.getDay()]}`;
+  $('clockDisplay').textContent=`${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
 }
 
-const MODULE_META = {
-  overview:  { icon:'📊', label:'运营总览', href:'/app-overview.html', kpis:['合计订单','合计箱量'] },
-  orders:    { icon:'📋', label:'订单看板', href:'/index.html', kpis:['泰国订单','越南订单'] },
-  flow:      { icon:'🚢', label:'货柜流向', href:'/index-flow.html', kpis:['已发货','已签收'] },
-  temperature:{icon:'🌡️', label:'温度监控', href:'/index-tv.html', kpis:['异常柜'] },
-  logistics: { icon:'🚛', label:'物流监控', href:'/index.html', kpis:['在途批次','关口滞留'] },
-  news:      { icon:'📰', label:'行业新闻', href:'/index.html', kpis:['最新新闻'] },
-  smartsheet:{ icon:'📑', label:'智能表管理',href:'/admin.html', kpis:['表管理'] },
-  admin:     { icon:'⚙️', label:'系统管理', href:'/admin.html', kpis:['用户'] },
-};
-
-let dashboardPermissions = [];
-
-async function loadUser(){
-  try{
-    const r=await fetch(API+'/api/auth/me',{cache:'no-store'});
-    if(r.status===401){gotoLogin();return false;}
-    const j=await r.json();
-    if(j&&j.success&&j.data){
-      dashboardPermissions=j.data.dashboardPermissions||[];
-      const name=j.data.displayName||j.data.username;
-      const canEnterAdmin=j.data.role==='admin'||(j.data.permissions||[]).length>0;
-      const adminLink=canEnterAdmin?' <a href="/admin">后台</a>':'';
-      $('userbar').innerHTML='👤 <span class="uname" title="'+esc(name)+'">'+esc(name)+'</span>'+adminLink+' <a id="btnLogout">退出</a>';
-      $('btnLogout').onclick=async()=>{try{await fetch(API+'/api/auth/logout',{method:'POST'});}catch(_){}gotoLogin();};
-    }
-    return true;
-  }catch(e){console.warn('用户加载失败:',e.message);return true;}
+async function api(path){
+  const res=await fetch(API+path,{cache:'no-store'});
+  if(res.status===401){gotoLogin();throw new Error('未登录')}
+  const json=await res.json();
+  if(!res.ok || json.success===false) throw new Error(json.error||'加载失败');
+  return json.data || json;
 }
 
-function buildGrid(data){
-  const grid=$('grid');
-  const g=data&&data.global;
-  const agg=data&&data.aggregate;
-  const flow=data&&data.flow;
-  let html='';
+function moduleAllowed(user, code, visibility){
+  if(user.role==='admin') return true;
+  if((user.permissions||[]).includes(code)) return true;
+  if((user.dashboardPermissions||[]).includes(code)) return true;
+  if(visibility && visibility[code]) return true;
+  return false;
+}
 
-  const perms=dashboardPermissions;
-  const dashPerms=data&&data.visibility?Object.keys(data.visibility).filter(k=>data.visibility[k]):[];
-  const allCodes=['overview','orders','flow','temperature','logistics','news','smartsheet','admin'];
+function buildViewModel(user, aggregate, flowData){
+  const global=aggregate.global||{};
+  const logistics=(aggregate.logistics&&aggregate.logistics.kpis)||{};
+  const flow=flowData.kpis||{};
+  const nodes=flowData.nodes||{};
+  const total=num(global.totalBoxes || (nodes.total&&nodes.total.count));
+  const shipped=num(flow.shipped || (nodes.shipped&&nodes.shipped.count) || (total - num(global.totalPending)));
+  const signed=num(flow.signed || (nodes.signed&&nodes.signed.count) || global.totalDone);
+  const unshipped=Math.max(0,num((nodes.unshipped&&nodes.unshipped.count) || global.totalPending));
+  const inTransit=num(logistics.inTransit || (nodes.overseasTransit&&nodes.overseasTransit.count));
+  const portDelayed=num(logistics.portDelayed);
+  const alerts=[...(flowData.alerts||[])];
+  if(portDelayed>0) alerts.unshift({alertType:'关口滞留',containerNo:'-',dwellDays:portDelayed,summary:`${portDelayed} 个批次需要关注`});
 
-  allCodes.forEach(code=>{
-    const meta=MODULE_META[code];
-    if(!meta)return;
-    if(!perms.includes(code)&&code!=='overview')return;
-    const vis=data&&data.visibility;
-    if(vis&&code!=='overview'&&!vis[code])return;
+  return {
+    user,
+    aggregate,
+    flowData,
+    visibility: aggregate.visibility || {},
+    generatedAt: aggregate.generatedAt || flowData.generatedAt || '',
+    kpis: [
+      {key:'orders',label:'总订单',value:num(global.totalOrders),sub:'订单主表去重',accent:'var(--gold)'},
+      {key:'boxes',label:'总柜数',value:total,sub:'订单总柜数',accent:'var(--green)'},
+      {key:'shipped',label:'已发货',value:shipped,sub:`发货率 ${pct(shipped,total)}%`,accent:'var(--teal)'},
+      {key:'unshipped',label:'未发货',value:unshipped,sub:`待发 ${pct(unshipped,total)}%`,accent:'var(--faint)'},
+      {key:'signed',label:'已签收',value:signed,sub:`签收率 ${pct(signed,total)}%`,accent:'var(--green)'},
+      {key:'transit',label:'国外在途',value:inTransit,sub:'分柜当前状态',accent:'var(--gold)'},
+      {key:'port',label:'关口滞留',value:portDelayed,sub:portDelayed?'需要催办':'暂无滞留',accent:portDelayed?'var(--red)':'var(--green)'},
+      {key:'risk',label:'风险待办',value:alerts.length,sub:alerts.length?'请查看右侧':'暂无风险',accent:alerts.length?'var(--red)':'var(--green)'},
+    ],
+    stages: [
+      {name:'总柜数',count:total,parent:total,accent:'var(--green)'},
+      {name:'已发货',count:shipped,parent:total,accent:'var(--teal)'},
+      {name:'国外在途',count:inTransit,parent:shipped,accent:'var(--gold)'},
+      {name:'关口/到岸',count:num((nodes.onShore&&nodes.onShore.count) || portDelayed),parent:shipped,accent:'var(--red)'},
+      {name:'已签收',count:signed,parent:total,accent:'var(--green)'},
+    ],
+    risks: alerts.slice(0,8),
+    modules: MODULES.filter(mod=>moduleAllowed(user,mod.code,aggregate.visibility||{})),
+  };
+}
 
-    let kpiHtml='';
-    if(code==='overview'&&g){
-      kpiHtml='<div class="kpi-item"><span class="v num">'+g.totalOrders+'</span><span class="u">订单</span></div>'+
-        '<div class="kpi-item"><span class="v num">'+g.totalBoxes+'</span><span class="u">箱量</span></div>';
-    }else if(code==='orders'&&agg){
-      const th=agg.th||{};const vn=agg.vn||{};
-      kpiHtml='<div class="kpi-item"><span class="v num">'+(th.orders||0)+'</span><span class="u">泰国</span></div>'+
-        '<div class="kpi-item"><span class="v num">'+(vn.orders||0)+'</span><span class="u">越南</span></div>';
-    }else if(code==='flow'&&flow){
-      kpiHtml='<div class="kpi-item"><span class="v num">'+(flow.shipped||0)+'</span><span class="u">已发货</span></div>'+
-        '<div class="kpi-item"><span class="v num">'+(flow.signed||0)+'</span><span class="u">已签收</span></div>';
-    }else if(code==='temperature'&&data){
-      const alarm=data.alarmCount||0;
-      kpiHtml='<div class="kpi-item"><span class="v num'+(alarm>0?' c-danger':'')+'">'+(alarm||0)+'</span><span class="u">异常</span></div>';
-    }else if(code==='logistics'&&agg){
-      const l=agg.logistics||{};const k=l.kpis||{};
-      kpiHtml='<div class="kpi-item"><span class="v num">'+(k.inTransit||0)+'</span><span class="u">在途</span></div>'+
-        '<div class="kpi-item"><span class="v num">'+(k.portDelayed||0)+'</span><span class="u">滞留</span></div>';
-    }else if(code==='news'&&data){
-      const nc=data.newsCount||0;
-      kpiHtml='<div class="kpi-item"><span class="v num">'+nc+'</span><span class="u">条新闻</span></div>';
-    }else if(code==='smartsheet'){
-      kpiHtml='<div class="kpi-item"><span class="v num">⚡</span><span class="u">管理</span></div>';
-    }else if(code==='admin'){
-      kpiHtml='<div class="kpi-item"><span class="v num">⚙️</span><span class="u">系统设置</span></div>';
-    }
+function renderUser(user){
+  const name=user.displayName||user.username||'-';
+  const canAdmin=user.role==='admin'||(user.permissions||[]).length>0;
+  $('userbar').innerHTML=`<span>${esc(name)}</span>${canAdmin?'<a href="/admin">后台</a>':''}<a id="btnLogout">退出</a>`;
+  $('btnLogout').onclick=async()=>{try{await fetch('/api/auth/logout',{method:'POST'})}catch(_){}gotoLogin()};
+}
 
-    html+='<div class="card" data-code="'+code+'" onclick="location.href=\''+meta.href+'\'">'+
-      '<div class="icon">'+meta.icon+'</div>'+
-      '<div class="label">'+meta.label+'</div>'+
-      '<div class="kpi-row">'+kpiHtml+'</div>'+
-      '</div>';
-  });
+function renderKpis(model){
+  $('kpiStrip').innerHTML=model.kpis.map(item=>`
+    <article class="kpi" style="--accent:${item.accent}">
+      <div class="label">${esc(item.label)}</div>
+      <div class="value">${esc(item.value)}</div>
+      <div class="sub">${esc(item.sub)}</div>
+    </article>
+  `).join('');
+}
 
-  if(!html){
-    grid.innerHTML='<div class="no-access">暂无可查看的看板内容</div>';
+function renderFlow(model){
+  $('flowPanel').innerHTML=`
+    <div class="panel-head">
+      <div><div class="panel-title">货柜状态流转</div><div class="panel-note">复用货柜流向看板当前统计口径</div></div>
+      <div class="panel-note">${model.generatedAt?new Date(model.generatedAt).toLocaleString('zh-CN'):'实时缓存'}</div>
+    </div>
+    <div class="flow-stages">
+      ${model.stages.map(stage=>`
+        <div class="stage" style="--accent:${stage.accent}">
+          <div class="name">${esc(stage.name)}</div>
+          <div class="count">${esc(stage.count)}</div>
+          <div class="panel-note">${pct(stage.count,stage.parent)}%</div>
+          <div class="rate"><div class="bar" style="width:${Math.min(100,pct(stage.count,stage.parent))}%"></div></div>
+        </div>
+      `).join('')}
+    </div>
+  `;
+}
+
+function renderRisks(model){
+  if(!model.risks.length){
+    $('riskPanel').innerHTML='<div class="panel-head"><div><div class="panel-title">风险待办</div><div class="panel-note">关口滞留、在途偏久和异常提醒</div></div></div><div class="empty-state">当前没有需要立即处理的风险</div>';
     return;
   }
-  grid.innerHTML=html;
+  $('riskPanel').innerHTML=`
+    <div class="panel-head"><div><div class="panel-title">风险待办</div><div class="panel-note">按风险优先显示前 8 条</div></div></div>
+    <div class="risk-list">
+      ${model.risks.map(r=>`
+        <div class="risk" style="--accent:${String(r.alertType||'').includes('滞留')?'var(--red)':'var(--gold)'}">
+          <div class="topline"><span>${esc(r.alertType||'风险提醒')}</span><span>${esc(r.containerNo||r.container||'-')}</span></div>
+          <div class="meta">${esc(r.summary||r.reason||r.note||'需要业务人员关注')}${r.dwellDays?` · ${esc(r.dwellDays)} 天`:''}</div>
+        </div>
+      `).join('')}
+    </div>
+  `;
 }
 
-async function loadData(){
-  try{
-    const [aggRes, flowRes] = await Promise.all([
-      fetch(API+'/api/aggregate',{cache:'no-store'}),
-      fetch(API+'/api/flow-dashboard',{cache:'no-store'})
-    ]);
-    const agg=aggRes.ok?await aggRes.json():null;
-    const flow=flowRes.ok?await flowRes.json():null;
-    return {aggregate:agg, flow:flow, visibility:agg?agg.visibility:null, global:agg?agg.global:null, newsCount:agg&&agg.news?agg.news.length:0, alarmCount:0};
-  }catch(e){console.warn('数据加载失败:',e.message);return null;}
+function renderModules(model){
+  $('moduleDock').innerHTML=model.modules.map(mod=>`
+    <a class="module" href="${esc(mod.href)}">
+      <div class="code">${esc(mod.code)}</div>
+      <div class="name">${esc(mod.name)}</div>
+      <div class="desc">${esc(mod.desc)}</div>
+    </a>
+  `).join('');
 }
 
 async function init(){
-  tick();setInterval(tick,1000);
-  const ok=await loadUser();
-  if(!ok)return;
-  const data=await loadData();
-  buildGrid(data);
+  tick();
+  try{
+    $('refreshState').textContent='正在加载';
+    const [user,aggregate,flowData]=await Promise.all([
+      api('/api/auth/me'),
+      api('/api/aggregate'),
+      api('/api/flow-dashboard'),
+    ]);
+    renderUser(user);
+    const model=buildViewModel(user,aggregate,flowData);
+    renderKpis(model);
+    renderFlow(model);
+    renderRisks(model);
+    renderModules(model);
+    $('refreshState').textContent='已更新 '+new Date().toLocaleTimeString('zh-CN',{hour12:false});
+  }catch(err){
+    console.warn(err);
+    $('refreshState').textContent=err.message||'加载失败';
+    $('kpiStrip').innerHTML='<div class="empty-state">运营总览加载失败，请稍后刷新</div>';
+  }
 }
 
+setInterval(tick,1000);
 init();
+setInterval(init,60000);
 </script>
 </body>
 </html>
