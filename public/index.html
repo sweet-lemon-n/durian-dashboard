@@ -492,13 +492,14 @@ async function loadUser(){
     const j = await r.json();
     if(j && j.success && j.data){
       dashboardPermissions = j.data.dashboardPermissions || [];
+      const hasDashboardPermission = (code, legacy) => dashboardPermissions.includes(code) || dashboardPermissions.includes(legacy);
       applyVisibility({
-        summary: dashboardPermissions.includes('summary'),
-        th: dashboardPermissions.includes('th'),
-        vn: dashboardPermissions.includes('vn'),
-        logistics: dashboardPermissions.includes('logistics'),
-        news: dashboardPermissions.includes('news'),
-        gantt: dashboardPermissions.includes('gantt'),
+        summary: hasDashboardPermission('overview', 'summary'),
+        th: hasDashboardPermission('orders', 'th'),
+        vn: hasDashboardPermission('orders', 'vn'),
+        logistics: hasDashboardPermission('logistics', 'logistics'),
+        news: hasDashboardPermission('news', 'news'),
+        gantt: hasDashboardPermission('temperature', 'gantt'),
       });
       const name = j.data.displayName || j.data.username;
       const canEnterAdmin = j.data.role==='admin' || (j.data.permissions||[]).length>0;

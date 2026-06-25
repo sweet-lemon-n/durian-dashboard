@@ -842,7 +842,8 @@ app.get('/api/config/info', requirePermission('smartsheet'), async (req, res) =>
  */
 app.get('/api/dashboard', async (req, res) => {
   try {
-    if (!(req.user.dashboardPermissions || []).includes('gantt')) {
+    const dashboardPermissions = req.user.dashboardPermissions || [];
+    if (!dashboardPermissions.includes('temperature') && !dashboardPermissions.includes('gantt')) {
       return res.status(403).json({ success: false, error: '无温度甘特图查看权限' });
     }
 
