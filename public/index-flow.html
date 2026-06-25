@@ -76,13 +76,41 @@ const links=[['total','unshipped'],['total','shipped'],['shipped','overseasTrans
 function n(v){return Number(v||0)} function pct(a,b){return b?Math.round(a/b*1000)/10:0} function p(v){return `${n(v).toFixed(1)}%`} function esc(s){return String(s??'').replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]))}
 async function api(path){const r=await fetch(path,{cache:'no-store'});if(r.status===401){location.href='/login?redirect=/index-flow.html';throw new Error('未登录')}const j=await r.json();if(!r.ok||!j.success)throw new Error(j.error||'加载失败');return j.data}
 function allShipments(){return data?data.details.shipped||[]:[]}
+function allOrders(){return data?data.orders||[]:[]}
 function factoryOf(r){const m=String(r.orderNo||'').match(/^([A-Z]+)-/);return m?m[1]:(r.brand||'其他')}
 function fillSelect(id,values,allLabel){const el=$(id),old=el.value;el.innerHTML=`<option value="">${allLabel}</option>`+values.map(v=>`<option value="${esc(v)}">${esc(v)}</option>`).join('');el.value=values.includes(old)?old:''}
 function initFilters(){const rows=allShipments();const uniq=fn=>Array.from(new Set(rows.map(fn).filter(Boolean))).sort((a,b)=>String(a).localeCompare(String(b),'zh-CN'));fillSelect('filterOrder',uniq(r=>r.orderNo),'全部订单');fillSelect('filterCountry',uniq(r=>r.country),'全部国家');fillSelect('filterFactory',uniq(factoryOf),'全部工厂');fillSelect('filterCategory',uniq(r=>r.categoryText||r.category),'全部品类')}
 function matchFilters(r){const q=$('searchBox').value.trim().toLowerCase();const order=$('filterOrder').value,country=$('filterCountry').value,factory=$('filterFactory').value,cat=$('filterCategory').value;if(order&&r.orderNo!==order)return false;if(country&&r.country!==country)return false;if(factory&&factoryOf(r)!==factory)return false;if(cat&&(r.categoryText||r.category)!==cat)return false;if(!q)return true;return [r.orderNo,r.containerNo,r.country,factoryOf(r),r.brand,r.categoryText,r.category].some(v=>String(v||'').toLowerCase().includes(q))}
 function byStatus(rows){return{unshipped:[],shipped:rows,overseasTransit:rows.filter(s=>s.status==='overseasTransit'),arrived:rows.filter(s=>['onShore','domesticTransit','signed'].includes(s.status)),onShore:rows.filter(s=>s.status==='onShore'),domesticTransfer:rows.filter(s=>['domesticTransit','signed'].includes(s.status)),domesticTransit:rows.filter(s=>s.status==='domesticTransit'),signed:rows.filter(s=>s.status==='signed')}}
 function node(key,count,total,parent){return{key,label:labels[key],count,totalRate:pct(count,total),parentRate:pct(count,parent),hint:hints[key]}}
-function recomputeView(){const filtered=allShipments().filter(matchFilters);const st=byStatus(filtered);const filtersOn=Boolean($('searchBox').value.trim()||$('filterOrder').value||$('filterCountry').value||$('filterFactory').value||$('filterCategory').value);const total=filtersOn?filtered.length:n(data.nodes.total.count);const shipped=filtered.length,overseasTransit=st.overseasTransit.length,onShore=st.onShore.length,domesticTransit=st.domesticTransit.length,signed=st.signed.length,domesticTransfer=domesticTransit+signed,arrived=onShore+domesticTransfer,unshipped=filtersOn?0:Math.max(0,total-shipped);view={total,filtersOn,details:st,nodes:{total:node('total',total,total,total),unshipped:node('unshipped',unshipped,total,total),shipped:node('shipped',shipped,total,total),overseasTransit:node('overseasTransit',overseasTransit,total,shipped),arrived:node('arrived',arrived,total,shipped),onShore:node('onShore',onShore,total,arrived),domesticTransfer:node('domesticTransfer',domesticTransfer,total,arrived),domesticTransit:node('domesticTransit',domesticTransit,total,domesticTransfer),signed:node('signed',signed,total,domesticTransfer)}};view.kpis={total,shipped,unshipped,arrived,signed,onShore,shippedRate:pct(shipped,total),signedRate:pct(signed,total)};view.breakdowns={country:breakdown(filtered,r=>r.country||'未填国家',k=>k),category:breakdown(filtered,r=>r.category||'UNKNOWN',k=>({FRESH:'鲜果',FROZEN:'冻果',UNKNOWN:'未填品类'}[k]||k))};view.alerts=alertsFrom(st);if($('searchBox').value.trim()&&filtered[0])active=statusBucket(filtered[0]);if(!view.details[active])active='shipped'}
+function qMatch(r,q){const s=String(q||'').trim().toLowerCase();if(!s)return true;return [r.orderNo,r.country,r.brand,r.categoryText,r.category].some(v=>String(v||'').toLowerCase().includes(s))}
+function recomputeView(){
+  const shipments=allShipments();
+  const orders=allOrders();
+  const query=$('searchBox').value.trim();
+  const filtered=shipments.filter(r=>matchFilters(r)&&qMatch(r,query));
+  const st=byStatus(filtered);
+  const filtersOn=Boolean(query||$('filterOrder').value||$('filterCountry').value||$('filterFactory').value||$('filterCategory').value);
+  const visibleOrders=orders.filter(r=>{
+    if($('filterOrder').value&&r.orderNo!==$('filterOrder').value)return false;
+    if($('filterCountry').value&&r.country!==$('filterCountry').value)return false;
+    if($('filterFactory').value&&factoryOf(r)!==$('filterFactory').value)return false;
+    if($('filterCategory').value){
+      const cat=$('filterCategory').value;
+      if(cat==='鲜果'&&r.category!=='FRESH')return false;
+      if(cat==='冻果'&&r.category!=='FROZEN')return false;
+    }
+    return qMatch(r, query);
+  });
+  const total=filtersOn ? visibleOrders.reduce((sum,r)=>sum+(Number(r.boxes)||0),0) : n(data.nodes.total.count);
+  const shipped=filtered.length, overseasTransit=st.overseasTransit.length, onShore=st.onShore.length, domesticTransit=st.domesticTransit.length, signed=st.signed.length, domesticTransfer=domesticTransit+signed, arrived=onShore+domesticTransfer, unshipped=filtersOn?Math.max(0,total-shipped):n(data.nodes.unshipped.count);
+  view={total,filtersOn,details:st,nodes:{total:node('total',total,total,total),unshipped:node('unshipped',unshipped,total,total),shipped:node('shipped',shipped,total,total),overseasTransit:node('overseasTransit',overseasTransit,total,shipped),arrived:node('arrived',arrived,total,shipped),onShore:node('onShore',onShore,total,arrived),domesticTransfer:node('domesticTransfer',domesticTransfer,total,arrived),domesticTransit:node('domesticTransit',domesticTransit,total,domesticTransfer),signed:node('signed',signed,total,domesticTransfer)}};
+  view.kpis={total,shipped,unshipped,arrived,signed,onShore,shippedRate:pct(shipped,total),signedRate:pct(signed,total)};
+  view.breakdowns={country:breakdown(filtered,r=>r.country||'未填国家',k=>k),category:breakdown(filtered,r=>r.category||'UNKNOWN',k=>({FRESH:'鲜果',FROZEN:'冻果',UNKNOWN:'未填品类'}[k]||k))};
+  view.alerts=alertsFrom(st);
+  if(query&&filtered[0])active=statusBucket(filtered[0]);
+  if(!view.details[active])active='shipped'
+}
 function statusBucket(r){if(r.status==='overseasTransit')return'overseasTransit';if(r.status==='onShore')return'onShore';if(r.status==='domesticTransit')return'domesticTransit';if(r.status==='signed')return'signed';return'shipped'}
 function alertsFrom(st){const t=data.config&&data.config.thresholds||{};return[...st.onShore.filter(s=>(s.dwellDays||0)>=(t.onShoreDays??2)).map(s=>({...s,alertType:'在岸待叫车'})),...st.overseasTransit.filter(s=>(s.dwellDays||0)>=(t.overseasTransitDays??7)).map(s=>({...s,alertType:'国外在途偏久'})),...st.domesticTransit.filter(s=>(s.dwellDays||0)>=(t.domesticTransitDays??2)).map(s=>({...s,alertType:'国内在途偏久'}))].sort((a,b)=>(b.dwellDays||0)-(a.dwellDays||0)).slice(0,20)}
 function breakdown(rows,keyFn,labelFn){const map=new Map();rows.forEach(r=>{const key=keyFn(r)||'UNKNOWN';if(!map.has(key))map.set(key,{key,label:labelFn(key,r),shipped:0});map.get(key).shipped++});return Array.from(map.values()).sort((a,b)=>b.shipped-a.shipped)}
