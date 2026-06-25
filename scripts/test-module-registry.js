@@ -29,3 +29,24 @@ const dashString = stringifyDashboardPermissions(['summary', 'flow']);
 assert.strictEqual(dashString, JSON.stringify(['overview', 'flow']), 'dashboard permissions must persist normalized section codes');
 
 console.log('module registry checks passed');
+
+// ---------- Task 2 可见性兼容 ----------
+const { dashboardVisibility } = require('../lib/board-routes');
+
+const visibility = dashboardVisibility({
+  dashboardPermissions: ['overview', 'orders', 'logistics', 'temperature'],
+});
+assert.deepStrictEqual(visibility, {
+  summary: true,
+  th: true,
+  vn: true,
+  logistics: true,
+  news: false,
+  gantt: true,
+  overview: true,
+  orders: true,
+  flow: false,
+  temperature: true,
+}, 'visibility must expose both legacy section names and new module names');
+
+console.log('module registry checks passed');
