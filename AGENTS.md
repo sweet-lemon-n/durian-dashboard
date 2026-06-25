@@ -4,6 +4,28 @@
 
 只记录长期稳定的信息：项目结构、开发规范、工作流程、文档维护规则。具体业务背景、统计口径、历史决策写入 `MEMORY.md`；临时任务、Bug、待办写入 `TASKS.md`。
 
+## 新对话快速启动
+
+当一个全新的 AI Agent 在没有任何历史聊天上下文的情况下接手本项目时，必须先按顺序读取：
+
+1. `AGENTS.md`：确认工作规则、目录结构和开发规范。
+2. `MEMORY.md`：理解业务背景、统计口径、数据结构和历史决策。
+3. `TASKS.md`：确认当前任务、待办、Bug 和优先级。
+4. `docs/statistics-logic.md`：如果任务涉及基础看板统计，必须额外读取。
+5. 相关源码文件：根据任务读取 `server.js`、`lib/*`、`public/*`。
+
+推荐新对话开场指令：
+
+```text
+请先阅读 AGENTS.md、MEMORY.md、TASKS.md，然后告诉我你理解的当前项目状态和下一步建议。
+```
+
+如果已安装 `$ai-context-engineering` skill，也可以使用：
+
+```text
+Use $ai-context-engineering to audit this project context and prepare to continue development from zero chat history.
+```
+
 ## 项目简介
 
 本项目是榴莲运输数据看板，用于展示订单、分柜、物流、温度、新闻和货柜流转等信息。系统主要从企业微信智能表格读取真实业务数据，并提供后台配置、智能解析录入、统计配置和多种看板页面。
@@ -154,4 +176,3 @@ git diff --check
 ↓
 更新文档
 ```
-
