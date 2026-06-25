@@ -39,10 +39,18 @@ const overview = fs.readFileSync('public/app-overview.html', 'utf8');
   'id="kpiStrip"',
   'id="flowPanel"',
   'id="riskPanel"',
+  'id="orderChartPanel"',
+  'id="logisticsChartPanel"',
+  'id="temperaturePanel"',
+  'id="newsPanel"',
   'id="moduleDock"',
   'function buildViewModel',
   'function renderKpis',
   'function renderFlow',
+  'function renderOrderChart',
+  'function renderLogisticsChart',
+  'function renderTemperature',
+  'function renderNews',
   'function renderRisks',
   'function renderModules',
 ].forEach(marker => {
@@ -53,8 +61,18 @@ const overview = fs.readFileSync('public/app-overview.html', 'utf8');
   '/api/auth/me',
   '/api/aggregate',
   '/api/flow-dashboard',
+  '/api/dashboard?hours=168&limit=500',
 ].forEach(path => {
   assert.ok(overview.includes(path), `app-overview must consume existing API ${path}`);
+});
+
+[
+  'class="bar-chart"',
+  'class="donut-chart"',
+  'class="sparkline"',
+  'class="mini-gantt"',
+].forEach(marker => {
+  assert.ok(overview.includes(marker), `app-overview must render multi-dimensional chart marker ${marker}`);
 });
 
 assert.ok(!overview.includes('/api/modules/'), 'overview redesign must not depend on new modular APIs');

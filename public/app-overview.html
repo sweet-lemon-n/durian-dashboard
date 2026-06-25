@@ -9,6 +9,7 @@
     --bg:#090d0b;
     --panel:#111915;
     --panel-2:#151f1b;
+    --panel-3:#1c2521;
     --line:#25362f;
     --line-strong:#3c5a4b;
     --text:#f2f7f1;
@@ -19,15 +20,16 @@
     --red:#ff625f;
     --teal:#39c7c9;
     --blue:#6ea8ff;
+    --violet:#b48cff;
     --shadow:0 18px 50px rgba(0,0,0,.34);
   }
   *{box-sizing:border-box}
   html,body{width:100%;min-height:100%;margin:0;background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Noto Sans SC",sans-serif}
-  body{overflow:hidden}
-  .shell{height:100vh;display:grid;grid-template-rows:72px 1fr;padding:14px;gap:12px;background:linear-gradient(135deg,#090d0b 0%,#11140d 48%,#170f12 100%)}
-  .topbar{display:flex;align-items:center;justify-content:space-between;border:1px solid var(--line);background:rgba(17,25,21,.86);border-radius:8px;padding:0 18px;box-shadow:var(--shadow);min-width:0}
+  body{overflow:auto}
+  .shell{min-height:100vh;display:grid;grid-template-rows:72px auto;padding:14px;gap:12px;background:linear-gradient(135deg,#090d0b 0%,#11140d 52%,#170f12 100%)}
+  .topbar{display:flex;align-items:center;justify-content:space-between;border:1px solid var(--line);background:rgba(17,25,21,.88);border-radius:8px;padding:0 18px;box-shadow:var(--shadow);min-width:0}
   .brand-block{display:flex;align-items:center;gap:14px;min-width:0}
-  .brand-mark{width:44px;height:44px;display:grid;place-items:center;border:1px solid var(--line-strong);border-radius:8px;color:var(--gold);font-weight:800;letter-spacing:.04em;background:linear-gradient(160deg,rgba(49,208,124,.14),rgba(243,194,79,.12))}
+  .brand-mark{width:44px;height:44px;display:grid;place-items:center;border:1px solid var(--line-strong);border-radius:8px;color:var(--gold);font-weight:800;background:linear-gradient(160deg,rgba(49,208,124,.14),rgba(243,194,79,.12))}
   h1{margin:0;font-size:22px;letter-spacing:0;font-weight:800}
   p{margin:0}
   .brand-block p{margin-top:3px;color:var(--muted);font-size:12px}
@@ -37,54 +39,90 @@
   .clock span{font-size:12px;color:var(--muted)}
   .clock strong{font-size:20px}
   .userbar{display:flex;align-items:center;gap:8px;color:var(--muted);font-size:13px;white-space:nowrap}
-  .userbar a{color:var(--text);border:1px solid var(--line);border-radius:6px;padding:6px 9px;text-decoration:none}
+  .userbar a{color:var(--text);border:1px solid var(--line);border-radius:6px;padding:6px 9px;text-decoration:none;cursor:pointer}
   .userbar a:hover{border-color:var(--line-strong);color:var(--gold)}
-  .dashboard{min-height:0;display:grid;grid-template-rows:132px minmax(0,1fr) 142px;gap:12px}
+  .dashboard{display:grid;grid-template-rows:auto auto auto auto;gap:12px;min-width:0}
   .kpi-strip{display:grid;grid-template-columns:repeat(8,minmax(0,1fr));gap:10px;min-width:0}
-  .kpi{border:1px solid var(--line);background:linear-gradient(180deg,rgba(21,31,27,.96),rgba(17,25,21,.96));border-radius:8px;padding:14px;min-width:0;box-shadow:var(--shadow);position:relative;overflow:hidden}
+  .kpi{border:1px solid var(--line);background:linear-gradient(180deg,rgba(21,31,27,.96),rgba(17,25,21,.96));border-radius:8px;padding:13px;min-width:0;box-shadow:var(--shadow);position:relative;overflow:hidden}
   .kpi:before{content:"";position:absolute;left:0;right:0;top:0;height:2px;background:var(--accent,var(--green))}
   .kpi .label{font-size:12px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-  .kpi .value{margin-top:8px;font-size:34px;line-height:1;font-weight:850;letter-spacing:0;font-variant-numeric:tabular-nums}
+  .kpi .value{margin-top:8px;font-size:30px;line-height:1;font-weight:850;letter-spacing:0;font-variant-numeric:tabular-nums}
   .kpi .sub{margin-top:8px;font-size:12px;color:var(--faint);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-  .main-grid{display:grid;grid-template-columns:minmax(0,1.45fr) minmax(320px,.55fr);gap:12px;min-height:0}
-  .panel{border:1px solid var(--line);background:rgba(17,25,21,.9);border-radius:8px;box-shadow:var(--shadow);padding:16px;min-width:0;min-height:0}
-  .panel-head{display:flex;justify-content:space-between;align-items:flex-start;gap:16px;margin-bottom:14px}
+  .grid-top{display:grid;grid-template-columns:minmax(0,1.35fr) minmax(280px,.65fr);gap:12px;min-width:0}
+  .grid-mid{display:grid;grid-template-columns:minmax(0,.9fr) minmax(0,.9fr) minmax(320px,.7fr);gap:12px;min-width:0}
+  .grid-bottom{display:grid;grid-template-columns:minmax(0,1.35fr) minmax(280px,.65fr);gap:12px;min-width:0}
+  .panel{border:1px solid var(--line);background:rgba(17,25,21,.9);border-radius:8px;box-shadow:var(--shadow);padding:15px;min-width:0;min-height:0}
+  .panel-head{display:flex;justify-content:space-between;align-items:flex-start;gap:14px;margin-bottom:12px}
   .panel-title{font-size:16px;font-weight:800}
   .panel-note{font-size:12px;color:var(--muted)}
-  .flow-stages{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:10px}
-  .stage{border:1px solid var(--line);border-radius:8px;padding:14px;background:rgba(21,31,27,.78);min-height:132px;position:relative}
+  .flow-stages{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:9px}
+  .stage{border:1px solid var(--line);border-radius:8px;padding:12px;background:rgba(21,31,27,.78);min-height:118px;position:relative;overflow:hidden}
   .stage .name{font-size:13px;color:var(--muted)}
-  .stage .count{margin-top:10px;font-size:34px;font-weight:850;font-variant-numeric:tabular-nums}
+  .stage .count{margin-top:9px;font-size:30px;font-weight:850;font-variant-numeric:tabular-nums}
   .stage .rate{margin-top:8px;height:7px;border-radius:999px;background:#223129;overflow:hidden}
   .stage .bar{height:100%;width:0;background:var(--accent,var(--green));transition:width .35s ease}
-  .risk-list{display:grid;gap:10px;overflow:auto;max-height:calc(100% - 46px);padding-right:4px}
+  .risk-list{display:grid;gap:9px;overflow:auto;max-height:302px;padding-right:4px}
   .risk-list::-webkit-scrollbar{width:4px}
   .risk-list::-webkit-scrollbar-thumb{background:var(--line-strong);border-radius:999px}
-  .risk{border:1px solid var(--line);border-left:3px solid var(--accent,var(--gold));border-radius:8px;background:rgba(21,31,27,.78);padding:12px}
+  .risk{border:1px solid var(--line);border-left:3px solid var(--accent,var(--gold));border-radius:8px;background:rgba(21,31,27,.78);padding:11px}
   .risk .topline{display:flex;justify-content:space-between;gap:10px;font-size:13px;font-weight:750}
   .risk .meta{margin-top:6px;color:var(--muted);font-size:12px;line-height:1.45}
+  .bar-chart{display:grid;gap:10px}
+  .bar-row{display:grid;grid-template-columns:72px minmax(0,1fr) 58px;gap:10px;align-items:center}
+  .bar-label{font-size:12px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .bar-track{height:12px;border-radius:999px;background:#223129;overflow:hidden}
+  .bar-fill{height:100%;width:0;background:linear-gradient(90deg,var(--accent,var(--green)),rgba(255,255,255,.28));border-radius:999px}
+  .bar-value{text-align:right;font-size:12px;font-variant-numeric:tabular-nums;color:var(--text)}
+  .donut-wrap{display:grid;grid-template-columns:150px minmax(0,1fr);gap:16px;align-items:center}
+  .donut-chart{width:136px;height:136px;border-radius:50%;background:conic-gradient(var(--green) 0deg,var(--green) var(--signedDeg),var(--gold) var(--signedDeg),var(--gold) var(--transitDeg),var(--teal) var(--transitDeg),var(--teal) var(--arrivedDeg),var(--faint) var(--arrivedDeg),var(--faint) 360deg);display:grid;place-items:center;box-shadow:inset 0 0 0 1px rgba(255,255,255,.06)}
+  .donut-hole{width:82px;height:82px;border-radius:50%;background:var(--panel);display:grid;place-items:center;text-align:center;border:1px solid var(--line)}
+  .donut-hole strong{font-size:22px}
+  .legend{display:grid;gap:8px}
+  .legend-item{display:flex;justify-content:space-between;gap:10px;color:var(--muted);font-size:12px}
+  .legend-item span:first-child:before{content:"";display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:6px;background:var(--dot)}
+  .sparkline{width:100%;height:86px;display:block;overflow:visible}
+  .temp-metrics{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin-bottom:11px}
+  .mini-metric{border:1px solid var(--line);border-radius:8px;background:rgba(21,31,27,.72);padding:9px;min-width:0}
+  .mini-metric .label{color:var(--muted);font-size:11px}
+  .mini-metric .value{font-size:22px;font-weight:820;margin-top:5px;font-variant-numeric:tabular-nums}
+  .mini-gantt{display:grid;gap:7px;margin-top:10px}
+  .gantt-row{display:grid;grid-template-columns:70px repeat(7,minmax(0,1fr));gap:5px;align-items:center}
+  .gantt-label{font-size:11px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .gantt-cell{height:18px;border-radius:4px;background:#223129;border:1px solid rgba(255,255,255,.04)}
+  .gantt-cell.ok{background:rgba(49,208,124,.48)}
+  .gantt-cell.warn{background:rgba(243,194,79,.62)}
+  .gantt-cell.alarm{background:rgba(255,98,95,.72)}
+  .news-list{display:grid;gap:9px;max-height:284px;overflow:auto;padding-right:4px}
+  .news-item{display:grid;gap:5px;border:1px solid var(--line);border-radius:8px;background:rgba(21,31,27,.72);padding:10px;color:var(--text);text-decoration:none}
+  .news-item:hover{border-color:var(--line-strong)}
+  .news-title{font-size:13px;font-weight:760;line-height:1.35}
+  .news-meta{font-size:11px;color:var(--muted)}
   .module-dock{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:10px}
-  .module{border:1px solid var(--line);border-radius:8px;background:rgba(17,25,21,.88);padding:14px;text-decoration:none;color:var(--text);min-width:0}
+  .module{border:1px solid var(--line);border-radius:8px;background:rgba(17,25,21,.88);padding:13px;text-decoration:none;color:var(--text);min-width:0}
   .module:hover{border-color:var(--line-strong);background:rgba(21,31,27,.96)}
   .module .code{font-size:11px;color:var(--faint);font-family:ui-monospace,SFMono-Regular,Menlo,monospace}
   .module .name{margin-top:8px;font-size:15px;font-weight:800}
   .module .desc{margin-top:6px;color:var(--muted);font-size:12px;line-height:1.4}
   .empty-state{color:var(--muted);border:1px dashed var(--line);border-radius:8px;padding:18px;text-align:center}
-  @media (max-width:1100px){
-    body{overflow:auto}
-    .shell{height:auto;min-height:100vh}
-    .dashboard{grid-template-rows:auto auto auto}
-    .kpi-strip{grid-template-columns:repeat(2,minmax(0,1fr))}
-    .main-grid{grid-template-columns:1fr}
-    .flow-stages{grid-template-columns:1fr}
+  @media (min-width:1500px){
+    .shell{height:100vh}
+    body{overflow:hidden}
+  }
+  @media (max-width:1180px){
+    .kpi-strip{grid-template-columns:repeat(4,minmax(0,1fr))}
+    .grid-top,.grid-mid,.grid-bottom{grid-template-columns:1fr}
+    .flow-stages{grid-template-columns:repeat(3,minmax(0,1fr))}
     .module-dock{grid-template-columns:repeat(2,minmax(0,1fr))}
   }
   @media (max-width:680px){
-    .shell{padding:10px}
+    .shell{padding:10px;grid-template-rows:auto auto}
     .topbar{height:auto;align-items:flex-start;flex-direction:column;padding:14px}
     .top-actions{width:100%;justify-content:space-between;flex-wrap:wrap}
     .kpi-strip,.module-dock{grid-template-columns:1fr}
-    .kpi .value{font-size:30px}
+    .flow-stages{grid-template-columns:1fr}
+    .donut-wrap{grid-template-columns:1fr}
+    .temp-metrics{grid-template-columns:1fr}
+    .kpi .value{font-size:28px}
   }
 </style>
 </head>
@@ -111,12 +149,21 @@
   <main class="dashboard">
     <section class="kpi-strip" id="kpiStrip" aria-label="核心指标"></section>
 
-    <section class="main-grid">
+    <section class="grid-top">
       <section class="panel flow-panel" id="flowPanel" aria-label="货柜状态流转"></section>
       <aside class="panel risk-panel" id="riskPanel" aria-label="风险待办"></aside>
     </section>
 
-    <section class="module-dock" id="moduleDock" aria-label="模块入口"></section>
+    <section class="grid-mid">
+      <section class="panel" id="orderChartPanel" aria-label="订单国家和品类柱状图"></section>
+      <section class="panel" id="logisticsChartPanel" aria-label="物流状态甜甜圈图"></section>
+      <section class="panel" id="temperaturePanel" aria-label="温度监控概览"></section>
+    </section>
+
+    <section class="grid-bottom">
+      <section class="panel" id="newsPanel" aria-label="行业新闻概览"></section>
+      <section class="module-dock" id="moduleDock" aria-label="模块入口"></section>
+    </section>
   </main>
 </div>
 <script>
@@ -135,8 +182,10 @@ function $(id){return document.getElementById(id)}
 function esc(value){return String(value == null ? '-' : value).replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]))}
 function num(value){const n=Number(value||0);return Number.isFinite(n)?n:0}
 function pct(a,b){return b?Math.round(num(a)/num(b)*1000)/10:0}
+function clamp(value,min,max){return Math.max(min,Math.min(max,value))}
 function gotoLogin(){location.href='/login?redirect='+encodeURIComponent(location.pathname)}
 function pad(n){return String(n).padStart(2,'0')}
+function dateKey(value){const d=value?new Date(value):null;if(!d||isNaN(d.getTime()))return '';return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`}
 
 function tick(){
   const d=new Date();
@@ -153,6 +202,10 @@ async function api(path){
   return json.data || json;
 }
 
+async function apiOptional(path){
+  try{return await api(path)}catch(err){return { _error: err.message || '加载失败' }}
+}
+
 function moduleAllowed(user, code, visibility){
   if(user.role==='admin') return true;
   if((user.permissions||[]).includes(code)) return true;
@@ -161,7 +214,75 @@ function moduleAllowed(user, code, visibility){
   return false;
 }
 
-function buildViewModel(user, aggregate, flowData){
+function flattenRows(section){
+  return section && Array.isArray(section.rows) ? section.rows : [];
+}
+
+function orderBars(aggregate){
+  const th=aggregate.th||{};
+  const vn=aggregate.vn||{};
+  const rows=[
+    {label:'泰国订单',value:num(th.orders),accent:'var(--gold)'},
+    {label:'越南订单',value:num(vn.orders),accent:'var(--teal)'},
+    {label:'泰国柜数',value:num(th.boxes),accent:'var(--green)'},
+    {label:'越南柜数',value:num(vn.boxes),accent:'var(--blue)'},
+  ];
+  const categories=[
+    ...flattenRows(th),
+    ...flattenRows(vn),
+  ].reduce((acc,row)=>{
+    const key=row.category==='FROZEN'?'冻果柜数':'鲜果柜数';
+    acc[key]=(acc[key]||0)+num(row.boxes);
+    return acc;
+  },{});
+  Object.entries(categories).forEach(([label,value],idx)=>rows.push({label,value,accent:idx?'var(--violet)':'var(--green)'}));
+  return rows.filter(r=>r.value>0 || ['泰国订单','越南订单'].includes(r.label));
+}
+
+function buildGantt(records){
+  const days=[];
+  for(let i=6;i>=0;i--){
+    const d=new Date(Date.now()-i*86400000);
+    days.push({key:dateKey(d),label:`${d.getMonth()+1}/${d.getDate()}`});
+  }
+  const byContainer=new Map();
+  (records||[]).forEach(r=>{
+    const c=r.containerNo||'-';
+    if(c==='-') return;
+    if(!byContainer.has(c)) byContainer.set(c,{container:c,days:{}});
+    const k=dateKey(r.updateTime);
+    if(!k) return;
+    const temp=num(r.returnTemp);
+    const set=r.setTemp == null ? null : num(r.setTemp);
+    let level='ok';
+    if(r.isAbnormal) level='alarm';
+    else if(set !== null && Math.abs(temp-set)>2) level='warn';
+    byContainer.get(c).days[k]=level;
+  });
+  return {days,rows:Array.from(byContainer.values()).slice(0,5)};
+}
+
+function tempTrend(records){
+  const buckets=new Map();
+  (records||[]).forEach(r=>{
+    const key=dateKey(r.updateTime);
+    if(!key || r.returnTemp == null || isNaN(Number(r.returnTemp))) return;
+    if(!buckets.has(key)) buckets.set(key,{sum:0,count:0});
+    const b=buckets.get(key);
+    b.sum+=Number(r.returnTemp);
+    b.count+=1;
+  });
+  const series=[];
+  for(let i=6;i>=0;i--){
+    const d=new Date(Date.now()-i*86400000);
+    const key=dateKey(d);
+    const b=buckets.get(key);
+    series.push({label:`${d.getMonth()+1}/${d.getDate()}`,value:b&&b.count?Math.round(b.sum/b.count*10)/10:null});
+  }
+  return series;
+}
+
+function buildViewModel(user, aggregate, flowData, temperatureData){
   const global=aggregate.global||{};
   const logistics=(aggregate.logistics&&aggregate.logistics.kpis)||{};
   const flow=flowData.kpis||{};
@@ -170,34 +291,56 @@ function buildViewModel(user, aggregate, flowData){
   const shipped=num(flow.shipped || (nodes.shipped&&nodes.shipped.count) || (total - num(global.totalPending)));
   const signed=num(flow.signed || (nodes.signed&&nodes.signed.count) || global.totalDone);
   const unshipped=Math.max(0,num((nodes.unshipped&&nodes.unshipped.count) || global.totalPending));
-  const inTransit=num(logistics.inTransit || (nodes.overseasTransit&&nodes.overseasTransit.count));
+  const overseas=num((nodes.overseasTransit&&nodes.overseasTransit.count) || logistics.inTransit || global.totalMoving);
+  const arrived=num((nodes.arrived&&nodes.arrived.count) || global.totalArrived);
+  const onShore=num((nodes.onShore&&nodes.onShore.count));
+  const domesticTransit=num((nodes.domesticTransit&&nodes.domesticTransit.count));
   const portDelayed=num(logistics.portDelayed);
+  const tempStats=temperatureData.stats || {};
+  const tempRecords=temperatureData.records || [];
+  const tempAlerts=temperatureData.alerts || [];
+  const newsAuto=(aggregate.news&&aggregate.news.auto)||[];
   const alerts=[...(flowData.alerts||[])];
   if(portDelayed>0) alerts.unshift({alertType:'关口滞留',containerNo:'-',dwellDays:portDelayed,summary:`${portDelayed} 个批次需要关注`});
+  tempAlerts.slice(0,3).forEach(item=>alerts.push({alertType:'温度异常',containerNo:item.containerNo,summary:item.reason,time:item.time}));
 
   return {
     user,
     aggregate,
     flowData,
+    temperatureData,
     visibility: aggregate.visibility || {},
     generatedAt: aggregate.generatedAt || flowData.generatedAt || '',
     kpis: [
       {key:'orders',label:'总订单',value:num(global.totalOrders),sub:'订单主表去重',accent:'var(--gold)'},
       {key:'boxes',label:'总柜数',value:total,sub:'订单总柜数',accent:'var(--green)'},
       {key:'shipped',label:'已发货',value:shipped,sub:`发货率 ${pct(shipped,total)}%`,accent:'var(--teal)'},
-      {key:'unshipped',label:'未发货',value:unshipped,sub:`待发 ${pct(unshipped,total)}%`,accent:'var(--faint)'},
       {key:'signed',label:'已签收',value:signed,sub:`签收率 ${pct(signed,total)}%`,accent:'var(--green)'},
-      {key:'transit',label:'国外在途',value:inTransit,sub:'分柜当前状态',accent:'var(--gold)'},
+      {key:'transit',label:'国外在途',value:overseas,sub:'分柜当前状态',accent:'var(--gold)'},
       {key:'port',label:'关口滞留',value:portDelayed,sub:portDelayed?'需要催办':'暂无滞留',accent:portDelayed?'var(--red)':'var(--green)'},
-      {key:'risk',label:'风险待办',value:alerts.length,sub:alerts.length?'请查看右侧':'暂无风险',accent:alerts.length?'var(--red)':'var(--green)'},
+      {key:'temp',label:'温度异常',value:num(tempStats.abnormalCount || logistics.tempAlarms),sub:`记录 ${num(tempStats.total || logistics.tempRecords)} 条`,accent:num(tempStats.abnormalCount || logistics.tempAlarms)?'var(--red)':'var(--blue)'},
+      {key:'news',label:'新闻动态',value:newsAuto.length,sub:'自动新闻源',accent:'var(--violet)'},
     ],
     stages: [
       {name:'总柜数',count:total,parent:total,accent:'var(--green)'},
+      {name:'未发货',count:unshipped,parent:total,accent:'var(--faint)'},
       {name:'已发货',count:shipped,parent:total,accent:'var(--teal)'},
-      {name:'国外在途',count:inTransit,parent:shipped,accent:'var(--gold)'},
-      {name:'关口/到岸',count:num((nodes.onShore&&nodes.onShore.count) || portDelayed),parent:shipped,accent:'var(--red)'},
+      {name:'国外在途',count:overseas,parent:shipped,accent:'var(--gold)'},
+      {name:'国内在途',count:domesticTransit,parent:total,accent:'var(--blue)'},
       {name:'已签收',count:signed,parent:total,accent:'var(--green)'},
     ],
+    orderBars: orderBars(aggregate),
+    logisticsDonut: {total, signed, overseas, arrived, onShore, domesticTransit, unshipped},
+    temperature: {
+      stats: tempStats,
+      records: tempRecords,
+      alerts: tempAlerts,
+      trend: tempTrend(tempRecords),
+      gantt: buildGantt(tempRecords),
+      error: temperatureData._error,
+    },
+    news: newsAuto.slice(0,6),
+    newsFetchedAt: aggregate.news && aggregate.news.fetchedAt,
     risks: alerts.slice(0,8),
     modules: MODULES.filter(mod=>moduleAllowed(user,mod.code,aggregate.visibility||{})),
   };
@@ -239,16 +382,126 @@ function renderFlow(model){
   `;
 }
 
+function renderOrderChart(model){
+  const max=Math.max(1,...model.orderBars.map(r=>r.value));
+  $('orderChartPanel').innerHTML=`
+    <div class="panel-head">
+      <div><div class="panel-title">订单与柜量结构</div><div class="panel-note">国家、订单、品类的横向对比</div></div>
+      <a class="panel-note" href="/index.html">进入订单看板</a>
+    </div>
+    <div class="bar-chart">
+      ${model.orderBars.map(row=>`
+        <div class="bar-row">
+          <div class="bar-label">${esc(row.label)}</div>
+          <div class="bar-track"><div class="bar-fill" style="--accent:${row.accent};width:${clamp(row.value/max*100,0,100)}%"></div></div>
+          <div class="bar-value">${esc(row.value)}</div>
+        </div>
+      `).join('')}
+    </div>
+  `;
+}
+
+function renderLogisticsChart(model){
+  const d=model.logisticsDonut;
+  const total=Math.max(1,num(d.total));
+  const signedDeg=pct(d.signed,total)*3.6;
+  const transitDeg=signedDeg+pct(d.overseas,total)*3.6;
+  const arrivedDeg=transitDeg+pct(d.arrived,total)*3.6;
+  const unsigned=Math.max(0,total-num(d.signed));
+  $('logisticsChartPanel').innerHTML=`
+    <div class="panel-head">
+      <div><div class="panel-title">物流状态占比</div><div class="panel-note">甜甜圈按总柜数拆分关键状态</div></div>
+      <a class="panel-note" href="/index-flow.html">进入流向看板</a>
+    </div>
+    <div class="donut-wrap">
+      <div class="donut-chart" style="--signedDeg:${signedDeg}deg;--transitDeg:${transitDeg}deg;--arrivedDeg:${arrivedDeg}deg">
+        <div class="donut-hole"><div><strong>${esc(pct(d.signed,total))}%</strong><br><span class="panel-note">签收率</span></div></div>
+      </div>
+      <div class="legend">
+        <div class="legend-item" style="--dot:var(--green)"><span>已签收</span><strong>${esc(d.signed)}</strong></div>
+        <div class="legend-item" style="--dot:var(--gold)"><span>国外在途</span><strong>${esc(d.overseas)}</strong></div>
+        <div class="legend-item" style="--dot:var(--teal)"><span>已到岸</span><strong>${esc(d.arrived)}</strong></div>
+        <div class="legend-item" style="--dot:var(--faint)"><span>未签收/待推进</span><strong>${esc(unsigned)}</strong></div>
+      </div>
+    </div>
+  `;
+}
+
+function sparklinePath(series,w,h){
+  const values=series.map(p=>p.value).filter(v=>v!=null);
+  if(!values.length) return '';
+  const min=Math.min(...values);
+  const max=Math.max(...values);
+  const span=max-min || 1;
+  return series.map((p,i)=>{
+    const x=i*(w/(series.length-1 || 1));
+    const y=p.value==null?h-8:h-8-((p.value-min)/span)*(h-18);
+    return `${i?'L':'M'}${Math.round(x*10)/10},${Math.round(y*10)/10}`;
+  }).join(' ');
+}
+
+function renderTemperature(model){
+  const t=model.temperature;
+  if(t.error){
+    $('temperaturePanel').innerHTML=`<div class="panel-head"><div><div class="panel-title">温度监控</div><div class="panel-note">最近 7 天温度数据</div></div></div><div class="empty-state">${esc(t.error)}</div>`;
+    return;
+  }
+  const stats=t.stats||{};
+  const path=sparklinePath(t.trend,320,86);
+  $('temperaturePanel').innerHTML=`
+    <div class="panel-head">
+      <div><div class="panel-title">温度监控</div><div class="panel-note">最近 7 天记录、异常和迷你甘特</div></div>
+      <a class="panel-note" href="/index-tv.html">进入温度看板</a>
+    </div>
+    <div class="temp-metrics">
+      <div class="mini-metric"><div class="label">记录数</div><div class="value">${esc(num(stats.total))}</div></div>
+      <div class="mini-metric"><div class="label">冷柜数</div><div class="value">${esc(num(stats.containerCount))}</div></div>
+      <div class="mini-metric"><div class="label">均温</div><div class="value">${esc(num(stats.avgReturnTemp))}°</div></div>
+    </div>
+    <svg class="sparkline" viewBox="0 0 320 86" role="img" aria-label="温度趋势折线图">
+      <path d="M0,76 L320,76" stroke="rgba(255,255,255,.08)" fill="none"/>
+      <path d="${esc(path)}" stroke="var(--blue)" stroke-width="3" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+      ${t.trend.map((p,i)=>p.value==null?'':`<circle cx="${i*(320/(t.trend.length-1 || 1))}" cy="${76-((p.value-Math.min(...t.trend.map(x=>x.value).filter(v=>v!=null)))/(Math.max(...t.trend.map(x=>x.value).filter(v=>v!=null))-Math.min(...t.trend.map(x=>x.value).filter(v=>v!=null)) || 1))*68}" r="3" fill="var(--blue)"><title>${esc(p.label)} ${esc(p.value)}°C</title></circle>`).join('')}
+    </svg>
+    <div class="mini-gantt">
+      ${t.gantt.rows.length?t.gantt.rows.map(row=>`
+        <div class="gantt-row">
+          <div class="gantt-label">${esc(row.container)}</div>
+          ${t.gantt.days.map(day=>`<div class="gantt-cell ${esc(row.days[day.key]||'')}" title="${esc(day.label)}"></div>`).join('')}
+        </div>
+      `).join(''):'<div class="empty-state">暂无可展示的温度甘特数据</div>'}
+    </div>
+  `;
+}
+
+function renderNews(model){
+  const fetched=model.newsFetchedAt?new Date(model.newsFetchedAt).toLocaleString('zh-CN'):'等待刷新';
+  $('newsPanel').innerHTML=`
+    <div class="panel-head">
+      <div><div class="panel-title">行业新闻</div><div class="panel-note">自动新闻源 · ${esc(fetched)}</div></div>
+      <a class="panel-note" href="/index.html#news">进入新闻模块</a>
+    </div>
+    <div class="news-list">
+      ${model.news.length?model.news.map(item=>`
+        <a class="news-item" href="${esc(item.url||'#')}" target="_blank" rel="noopener">
+          <div class="news-title">${esc(item.title||'未命名新闻')}</div>
+          <div class="news-meta">${esc(item.source||item.site||'新闻源')} · ${esc(item.publishedAt||item.time||item.date||'')}</div>
+        </a>
+      `).join(''):'<div class="empty-state">暂无自动新闻，请检查新闻源配置或等待下一次刷新</div>'}
+    </div>
+  `;
+}
+
 function renderRisks(model){
   if(!model.risks.length){
-    $('riskPanel').innerHTML='<div class="panel-head"><div><div class="panel-title">风险待办</div><div class="panel-note">关口滞留、在途偏久和异常提醒</div></div></div><div class="empty-state">当前没有需要立即处理的风险</div>';
+    $('riskPanel').innerHTML='<div class="panel-head"><div><div class="panel-title">风险待办</div><div class="panel-note">关口滞留、在途偏久和温度异常</div></div></div><div class="empty-state">当前没有需要立即处理的风险</div>';
     return;
   }
   $('riskPanel').innerHTML=`
     <div class="panel-head"><div><div class="panel-title">风险待办</div><div class="panel-note">按风险优先显示前 8 条</div></div></div>
     <div class="risk-list">
       ${model.risks.map(r=>`
-        <div class="risk" style="--accent:${String(r.alertType||'').includes('滞留')?'var(--red)':'var(--gold)'}">
+        <div class="risk" style="--accent:${String(r.alertType||'').includes('异常')||String(r.alertType||'').includes('滞留')?'var(--red)':'var(--gold)'}">
           <div class="topline"><span>${esc(r.alertType||'风险提醒')}</span><span>${esc(r.containerNo||r.container||'-')}</span></div>
           <div class="meta">${esc(r.summary||r.reason||r.note||'需要业务人员关注')}${r.dwellDays?` · ${esc(r.dwellDays)} 天`:''}</div>
         </div>
@@ -271,16 +524,21 @@ async function init(){
   tick();
   try{
     $('refreshState').textContent='正在加载';
-    const [user,aggregate,flowData]=await Promise.all([
-      api('/api/auth/me'),
+    const user=await api('/api/auth/me');
+    renderUser(user);
+    const [aggregate,flowData,temperatureData]=await Promise.all([
       api('/api/aggregate'),
       api('/api/flow-dashboard'),
+      apiOptional('/api/dashboard?hours=168&limit=500'),
     ]);
-    renderUser(user);
-    const model=buildViewModel(user,aggregate,flowData);
+    const model=buildViewModel(user,aggregate,flowData,temperatureData);
     renderKpis(model);
     renderFlow(model);
     renderRisks(model);
+    renderOrderChart(model);
+    renderLogisticsChart(model);
+    renderTemperature(model);
+    renderNews(model);
     renderModules(model);
     $('refreshState').textContent='已更新 '+new Date().toLocaleTimeString('zh-CN',{hour12:false});
   }catch(err){
