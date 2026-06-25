@@ -1,0 +1,216 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>运营总览 · DURIAN OVERVIEW</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=Noto+Sans+SC:wght@400;500;700;900&family=Oswald:wght@500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#070b16; --bg2:#0d1426;
+    --panel:rgba(20,28,48,.72); --panel2:rgba(13,20,38,.85);
+    --line:rgba(99,124,168,.18); --line2:rgba(148,173,214,.12);
+    --txt:#eef3ff; --txt2:#9fb0cc; --txt3:#6c7e9c;
+    --gold:#f5c451; --th:#eab308; --vn:#ef4444;
+    --signed:#22c55e; --delivered:#2dd4bf; --transit:#f59e0b; --port:#fbbf24; --pending:#46556f;
+    --danger:#f87171; --warn:#fbbf24; --ok:#34d399;
+    --card-radius:1.3vh;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{min-height:100%;width:100%;background:var(--bg);
+    font-family:"Noto Sans SC","Microsoft YaHei",sans-serif;color:var(--txt);}
+  .num{font-family:"Oswald","Barlow Condensed",sans-serif;font-weight:700;font-feature-settings:"tnum";}
+  .board{height:100vh;width:100vw;display:grid;grid-template-rows:6vh 1fr;gap:1.1vh;padding:1.1vh 1.1vw;
+    background:radial-gradient(1200px 600px at 12% -10%,rgba(234,179,8,.10),transparent 60%),
+      radial-gradient(1200px 600px at 88% -10%,rgba(239,68,68,.10),transparent 60%),var(--bg);}
+
+  .top{display:flex;align-items:center;gap:1.3vw;padding:0 1.3vw;border-radius:1.1vh;
+    background:linear-gradient(90deg,rgba(234,179,8,.14),rgba(239,68,68,.14));
+    border:1px solid var(--line);position:relative;overflow:hidden;min-width:0;}
+  .top::before{content:"";position:absolute;inset:0;
+    background:linear-gradient(90deg,transparent,rgba(255,255,255,.05),transparent);}
+  .brand{display:flex;align-items:center;gap:.8vw;position:relative;flex-shrink:0;}
+  .logo{font-size:3vh;line-height:1;}
+  .title-main{font-weight:900;font-size:2.2vh;letter-spacing:.08em;}
+  .title-sub{font-size:1.2vh;color:var(--txt2);letter-spacing:.06em;margin-top:.1vh;}
+  .divider-v{width:1px;height:4.4vh;background:var(--line);flex-shrink:0;}
+  .top .right{margin-left:auto;display:flex;align-items:center;gap:1vw;position:relative;flex-shrink:0;}
+  .top .clock-box{display:flex;flex-direction:column;align-items:flex-end;gap:.1vh;line-height:1.1;}
+  .top .date{font-size:1.25vh;color:var(--txt2);font-weight:500;white-space:nowrap;}
+  .top .clock{font-size:1.9vh;color:var(--txt);letter-spacing:.05em;white-space:nowrap;}
+  .top .userbar{display:flex;align-items:center;gap:.5vw;font-size:1.2vh;color:var(--txt2);white-space:nowrap;}
+  .top .userbar .uname{color:var(--gold);font-weight:700;max-width:8vw;overflow:hidden;text-overflow:ellipsis;display:inline-block;vertical-align:bottom;}
+  .top .userbar a{color:var(--txt2);text-decoration:none;border:1px solid var(--line);
+    padding:.2vh .55vw;border-radius:.5vh;cursor:pointer;transition:.15s;font-size:1.15vh;}
+  .top .userbar a:hover{color:var(--vn);border-color:var(--vn);}
+
+  .grid{display:grid;grid-template-columns:repeat(4,1fr);gap:1.1vw;align-content:start;min-height:0;overflow-y:auto;}
+  .grid::-webkit-scrollbar{width:4px;}
+  .grid::-webkit-scrollbar-thumb{background:rgba(148,173,214,.18);border-radius:2px;}
+  .card{display:flex;flex-direction:column;background:var(--panel);border:1px solid var(--line);
+    border-radius:var(--card-radius);padding:1.8vh 1.2vw 1.5vh;position:relative;overflow:hidden;cursor:pointer;transition:.15s;min-height:14vh;}
+  .card:hover{border-color:rgba(148,173,214,.35);background:rgba(20,28,48,.85);}
+  .card .icon{font-size:3.2vh;margin-bottom:.6vh;}
+  .card .label{font-size:1.5vh;font-weight:700;color:var(--txt2);letter-spacing:.04em;margin-bottom:.4vh;}
+  .card .kpi-row{display:flex;gap:.8vw;flex-wrap:wrap;margin-top:auto;}
+  .card .kpi-item{display:flex;flex-direction:column;line-height:1.1;}
+  .card .kpi-item .v{font-size:2.4vh;}
+  .card .kpi-item .u{font-size:1.05vh;color:var(--txt3);white-space:nowrap;}
+  .card a{position:absolute;inset:0;z-index:1;}
+  .card .badge{position:absolute;top:1.2vh;right:1.2vw;font-size:1.05vh;color:var(--txt3);
+    border:1px solid var(--line2);padding:.15vh .5vw;border-radius:.5vh;}
+  .card .badge.warn{color:var(--warn);border-color:rgba(251,191,36,.35);}
+  .card .badge.danger{color:var(--danger);border-color:rgba(248,113,113,.35);}
+  .no-access{height:100vh;width:100vw;display:flex;align-items:center;justify-content:center;
+    color:var(--txt2);font-size:2vh;background:var(--bg);}
+</style>
+</head>
+<body>
+<div class="board">
+  <div class="top">
+    <div class="brand">
+      <div class="logo">🫕</div>
+      <div>
+        <div class="title-main" id="titleMain">运营总览</div>
+        <div class="title-sub" id="titleSub">榴莲交付 DURIAN OVERVIEW</div>
+      </div>
+    </div>
+    <div class="right">
+      <div class="clock-box">
+        <div class="date" id="dateDisplay"></div>
+        <div class="clock" id="clockDisplay"></div>
+      </div>
+      <div class="userbar" id="userbar"></div>
+    </div>
+  </div>
+  <div class="grid" id="grid"></div>
+</div>
+<script>
+const API = '';
+function $(id){return document.getElementById(id);}
+function esc(s){const d=document.createElement('div');d.appendChild(document.createTextNode(s));return d.innerHTML;}
+function gotoLogin(){window.location.href='/login?redirect='+encodeURIComponent(window.location.pathname);}
+
+function pad(n){return String(n).padStart(2,'0')}
+function tick(){
+  const d=new Date();
+  const week=['日','一','二','三','四','五','六'];
+  $('dateDisplay').textContent=d.getFullYear()+'年'+(d.getMonth()+1)+'月'+d.getDate()+'日 星期'+week[d.getDay()];
+  $('clockDisplay').textContent=pad(d.getHours())+':'+pad(d.getMinutes())+':'+pad(d.getSeconds());
+}
+
+const MODULE_META = {
+  overview:  { icon:'📊', label:'运营总览', href:'/app-overview.html', kpis:['合计订单','合计箱量'] },
+  orders:    { icon:'📋', label:'订单看板', href:'/index.html', kpis:['泰国订单','越南订单'] },
+  flow:      { icon:'🚢', label:'货柜流向', href:'/index-flow.html', kpis:['已发货','已签收'] },
+  temperature:{icon:'🌡️', label:'温度监控', href:'/index-tv.html', kpis:['异常柜'] },
+  logistics: { icon:'🚛', label:'物流监控', href:'/index.html', kpis:['在途批次','关口滞留'] },
+  news:      { icon:'📰', label:'行业新闻', href:'/index.html', kpis:['最新新闻'] },
+  smartsheet:{ icon:'📑', label:'智能表管理',href:'/admin.html', kpis:['表管理'] },
+  admin:     { icon:'⚙️', label:'系统管理', href:'/admin.html', kpis:['用户'] },
+};
+
+let dashboardPermissions = [];
+
+async function loadUser(){
+  try{
+    const r=await fetch(API+'/api/auth/me',{cache:'no-store'});
+    if(r.status===401){gotoLogin();return false;}
+    const j=await r.json();
+    if(j&&j.success&&j.data){
+      dashboardPermissions=j.data.dashboardPermissions||[];
+      const name=j.data.displayName||j.data.username;
+      const canEnterAdmin=j.data.role==='admin'||(j.data.permissions||[]).length>0;
+      const adminLink=canEnterAdmin?' <a href="/admin">后台</a>':'';
+      $('userbar').innerHTML='👤 <span class="uname" title="'+esc(name)+'">'+esc(name)+'</span>'+adminLink+' <a id="btnLogout">退出</a>';
+      $('btnLogout').onclick=async()=>{try{await fetch(API+'/api/auth/logout',{method:'POST'});}catch(_){}gotoLogin();};
+    }
+    return true;
+  }catch(e){console.warn('用户加载失败:',e.message);return true;}
+}
+
+function buildGrid(data){
+  const grid=$('grid');
+  const g=data&&data.global;
+  const agg=data&&data.aggregate;
+  const flow=data&&data.flow;
+  let html='';
+
+  const perms=dashboardPermissions;
+  const dashPerms=data&&data.visibility?Object.keys(data.visibility).filter(k=>data.visibility[k]):[];
+  const allCodes=['overview','orders','flow','temperature','logistics','news','smartsheet','admin'];
+
+  allCodes.forEach(code=>{
+    const meta=MODULE_META[code];
+    if(!meta)return;
+    if(!perms.includes(code)&&code!=='overview')return;
+    const vis=data&&data.visibility;
+    if(vis&&code!=='overview'&&!vis[code])return;
+
+    let kpiHtml='';
+    if(code==='overview'&&g){
+      kpiHtml='<div class="kpi-item"><span class="v num">'+g.totalOrders+'</span><span class="u">订单</span></div>'+
+        '<div class="kpi-item"><span class="v num">'+g.totalBoxes+'</span><span class="u">箱量</span></div>';
+    }else if(code==='orders'&&agg){
+      const th=agg.th||{};const vn=agg.vn||{};
+      kpiHtml='<div class="kpi-item"><span class="v num">'+(th.orders||0)+'</span><span class="u">泰国</span></div>'+
+        '<div class="kpi-item"><span class="v num">'+(vn.orders||0)+'</span><span class="u">越南</span></div>';
+    }else if(code==='flow'&&flow){
+      kpiHtml='<div class="kpi-item"><span class="v num">'+(flow.shipped||0)+'</span><span class="u">已发货</span></div>'+
+        '<div class="kpi-item"><span class="v num">'+(flow.signed||0)+'</span><span class="u">已签收</span></div>';
+    }else if(code==='temperature'&&data){
+      const alarm=data.alarmCount||0;
+      kpiHtml='<div class="kpi-item"><span class="v num'+(alarm>0?' c-danger':'')+'">'+(alarm||0)+'</span><span class="u">异常</span></div>';
+    }else if(code==='logistics'&&agg){
+      const l=agg.logistics||{};const k=l.kpis||{};
+      kpiHtml='<div class="kpi-item"><span class="v num">'+(k.inTransit||0)+'</span><span class="u">在途</span></div>'+
+        '<div class="kpi-item"><span class="v num">'+(k.portDelayed||0)+'</span><span class="u">滞留</span></div>';
+    }else if(code==='news'&&data){
+      const nc=data.newsCount||0;
+      kpiHtml='<div class="kpi-item"><span class="v num">'+nc+'</span><span class="u">条新闻</span></div>';
+    }else if(code==='smartsheet'){
+      kpiHtml='<div class="kpi-item"><span class="v num">⚡</span><span class="u">管理</span></div>';
+    }else if(code==='admin'){
+      kpiHtml='<div class="kpi-item"><span class="v num">⚙️</span><span class="u">系统设置</span></div>';
+    }
+
+    html+='<div class="card" data-code="'+code+'" onclick="location.href=\''+meta.href+'\'">'+
+      '<div class="icon">'+meta.icon+'</div>'+
+      '<div class="label">'+meta.label+'</div>'+
+      '<div class="kpi-row">'+kpiHtml+'</div>'+
+      '</div>';
+  });
+
+  if(!html){
+    grid.innerHTML='<div class="no-access">暂无可查看的看板内容</div>';
+    return;
+  }
+  grid.innerHTML=html;
+}
+
+async function loadData(){
+  try{
+    const [aggRes, flowRes] = await Promise.all([
+      fetch(API+'/api/aggregate',{cache:'no-store'}),
+      fetch(API+'/api/flow-dashboard',{cache:'no-store'})
+    ]);
+    const agg=aggRes.ok?await aggRes.json():null;
+    const flow=flowRes.ok?await flowRes.json():null;
+    return {aggregate:agg, flow:flow, visibility:agg?agg.visibility:null, global:agg?agg.global:null, newsCount:agg&&agg.news?agg.news.length:0, alarmCount:0};
+  }catch(e){console.warn('数据加载失败:',e.message);return null;}
+}
+
+async function init(){
+  tick();setInterval(tick,1000);
+  const ok=await loadUser();
+  if(!ok)return;
+  const data=await loadData();
+  buildGrid(data);
+}
+
+init();
+</script>
+</body>
+</html>
