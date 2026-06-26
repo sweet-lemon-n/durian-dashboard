@@ -22,7 +22,7 @@ const aggregate = {
     },
     inTransitContainers: [
       { container: 'TCLU1', status: 'ALARM', setTemp: 5, returnTemp: 10, note: '▲异常' },
-      { container: 'TCLU2', status: 'WARN', setTemp: 5, returnTemp: 7.4, note: '注意' },
+      { container: 'TCLU2', status: 'OK', setTemp: 5, returnTemp: 6.6, note: '注意' },
       { container: 'TCLU3', status: 'OK', setTemp: 5, returnTemp: 5.4, recordedAt: isoDaysAgo(2), note: '正常' },
     ],
   },
@@ -137,7 +137,10 @@ assert.equal(out.drilldowns.riskItems[1].rows.length, 1);
 assert.ok(out.drilldowns.riskItems[0].columns.includes('statusText'));
 assert.ok(out.drilldowns.temperatureDetails.rows.some(row => row.containerNo === 'TCLU1'));
 assert.ok(out.drilldowns.temperatureByContainer.TCLU1.rows.every(row => row.containerNo === 'TCLU1'));
+assert.equal(out.temperature.details.find(row => row.containerNo === 'TCLU2').status, 'WARN');
+assert.equal(out.temperature.details.find(row => row.containerNo === 'TCLU2').statusText, '温度预警');
 assert.equal(out.temperature.gantt.rows.length, 2);
+assert.equal(out.temperature.gantt.rows.find(row => row.containerNo === 'TCLU2').cells.at(-1).level, 'warn');
 assert.equal(out.temperature.gantt.days.length, 7);
 
 const filtered = buildExecutiveOverview({ aggregate, flow, filters: { country: '越南', factory: 'YL' } });
