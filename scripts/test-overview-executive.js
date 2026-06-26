@@ -23,6 +23,7 @@ const aggregate = {
     inTransitContainers: [
       { container: 'TCLU1', status: 'ALARM', setTemp: 5, returnTemp: 10, note: '▲异常' },
       { container: 'TCLU2', status: 'WARN', setTemp: 5, returnTemp: 7.4, note: '注意' },
+      { container: 'TCLU3', status: 'OK', setTemp: 5, returnTemp: 5.4, recordedAt: isoDaysAgo(2), note: '正常' },
     ],
   },
   news: {
@@ -88,6 +89,9 @@ assert.equal(out.headline.totalBoxes, 40);
 assert.equal(out.headline.shipped, 7);
 assert.equal(out.headline.signed, 3);
 assert.equal(out.headline.totalRisks, 5);
+assert.equal(out.headline.healthRule.baseScore, 100);
+assert.equal(out.headline.healthRule.highRiskDeduction, 12);
+assert.equal(out.headline.healthRule.mediumRiskDeduction, 5);
 
 assert.equal(out.efficiency.funnel.length, 4);
 assert.equal(out.efficiency.funnel[1].label, '已发货');
@@ -97,11 +101,15 @@ assert.equal(out.efficiency.cycleTimes.avgDomesticTransitDays, 4.7);
 assert.equal(out.bottlenecks[0].key, 'overseasTransit');
 assert.equal(out.bottlenecks[0].longestContainer, 'OV1');
 assert.equal(out.bottlenecks[0].longestDays, 9);
+assert.equal(out.bottlenecks[0].progressBasis, '占已发货柜比例');
+assert.equal(out.bottlenecks[0].progressRate, Math.round((2 / 7) * 1000) / 10);
 
 assert.equal(out.temperature.alarmCount, 2);
 assert.equal(out.temperature.alarmRate, 3.3);
 assert.equal(out.temperature.maxDeviation, 5);
 assert.equal(out.temperature.topAlerts[0].containerNo, 'TCLU1');
+assert.ok(out.temperature.details.length >= 3);
+assert.ok(out.temperature.details.every(row => row.statusText));
 
 assert.equal(out.structure.brandTop[0].label, 'KK');
 assert.equal(out.news.items.length, 3);
@@ -120,8 +128,15 @@ assert.equal(out.comparisons.signed7d.direction, 'up');
 
 assert.equal(out.drilldowns.orders.rows.length, 2);
 assert.equal(out.drilldowns.shipped.rows.length, 7);
+assert.ok(out.drilldowns.shipped.rows.every(row => row.statusText));
 assert.equal(out.drilldowns.bottlenecks.overseasTransit.rows[0].containerNo, 'OV1');
+assert.ok(out.drilldowns.bottlenecks.overseasTransit.rows.every(row => row.statusText === '国外在途'));
 assert.equal(out.drilldowns.risks.rows.length, out.risks.length);
+assert.equal(out.drilldowns.riskItems[0].rows.length, 1);
+assert.equal(out.drilldowns.riskItems[1].rows.length, 1);
+assert.ok(out.drilldowns.riskItems[0].columns.includes('statusText'));
+assert.ok(out.drilldowns.temperatureDetails.rows.some(row => row.containerNo === 'TCLU1'));
+assert.ok(out.drilldowns.temperatureByContainer.TCLU1.rows.every(row => row.containerNo === 'TCLU1'));
 assert.equal(out.temperature.gantt.rows.length, 2);
 assert.equal(out.temperature.gantt.days.length, 7);
 
