@@ -41,5 +41,13 @@ assert.ok(
   !/filter:\s*['"`][^'"`]*brightness\(/.test(html),
   'ambient motion should not animate brightness because it can dim the top overview'
 );
+assert.ok(
+  !/\.topbar,\.dashboard,\.modal-backdrop\{position:relative;z-index:1\}/.test(html),
+  'motion stacking rule must not override drill modal fixed positioning'
+);
+assert.ok(
+  /\.modal-backdrop\{[^}]*position:fixed[^}]*z-index:20/.test(html),
+  'drill modal backdrop should stay fixed above the dashboard after motion styles'
+);
 
 console.log('overview motion checks passed');
