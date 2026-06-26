@@ -535,6 +535,9 @@ function clearSchemaCache() {
 
 app.use(express.json());
 app.use(cookieParser());
+app.get('/vendor/gsap/gsap.min.js', (req, res) => {
+  res.sendFile(require.resolve('gsap/dist/gsap.min.js'));
+});
 app.use(express.static(path.join(__dirname, 'public')));
 
 // /admin 路由 → admin.html
