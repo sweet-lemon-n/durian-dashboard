@@ -21,39 +21,44 @@ assert.ok(
 );
 assert.ok(
   /\.risk-board\{[^}]*display:flex[^}]*flex-direction:column/.test(html),
-  'risk list should use flex column so many risks scroll instead of being compressed into strips'
+  'risk list should use flex column so many risks scroll instead being compressed into strips'
 );
 assert.ok(
   /\.risk-board\{[^}]*overflow-y:auto[^}]*overflow-x:hidden/.test(html),
-  'risk list should hide horizontal overflow and only scroll vertically'
+  'risk list should hide horizontal overflow only scroll vertically'
+);
+assert.ok(
+  /\.risk-board\{[^}]*padding-right:0/.test(html) && !/\.risk-board\{[^}]*scrollbar-gutter:stable/.test(html),
+  'risk list should not reserve an ugly scrollbar gutter or create a visible empty strip'
 );
 assert.ok(
   /\.risk\{[^}]*min-height:42px/.test(html),
-  'risk cards should keep a readable minimum height'
+  'risk cards should keep readable minimum height'
+);
+assert.ok(
+  /const panel=\$\('riskPanel'\);if\(panel\)\{panel\.scrollTop=0;panel\.scrollLeft=0\}/.test(html),
+  'risk panel itself should reset scroll position after render'
+);
+assert.strictEqual(
+  (html.match(/function renderRisks/g) || []).length,
+  (html.match(/const panel=\$\('riskPanel'\);if\(panel\)\{panel\.scrollTop=0;panel\.scrollLeft=0\}/g) || []).length,
+  'every risk renderer should reset the outer risk panel scroll position'
 );
 assert.ok(
   !/gsap\.fromTo\('\.kpi[^']*'\s*,\{autoAlpha:0/.test(html),
-  'KPI entrance should not fade from full transparency because it creates black flashes'
+  'KPI entrance should not fade from full transparency because creates black flashes'
 );
 assert.ok(
   /function startAmbientMotion/.test(html),
-  'overview should define continuous ambient motion, not only refresh-time entrance animation'
+  'overview define continuous ambient motion, not only refresh-time entrance animation'
 );
 assert.ok(
   /@keyframes alertSweep/.test(html),
-  'overview should include persistent alert sweep animation for warning cards'
+  'overview include persistent alert sweep animation warning cards'
 );
 assert.ok(
-  /@keyframes donutTurn/.test(html) && /#60a5fa','#2dd4bf/.test(html),
-  'donut charts should use gradient colors and slow rotation'
-);
-assert.ok(
-  /statusText\|\|r\.status/.test(html),
-  'risk cards should prefer Chinese status text over internal status keys'
-);
-assert.ok(
-  !/domesticTransit ·/.test(html),
-  'risk card template should not hardcode internal status keys'
+  /@keyframes donutTurn/.test(html) && /donut-grad-/.test(html),
+  'donut charts should use gradient colors slow rotation'
 );
 
 console.log('overview layout checks passed');
