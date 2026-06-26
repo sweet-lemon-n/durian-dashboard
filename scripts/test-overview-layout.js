@@ -24,8 +24,16 @@ assert.ok(
   'risk list should use flex column so many risks scroll instead of being compressed into strips'
 );
 assert.ok(
+  /\.risk-board\{[^}]*overflow-y:auto[^}]*overflow-x:hidden/.test(html),
+  'risk list should hide horizontal overflow and only scroll vertically'
+);
+assert.ok(
   /\.risk\{[^}]*min-height:42px/.test(html),
   'risk cards should keep a readable minimum height'
+);
+assert.ok(
+  !/gsap\.fromTo\('\.kpi[^']*'\s*,\{autoAlpha:0/.test(html),
+  'KPI entrance should not fade from full transparency because it creates black flashes'
 );
 assert.ok(
   /function startAmbientMotion/.test(html),
@@ -34,6 +42,10 @@ assert.ok(
 assert.ok(
   /@keyframes alertSweep/.test(html),
   'overview should include persistent alert sweep animation for warning cards'
+);
+assert.ok(
+  /@keyframes donutTurn/.test(html) && /#60a5fa','#2dd4bf/.test(html),
+  'donut charts should use gradient colors and slow rotation'
 );
 assert.ok(
   /statusText\|\|r\.status/.test(html),
