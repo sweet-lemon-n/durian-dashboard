@@ -34,6 +34,10 @@ assert.ok(
   'donut charts should render actual SVG gradient strokes, not only static CSS colors'
 );
 assert.ok(
+  /const SOFT_STRUCTURE_COLORS=/.test(html) && /#d8e6f3/.test(html) && /#e7d9f0/.test(html),
+  'structure portrait should use a dedicated low-saturation high-lightness gradient palette'
+);
+assert.ok(
   !/conic-gradient/.test(html),
   'donut charts should not fall back to static conic-gradient backgrounds'
 );
