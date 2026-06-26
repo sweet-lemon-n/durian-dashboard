@@ -132,29 +132,44 @@ window.DashboardMotion=(()=>{
       el.addEventListener('mouseleave',()=>gsap.to(el,{y:0,duration:.2,ease:'power2.out',overwrite:true}));
     });
   }
-  function startAmbientMotion(){
-    if(!ready())return;
-    if(ambientTimeline)ambientTimeline.kill();
-    ambientTimeline=gsap.timeline({repeat:-1,defaults:{ease:'sine.inOut'}});
+function startAmbientMotion(){
+if(!ready())return;
+if(ambientTimeline)ambientTimeline.kill();
+ambientTimeline=gsap.timeline({repeat:-1,defaults:{ease:'sine.inOut'}});
     ambientTimeline
       .to('.brand-mark',{boxShadow:'0 0 12px rgba(245,196,81,.28),0 0 24px rgba(96,165,250,.1)',duration:2.4,yoyo:true,repeat:1},0)
       .to('.refresh-state',{borderColor:'rgba(96,165,250,.44)',color:'#dbeafe',duration:2.1,yoyo:true,repeat:1},.1)
       .to('.kpi',{boxShadow:'0 0 0 1px rgba(96,165,250,.16),0 14px 38px rgba(0,0,0,.26)',duration:2.8,stagger:.08,yoyo:true,repeat:1},.2)
       .to('#riskPanel',{boxShadow:'0 0 0 1px rgba(248,113,113,.08),0 0 18px rgba(248,113,113,.045)',duration:2.4,yoyo:true,repeat:1},.35)
       .to('#temperaturePanel',{boxShadow:'0 0 0 1px rgba(45,212,191,.08),0 0 16px rgba(45,212,191,.045)',duration:2.4,yoyo:true,repeat:1},.55)
-      .to('.module',{borderColor:'rgba(96,165,250,.32)',duration:2,stagger:.05,yoyo:true,repeat:1},.8);
-  }
-  function afterOverviewRender(){
-    if(!ready())return;
-    gsap.killTweensOf('.kpi,.panel,.module,.funnel-fill,.bottleneck-bar span,.bar-fill,.risk,.temp-alert,.mini-metric,.cycle .value,.kpi .value');
-    stageIn();
-    revealMeters();
-    countValues();
-    emphasizeRisks();
-    wireHover();
-    startAmbientMotion();
-    firstPaint=false;
-  }
+.to('.module',{borderColor:'rgba(96,165,250,.32)',duration:2,stagger:.05,yoyo:true,repeat:1},.8);
+}
+function autoScrollList(selector){
+if(!ready())return;
+elements(selector).forEach(el=>{
+gsap.killTweensOf(el);
+el.setAttribute('data-auto-scroll','1');
+el.scrollTop=0;
+const distance=el.scrollHeight-el.clientHeight;
+if(distance<=8)return;
+const tween=gsap.to(el,{scrollTop:distance,duration:Math.max(12,distance/10),ease:'none',repeat:-1,yoyo:true,repeatDelay:1.2});
+el.onmouseenter=()=>tween.pause();
+el.onmouseleave=()=>tween.resume();
+});
+}
+function afterOverviewRender(){
+if(!ready())return;
+gsap.killTweensOf('.kpi,.panel,.module,.funnel-fill,.bottleneck-bar span,.bar-fill,.risk,.temp-alert,.mini-metric,.cycle .value,.kpi .value,.risk-board,.news-list');
+stageIn();
+revealMeters();
+countValues();
+emphasizeRisks();
+wireHover();
+startAmbientMotion();
+autoScrollList('#riskPanel .risk-board');
+autoScrollList('#newsPanel .news-list');
+firstPaint=false;
+}
   function openModal(modal){
     if(!ready()||!modal)return;
     const box=modal.querySelector('.modal');
@@ -186,7 +201,7 @@ function buildViewModel(user, executive){return {user,...executive,modules:MODUL
 function renderUser(user){const name=user.displayName||user.username||'-';const canAdmin=user.role==='admin'||(user.permissions||[]).length>0;$('userbar').innerHTML=`<span>${esc(name)}</span>${canAdmin?'<a href="/admin">后台</a>':''}<a id="btnLogout">退出</a>`;$('btnLogout').onclick=async()=>{try{await fetch('/api/auth/logout',{method:'POST'})}catch(_){}gotoLogin()}}
 function renderFilters(model){const f=model.filters||{};const option=(v,cur)=>`<option value="${esc(v)}" ${v===cur?'selected':''}>${esc(v||'全部')}</option>`;$('filterbar').innerHTML=`<select id="countryFilter">${option('',state.filters.country)}${(f.countries||[]).map(v=>option(v,state.filters.country)).join('')}</select><select id="factoryFilter">${option('',state.filters.factory)}${(f.factories||[]).map(v=>option(v,state.filters.factory)).join('')}</select><input id="containerFilter" value="${esc(state.filters.container)}" placeholder="输入柜号直接定位"><button id="filterReset">重置</button>`;['country','factory','container'].forEach(key=>{$(`${key}Filter`).onchange=()=>{state.filters[key]=$(`${key}Filter`).value.trim();load()}});$('containerFilter').onkeydown=e=>{if(e.key==='Enter'){state.filters.container=$('containerFilter').value.trim();load()}};$('filterReset').onclick=()=>{state.filters={country:'',factory:'',container:''};load()}}
 function renderFlow(model){const e=model.efficiency||{},cycle=e.cycleTimes||{},c=model.comparisons||{};$('flowPanel').innerHTML=`<div class="panel-head"><div><div class="panel-title">履约效率</div><div class="panel-note">最近 7 天对比上一周期</div></div><button data-drill="shipped">明细</button></div><div class="fulfillment-funnel">${(e.funnel||[]).map(row=>`<div class="funnel-row" data-drill="${esc(row.drilldown)}"><div class="funnel-label">${esc(row.label)}</div><div class="funnel-track"><div class="funnel-fill" style="width:${clamp(row.rate,0,100)}%"></div></div><div class="funnel-value num">${esc(row.value)} · ${pctText(row.rate)}</div></div>`).join('')}<div class="cycle-strip"><div class="cycle"><div class="label">平均国外段${trendHtml(c.avgTransitDays7d)}</div><div class="value num">${esc(cycle.avgOverseasDays)}天</div></div><div class="cycle"><div class="label">平均在岸</div><div class="value num">${esc(cycle.avgOnShoreDays)}天</div></div><div class="cycle"><div class="label">平均国内段</div><div class="value num">${esc(cycle.avgDomesticTransitDays)}天</div></div></div></div>`;document.querySelectorAll('.funnel-row[data-drill],#flowPanel button[data-drill]').forEach(el=>el.onclick=()=>openDrill(el.dataset.drill))}
-function renderNews(model){const n=model.news||{};$('newsPanel').innerHTML=`<div class="panel-head"><div><div class="panel-title">外部信息</div><div class="panel-note">只保留最新 3 条</div></div><a href="/index.html#news">详情</a></div><div class="news-list">${(n.items||[]).length?(n.items||[]).map(item=>`<a class="news-item" href="${esc(item.url||'#')}" target="_blank" rel="noopener"><div class="news-title">${esc(item.title||'未命名新闻')}</div><div class="news-meta">${esc(item.source||item.site||'新闻源')} · ${esc(item.publishedAt||item.time||item.date||'')}</div></a>`).join(''):'<div class="empty-state">暂无自动新闻</div>'}</div>`}
+function renderNews(model){const n=model.news||{};$('newsPanel').innerHTML=`<div class="panel-head"><div><div class="panel-title">外部信息</div><div class="panel-note">自动滚动全部新闻</div></div><a href="/index.html#news">详情</a></div><div class="news-list">${(n.items||[]).length?(n.items||[]).map(item=>`<a class="news-item" href="${esc(item.url||'#')}" target="_blank" rel="noopener"><div class="news-title">${esc(item.title||'未命名新闻')}</div><div class="news-meta">${esc(item.source||item.site||'新闻源')} · ${esc(item.publishedAt||item.time||item.date||'')}</div></a>`).join(''):'<div class="empty-state">暂无自动新闻</div>'}</div>`}
 function renderModules(model){$('moduleDock').innerHTML=model.modules.map(mod=>`<a class="module" href="${esc(mod.href)}"><div class="code">${esc(mod.code)}</div><div class="name">${esc(mod.name)}</div><div class="desc">${esc(mod.desc)}</div></a>`).join('')}
 function resolveDrill(path){const parts=String(path||'').split('.');let cur=state.model&&state.model.drilldowns;for(const part of parts){if(cur==null)return null;cur=cur[part]}return cur}
 function trendFrom(model,key,fallback){return (model.snapshotComparisons&&model.snapshotComparisons[key])||fallback}
@@ -213,7 +228,7 @@ function renderTemperature(model){
  document.querySelectorAll('#temperaturePanel [data-drill]').forEach(el=>el.onclick=()=>openDrill(el.dataset.drill));
  document.querySelectorAll('#temperaturePanel [data-container]').forEach(el=>el.onclick=()=>openDrill(`temperatureByContainer.${el.dataset.container}`));
 }
-const SOFT_STRUCTURE_COLORS=[['#d8e6f3','#cce7e2'],['#eadfbe','#e4cfd7'],['#cbe6df','#d9dfef'],['#edd4d8','#e8dec4'],['#e7d9f0','#d3e4e6']];function donutSegments(items){let start=0,total=items.reduce((sum,item)=>sum+num(item.value),0)||1;return items.map((item,idx)=>{const value=num(item.value);const size=Math.max(value/total*100,1.8);const seg={item,idx,start,size,colors:SOFT_STRUCTURE_COLORS[idx%SOFT_STRUCTURE_COLORS.length]};start+=size;return seg})}
+const STRUCTURE_TECH_COLORS=[['#60a5fa','#38bdf8'],['#2dd4bf','#22c55e'],['#f59e0b','#f5c451'],['#a78bfa','#38bdf8'],['#f97316','#facc15'],['#84cc16','#2dd4bf'],['#c084fc','#f0abfc']];function donutSegments(items){let start=0,total=items.reduce((sum,item)=>sum+num(item.value),0)||1;return items.map((item,idx)=>{const value=num(item.value);const size=Math.max(value/total*100,1.8);const seg={item,idx,start,size,colors:STRUCTURE_TECH_COLORS[idx%STRUCTURE_TECH_COLORS.length]};start+=size;return seg})}
 function donutBlock(title,items,path){const segments=donutSegments(items||[]);const svgSegments=segments.reduce((acc,seg)=>{const gap=.35,dash=Math.max(seg.size-gap,.4),offset=seg.start*3.6-90;const gradId=`donut-grad-${esc(title)}-${seg.idx}`;acc.defs+=`<linearGradient id="${gradId}" x1="6" y1="18" x2="66" y2="54" gradientUnits="userSpaceOnUse"><stop offset="0%" stop-color="${seg.colors[0]}" stop-opacity=".96"/><stop offset="100%" stop-color="${seg.colors[1]}" stop-opacity=".84"/></linearGradient>`;acc.circles+=`<circle cx="36" cy="36" r="28" fill="none" stroke="url(#${gradId})" stroke-width="12" stroke-linecap="butt" pathLength="100" stroke-dasharray="${dash} ${100-dash}" transform="rotate(${offset} 36 36)" opacity=".94"/>`;return acc},{defs:'',circles:''});return `<div class="donut-card"><div class="donut-title">${esc(title)}</div><div class="donut-chart-wrap"><div class="donut-chart"><svg viewBox="0 0 72 72" aria-hidden="true"><defs>${svgSegments.defs}</defs><circle cx="36" cy="36" r="28" fill="none" stroke="rgba(99,124,168,.16)" stroke-width="12"/>${svgSegments.circles}<circle cx="36" cy="36" r="17" fill="rgba(13,20,38,.94)" stroke="rgba(148,173,214,.12)" stroke-width="1"/></svg></div></div><div class="donut-list">${segments.map(seg=>`<div class="donut-item" data-drill="${esc(path(seg.item))}"><span class="donut-dot" style="background:linear-gradient(135deg,${seg.colors[0]},${seg.colors[1]})"></span><span class="donut-name">${esc(seg.item.label)}</span><strong>${pctText(seg.item.rate)}</strong></div>`).join('')}</div></div>`}
 function renderOrderChart(model){const s=model.structure||{};$('orderChartPanel').innerHTML=`<div class="panel-head"><div><div class="panel-title">结构画像</div><div class="panel-note">国家、品类、品牌占比</div></div><button data-drill="shipped">明细</button></div><div class="donut-grid">${donutBlock('国家',s.country||[],item=>`byCountry.${item.label}`)}${donutBlock('品类',s.category||[],item=>`byCategory.${item.key}`)}${donutBlock('品牌',s.brandTop||[],item=>`byFactory.${item.label}`)}</div>`;document.querySelectorAll('#orderChartPanel [data-drill]').forEach(el=>el.onclick=()=>openDrill(el.dataset.drill))}
 function renderRisks(model){const risks=model.risks||[];$('riskPanel').innerHTML=`<div class="panel-head"><div><div class="panel-title">风险待办</div><div class="panel-note">点单条只看对应柜，点全部看清单</div></div><button data-drill="risks">全部 ${risks.length}</button></div><div class="risk-board">${risks.length?risks.map((r,idx)=>`<div class="risk" data-drill="riskItems.${idx}" style="--accent:${r.severity==='high'?'var(--red)':'var(--orange)'}"><div class="topline"><span>${esc(r.type)}</span><span>${esc(r.containerNo)}</span></div><div class="meta">${esc(r.statusText||r.status||r.summary||'需要业务人员关注')}${r.days?` · ${esc(r.days)}天`:''}</div></div>`).join(''):'<div class="empty-state">当前无高优先级风险</div>'}</div>`;document.querySelectorAll('#riskPanel [data-drill]').forEach(el=>el.onclick=()=>openDrill(el.dataset.drill));const panel=$('riskPanel');if(panel){panel.scrollTop=0;panel.scrollLeft=0}const board=panel&&panel.querySelector('.risk-board');if(board){board.scrollTop=0;board.scrollLeft=0}}

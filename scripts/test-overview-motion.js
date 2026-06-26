@@ -34,8 +34,20 @@ assert.ok(
   'donut charts should render actual SVG gradient strokes, not only static CSS colors'
 );
 assert.ok(
-  /const SOFT_STRUCTURE_COLORS=/.test(html) && /#d8e6f3/.test(html) && /#e7d9f0/.test(html),
-  'structure portrait should use a dedicated low-saturation high-lightness gradient palette'
+  /const STRUCTURE_TECH_COLORS=/.test(html)
+    && /#60a5fa/.test(html)
+    && /#2dd4bf/.test(html)
+    && /#f59e0b/.test(html)
+    && /#a78bfa/.test(html)
+    && /#f5c451/.test(html)
+    && /#22c55e/.test(html),
+  'structure portrait should use differentiated technology gradients matching the fulfillment palette'
+);
+assert.ok(
+  /function autoScrollList/.test(html)
+    && /autoScrollList\('#riskPanel \.risk-board'/.test(html)
+    && /autoScrollList\('#newsPanel \.news-list'/.test(html),
+  'risk and news panels should auto-scroll when their content overflows'
 );
 assert.ok(
   !/conic-gradient/.test(html),

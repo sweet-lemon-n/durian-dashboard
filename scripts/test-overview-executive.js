@@ -112,7 +112,7 @@ assert.ok(out.temperature.details.length >= 3);
 assert.ok(out.temperature.details.every(row => row.statusText));
 
 assert.equal(out.structure.brandTop[0].label, 'KK');
-assert.equal(out.news.items.length, 3);
+assert.equal(out.news.items.length, 4);
 assert.ok(out.health.score < 100);
 
 assert.deepEqual(out.filters.countries.sort(), ['泰国', '越南']);

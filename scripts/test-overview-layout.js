@@ -36,6 +36,14 @@ assert.ok(
   'risk cards should keep readable minimum height'
 );
 assert.ok(
+  /外部信息/.test(html) && !/只保留最新 3 条/.test(html),
+  'news panel should not claim only three items are shown'
+);
+assert.ok(
+  /data-auto-scroll/.test(html) && /mouseenter/.test(html) && /mouseleave/.test(html),
+  'auto-scrolling lists should expose pause-on-hover behavior'
+);
+assert.ok(
   /const panel=\$\('riskPanel'\);if\(panel\)\{panel\.scrollTop=0;panel\.scrollLeft=0\}/.test(html),
   'risk panel itself should reset scroll position after render'
 );
