@@ -43,7 +43,7 @@ Use $ai-context-engineering to audit this project context and prepare to continu
 - 前端：原生 HTML、CSS、JavaScript
 - 认证：JWT、httpOnly Cookie、SQLite、better-sqlite3、bcryptjs
 - 数据源：企业微信智能表格 API、运行时 JSON 配置、少量本地 SQLite
-- 数据导入：xlsx
+- 数据导入：历史一次性脚本保留在 `scripts/`；生产依赖不再内置 Excel 解析库
 - 部署：Tencent Cloud Ubuntu Lighthouse、PM2、GitHub 拉取部署
 
 ## 项目目录说明
