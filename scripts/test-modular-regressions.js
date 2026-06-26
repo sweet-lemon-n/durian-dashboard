@@ -75,6 +75,20 @@ const overview = fs.readFileSync('public/app-overview.html', 'utf8');
   assert.ok(overview.includes(marker), `app-overview must render multi-dimensional chart marker ${marker}`);
 });
 
+[
+  '--bg:#070b16',
+  'body{overflow:hidden}',
+  'class="metric-rule"',
+  '订单数=订单主表去重订单编号',
+  '下单柜数=订单主表鲜果+冻果柜数',
+  '已发货=分柜明细有柜号',
+  '签收率=已签收柜数/订单总柜数',
+  '温度异常=回风温度偏离设定温度',
+].forEach(marker => {
+  assert.ok(overview.includes(marker), `app-overview compact command center must contain ${marker}`);
+});
+
+assert.ok(!overview.includes('--bg:#090d0b'), 'app-overview must not use the previous deep-green theme');
 assert.ok(!overview.includes('/api/modules/'), 'overview redesign must not depend on new modular APIs');
 assert.ok(!overview.includes('fonts.googleapis.com'), 'overview redesign must not depend on remote fonts');
 
