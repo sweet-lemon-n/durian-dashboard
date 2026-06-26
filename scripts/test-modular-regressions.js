@@ -59,9 +59,7 @@ const overview = fs.readFileSync('public/app-overview.html', 'utf8');
 
 [
   '/api/auth/me',
-  '/api/aggregate',
-  '/api/flow-dashboard',
-  '/api/dashboard?hours=168&limit=500',
+  '/api/overview-executive',
 ].forEach(path => {
   assert.ok(overview.includes(path), `app-overview must consume existing API ${path}`);
 });
@@ -69,8 +67,12 @@ const overview = fs.readFileSync('public/app-overview.html', 'utf8');
 [
   'class="bar-chart"',
   'class="donut-chart"',
-  'class="sparkline"',
-  'class="mini-gantt"',
+  'class="fulfillment-funnel"',
+  'class="bottleneck-list"',
+  'class="executive-health"',
+  'class="temperature-summary"',
+  'class="structure-grid"',
+  'class="risk-board"',
 ].forEach(marker => {
   assert.ok(overview.includes(marker), `app-overview must render multi-dimensional chart marker ${marker}`);
 });
@@ -79,11 +81,12 @@ const overview = fs.readFileSync('public/app-overview.html', 'utf8');
   '--bg:#070b16',
   'body{overflow:hidden}',
   'class="metric-rule"',
-  '订单数=订单主表去重订单编号',
-  '下单柜数=订单主表鲜果+冻果柜数',
-  '已发货=分柜明细有柜号',
-  '签收率=已签收柜数/订单总柜数',
-  '温度异常=回风温度偏离设定温度',
+  '老板经营驾驶舱',
+  '履约效率',
+  '瓶颈排行',
+  '温度健康',
+  '结构画像',
+  '风险待办',
 ].forEach(marker => {
   assert.ok(overview.includes(marker), `app-overview compact command center must contain ${marker}`);
 });
