@@ -36,6 +36,7 @@ assert.ok(
 const overview = fs.readFileSync('public/app-overview.html', 'utf8');
 
 [
+  'id="filterbar"',
   'id="kpiStrip"',
   'id="flowPanel"',
   'id="riskPanel"',
@@ -44,6 +45,7 @@ const overview = fs.readFileSync('public/app-overview.html', 'utf8');
   'id="temperaturePanel"',
   'id="newsPanel"',
   'id="moduleDock"',
+  'id="drillModal"',
   'function buildViewModel',
   'function renderKpis',
   'function renderFlow',
@@ -53,6 +55,8 @@ const overview = fs.readFileSync('public/app-overview.html', 'utf8');
   'function renderNews',
   'function renderRisks',
   'function renderModules',
+  'function openDrill',
+  'function resolveDrill',
 ].forEach(marker => {
   assert.ok(overview.includes(marker), `app-overview must contain ${marker}`);
 });
@@ -66,13 +70,13 @@ const overview = fs.readFileSync('public/app-overview.html', 'utf8');
 
 [
   'class="bar-chart"',
-  'class="donut-chart"',
   'class="fulfillment-funnel"',
   'class="bottleneck-list"',
-  'class="executive-health"',
   'class="temperature-summary"',
+  'class="mini-gantt"',
   'class="structure-grid"',
   'class="risk-board"',
+  'class="modal-backdrop"',
 ].forEach(marker => {
   assert.ok(overview.includes(marker), `app-overview must render multi-dimensional chart marker ${marker}`);
 });
@@ -80,15 +84,25 @@ const overview = fs.readFileSync('public/app-overview.html', 'utf8');
 [
   '--bg:#070b16',
   'body{overflow:hidden}',
-  'class="metric-rule"',
+  'class="meaning"',
   '老板经营驾驶舱',
+  '按国家、工厂、柜号看风险',
   '履约效率',
   '瓶颈排行',
-  '温度健康',
+  '温度监控',
   '结构画像',
   '风险待办',
+  '最近 7 天对比上一周期',
 ].forEach(marker => {
   assert.ok(overview.includes(marker), `app-overview compact command center must contain ${marker}`);
+});
+
+[
+  '订单主表去重订单编号',
+  '订单主表鲜果+冻果柜数',
+  '分柜明细有柜号',
+].forEach(copy => {
+  assert.ok(!overview.includes(copy), `app-overview must not show technical copy ${copy}`);
 });
 
 assert.ok(!overview.includes('--bg:#090d0b'), 'app-overview must not use the previous deep-green theme');

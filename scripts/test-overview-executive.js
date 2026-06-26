@@ -40,8 +40,21 @@ const flow = {
     shippedRate: 85,
     signedRate: 37.5,
   },
+  orders: [
+    { orderNo: 'KK-001', category: 'FRESH', boxes: 20, country: '泰国' },
+    { orderNo: 'KK-001', category: 'FROZEN', boxes: 5, country: '泰国' },
+    { orderNo: 'YL-002', category: 'FRESH', boxes: 15, country: '越南' },
+  ],
   details: {
-    shipped: [],
+    shipped: [
+      { containerNo: 'OV1', orderNo: 'KK-001', status: 'overseasTransit', dwellDays: 9, shipDate: isoDaysAgo(9), country: '泰国', brand: 'KK', category: 'FRESH' },
+      { containerNo: 'OV2', orderNo: 'YL-002', status: 'overseasTransit', dwellDays: 3, shipDate: isoDaysAgo(3), country: '越南', brand: 'YL', category: 'FRESH' },
+      { containerNo: 'SH1', orderNo: 'KK-001', status: 'onShore', dwellDays: 5, shipDate: isoDaysAgo(12), arrivalDate: isoDaysAgo(5), country: '泰国', brand: 'KK', category: 'FROZEN' },
+      { containerNo: 'DO1', orderNo: 'YL-002', status: 'domesticTransit', dwellDays: 4, shipDate: isoDaysAgo(11), arrivalDate: isoDaysAgo(6), domesticShipDate: isoDaysAgo(4), country: '越南', brand: 'YL', category: 'FRESH' },
+      { containerNo: 'SG1', orderNo: 'KK-001', status: 'signed', shipDate: isoDaysAgo(12), arrivalDate: isoDaysAgo(8), domesticShipDate: isoDaysAgo(6), signedDate: isoDaysAgo(2), country: '泰国', brand: 'KK', category: 'FRESH' },
+      { containerNo: 'SG2', orderNo: 'YL-002', status: 'signed', shipDate: isoDaysAgo(10), arrivalDate: isoDaysAgo(7), domesticShipDate: isoDaysAgo(5), signedDate: isoDaysAgo(1), country: '越南', brand: 'YL', category: 'FRESH' },
+      { containerNo: 'OLD1', orderNo: 'KK-001', status: 'signed', shipDate: isoDaysAgo(18), arrivalDate: isoDaysAgo(16), domesticShipDate: isoDaysAgo(15), signedDate: isoDaysAgo(9), country: '泰国', brand: 'KK', category: 'FRESH' },
+    ],
     overseasTransit: [
       { containerNo: 'OV1', status: 'overseasTransit', dwellDays: 9, shipDate: isoDaysAgo(9), country: '泰国' },
       { containerNo: 'OV2', status: 'overseasTransit', dwellDays: 3, shipDate: isoDaysAgo(3), country: '越南' },
@@ -70,16 +83,16 @@ const flow = {
 
 const out = buildExecutiveOverview({ aggregate, flow });
 
-assert.equal(out.headline.totalOrders, 12);
+assert.equal(out.headline.totalOrders, 2);
 assert.equal(out.headline.totalBoxes, 40);
-assert.equal(out.headline.shipped, 34);
-assert.equal(out.headline.signed, 15);
+assert.equal(out.headline.shipped, 7);
+assert.equal(out.headline.signed, 3);
 assert.equal(out.headline.totalRisks, 5);
 
 assert.equal(out.efficiency.funnel.length, 4);
 assert.equal(out.efficiency.funnel[1].label, '已发货');
-assert.equal(out.efficiency.cycleTimes.avgOverseasDays, 3.5);
-assert.equal(out.efficiency.cycleTimes.avgDomesticTransitDays, 4);
+assert.equal(out.efficiency.cycleTimes.avgOverseasDays, 3);
+assert.equal(out.efficiency.cycleTimes.avgDomesticTransitDays, 4.7);
 
 assert.equal(out.bottlenecks[0].key, 'overseasTransit');
 assert.equal(out.bottlenecks[0].longestContainer, 'OV1');
@@ -93,5 +106,28 @@ assert.equal(out.temperature.topAlerts[0].containerNo, 'TCLU1');
 assert.equal(out.structure.brandTop[0].label, 'KK');
 assert.equal(out.news.items.length, 3);
 assert.ok(out.health.score < 100);
+
+assert.deepEqual(out.filters.countries.sort(), ['泰国', '越南']);
+assert.ok(out.filters.factories.includes('KK'));
+assert.ok(out.filters.containers.includes('OV1'));
+
+assert.equal(out.comparisons.shipped7d.current, 1);
+assert.equal(out.comparisons.shipped7d.previous, 5);
+assert.equal(out.comparisons.shipped7d.direction, 'down');
+assert.equal(out.comparisons.signed7d.current, 2);
+assert.equal(out.comparisons.signed7d.previous, 1);
+assert.equal(out.comparisons.signed7d.direction, 'up');
+
+assert.equal(out.drilldowns.orders.rows.length, 2);
+assert.equal(out.drilldowns.shipped.rows.length, 7);
+assert.equal(out.drilldowns.bottlenecks.overseasTransit.rows[0].containerNo, 'OV1');
+assert.equal(out.drilldowns.risks.rows.length, out.risks.length);
+assert.equal(out.temperature.gantt.rows.length, 2);
+assert.equal(out.temperature.gantt.days.length, 7);
+
+const filtered = buildExecutiveOverview({ aggregate, flow, filters: { country: '越南', factory: 'YL' } });
+assert.equal(filtered.headline.totalOrders, 1);
+assert.equal(filtered.headline.totalBoxes, 15);
+assert.ok(filtered.drilldowns.shipped.rows.every(row => row.country === '越南'));
 
 console.log('overview executive checks passed');
