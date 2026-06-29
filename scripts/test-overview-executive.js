@@ -25,6 +25,8 @@ const aggregate = {
       { container: 'TCLU2', status: 'OK', setTemp: 5, returnTemp: 6.6, note: '注意' },
       { container: 'TCLU3', status: 'OK', setTemp: 5, returnTemp: 5.4, recordedAt: isoDaysAgo(2), note: '正常' },
       { container: 'OV1', status: 'OK', setTemp: 13, returnTemp: 13.4, location: '泰国南部在途', note: '正常' },
+      { container: 'SH1', status: 'OK', setTemp: 13, returnTemp: 13.1, location: '口岸旧温度', note: '已到岸旧记录' },
+      { container: 'DO1', status: 'OK', setTemp: 13, returnTemp: 13.2, location: '国内旧温度', note: '国内旧记录' },
     ],
   },
   news: {
@@ -51,7 +53,7 @@ const flow = {
     shipped: [
       { containerNo: 'OV1', orderNo: 'KK-001', status: 'overseasTransit', dwellDays: 9, shipDate: isoDaysAgo(9), country: '泰国', brand: 'KK', category: 'FRESH' },
       { containerNo: 'OV2', orderNo: 'YL-002', status: 'overseasTransit', dwellDays: 3, shipDate: isoDaysAgo(3), country: '越南', brand: 'YL', category: 'FRESH' },
-      { containerNo: 'SH1', orderNo: 'KK-001', status: 'onShore', dwellDays: 5, shipDate: isoDaysAgo(12), arrivalDate: isoDaysAgo(5), country: '泰国', brand: 'KK', category: 'FROZEN', port: '磨憨口岸' },
+      { containerNo: 'SH1', orderNo: 'KK-001', status: 'onShore', dwellDays: 5, shipDate: isoDaysAgo(12), arrivalDate: isoDaysAgo(5), country: '泰国', brand: 'KK', category: 'FROZEN', customsPort: '磨憨口岸' },
       { containerNo: 'DO1', orderNo: 'YL-002', status: 'domesticTransit', dwellDays: 4, shipDate: isoDaysAgo(11), arrivalDate: isoDaysAgo(6), domesticShipDate: isoDaysAgo(4), country: '越南', brand: 'YL', category: 'FRESH' },
       { containerNo: 'SG1', orderNo: 'KK-001', status: 'signed', shipDate: isoDaysAgo(12), arrivalDate: isoDaysAgo(8), domesticShipDate: isoDaysAgo(6), signedDate: isoDaysAgo(2), country: '泰国', brand: 'KK', category: 'FRESH' },
       { containerNo: 'SG2', orderNo: 'YL-002', status: 'signed', shipDate: isoDaysAgo(10), arrivalDate: isoDaysAgo(7), domesticShipDate: isoDaysAgo(5), signedDate: isoDaysAgo(1), country: '越南', brand: 'YL', category: 'FRESH' },
@@ -134,6 +136,7 @@ assert.equal(out.drilldowns.bottlenecks.overseasTransit.rows[0].containerNo, 'OV
 assert.ok(out.drilldowns.bottlenecks.overseasTransit.rows.every(row => row.statusText === '国外在途'));
 assert.equal(out.drilldowns.bottlenecks.overseasTransit.rows[0].location, '泰国南部在途');
 assert.equal(out.drilldowns.bottlenecks.onShore.rows[0].location, '磨憨口岸');
+assert.equal(out.drilldowns.bottlenecks.onShore.rows[0].temperatureStatusText, '');
 assert.ok(out.drilldowns.risks.rows.some(row => row.type === '温度缺失' && row.containerNo === 'OV2'));
 assert.ok(!out.drilldowns.risks.rows.some(row => row.type === '温度缺失' && row.containerNo === 'SH1'));
 assert.ok(!out.drilldowns.risks.rows.some(row => row.type === '温度缺失' && row.containerNo === 'DO1'));
@@ -145,8 +148,10 @@ assert.ok(out.drilldowns.temperatureDetails.rows.some(row => row.containerNo ===
 assert.ok(out.drilldowns.temperatureByContainer.TCLU1.rows.every(row => row.containerNo === 'TCLU1'));
 assert.equal(out.temperature.details.find(row => row.containerNo === 'TCLU2').status, 'WARN');
 assert.equal(out.temperature.details.find(row => row.containerNo === 'TCLU2').statusText, '温度预警');
-assert.equal(out.temperature.gantt.rows.length, 2);
-assert.equal(out.temperature.gantt.rows.find(row => row.containerNo === 'TCLU2').cells.at(-1).level, 'warn');
+assert.deepEqual(out.temperature.gantt.rows.map(row => row.containerNo).sort(), ['OV1', 'OV2']);
+assert.equal(out.temperature.gantt.rows.find(row => row.containerNo === 'OV1').cells.at(-1).level, 'ok');
+assert.equal(out.temperature.gantt.rows.find(row => row.containerNo === 'OV2').cells.at(-1).level, 'missing');
+assert.ok(!out.temperature.gantt.rows.some(row => ['SH1', 'DO1', 'TCLU1'].includes(row.containerNo)));
 assert.equal(out.temperature.gantt.days.length, 7);
 
 const filtered = buildExecutiveOverview({ aggregate, flow, filters: { country: '越南', factory: 'YL' } });

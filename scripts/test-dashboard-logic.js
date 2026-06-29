@@ -46,12 +46,16 @@ async function main() {
   const signed = containers.find(r => r['签收日期']);
   assert(onShore, '需要至少一条在岸柜样本');
   assert(signed, '需要至少一条已签收柜样本');
+  const detailRows = containers.map(r => ({
+    ...r,
+    口岸: r['柜号'] === onShore['柜号'] ? '磨憨口岸' : '',
+  }));
 
   const snapshot = {
     fetchedAt: new Date().toISOString(),
     sheets: [
       makeSheet('订单主表', orders),
-      makeSheet('分柜明细表', containers),
+      makeSheet('分柜明细表', detailRows),
       makeSheet('温度记录', [
         { 柜号: containers[0]['柜号'], 更新时间: daysAgo(0), 设定温度: 13, 回风温度: 14.2, 品牌: '测试品牌A', 当前位置: '越南LANG SON' },
         { 柜号: containers[1]['柜号'], 更新时间: daysAgo(0), 设定温度: 13, 回风温度: 12.9, 品牌: '测试品牌B', 当前位置: '泰国在途' },
@@ -75,6 +79,11 @@ async function main() {
   const flow = await aggregateFlowDashboard(snapshot);
   assert.ok(Array.isArray(flow.orders), '流向看板应暴露订单事实，供前端筛选重新计算总数');
   assert.strictEqual(flow.orders.length, orders.length * 2, '每个订单应拆成两个品类事实');
+  assert.strictEqual(
+    flow.details.onShore.find(r => r.containerNo === onShore['柜号']).port,
+    '磨憨口岸',
+    '口岸等待位置应从分柜明细口岸字段传递'
+  );
 
   console.log('dashboard logic checks passed');
 }
