@@ -24,6 +24,7 @@ const aggregate = {
       { container: 'TCLU1', status: 'ALARM', setTemp: 5, returnTemp: 10, note: '▲异常' },
       { container: 'TCLU2', status: 'OK', setTemp: 5, returnTemp: 6.6, note: '注意' },
       { container: 'TCLU3', status: 'OK', setTemp: 5, returnTemp: 5.4, recordedAt: isoDaysAgo(2), note: '正常' },
+      { container: 'OV1', status: 'OK', setTemp: 13, returnTemp: 13.4, location: '泰国南部在途', note: '正常' },
     ],
   },
   news: {
@@ -50,7 +51,7 @@ const flow = {
     shipped: [
       { containerNo: 'OV1', orderNo: 'KK-001', status: 'overseasTransit', dwellDays: 9, shipDate: isoDaysAgo(9), country: '泰国', brand: 'KK', category: 'FRESH' },
       { containerNo: 'OV2', orderNo: 'YL-002', status: 'overseasTransit', dwellDays: 3, shipDate: isoDaysAgo(3), country: '越南', brand: 'YL', category: 'FRESH' },
-      { containerNo: 'SH1', orderNo: 'KK-001', status: 'onShore', dwellDays: 5, shipDate: isoDaysAgo(12), arrivalDate: isoDaysAgo(5), country: '泰国', brand: 'KK', category: 'FROZEN' },
+      { containerNo: 'SH1', orderNo: 'KK-001', status: 'onShore', dwellDays: 5, shipDate: isoDaysAgo(12), arrivalDate: isoDaysAgo(5), country: '泰国', brand: 'KK', category: 'FROZEN', port: '磨憨口岸' },
       { containerNo: 'DO1', orderNo: 'YL-002', status: 'domesticTransit', dwellDays: 4, shipDate: isoDaysAgo(11), arrivalDate: isoDaysAgo(6), domesticShipDate: isoDaysAgo(4), country: '越南', brand: 'YL', category: 'FRESH' },
       { containerNo: 'SG1', orderNo: 'KK-001', status: 'signed', shipDate: isoDaysAgo(12), arrivalDate: isoDaysAgo(8), domesticShipDate: isoDaysAgo(6), signedDate: isoDaysAgo(2), country: '泰国', brand: 'KK', category: 'FRESH' },
       { containerNo: 'SG2', orderNo: 'YL-002', status: 'signed', shipDate: isoDaysAgo(10), arrivalDate: isoDaysAgo(7), domesticShipDate: isoDaysAgo(5), signedDate: isoDaysAgo(1), country: '越南', brand: 'YL', category: 'FRESH' },
@@ -88,7 +89,7 @@ assert.equal(out.headline.totalOrders, 2);
 assert.equal(out.headline.totalBoxes, 40);
 assert.equal(out.headline.shipped, 7);
 assert.equal(out.headline.signed, 3);
-assert.equal(out.headline.totalRisks, 5);
+assert.equal(out.headline.totalRisks, 6);
 assert.equal(out.headline.healthRule.baseScore, 100);
 assert.equal(out.headline.healthRule.highRiskDeduction, 12);
 assert.equal(out.headline.healthRule.mediumRiskDeduction, 5);
@@ -131,6 +132,11 @@ assert.equal(out.drilldowns.shipped.rows.length, 7);
 assert.ok(out.drilldowns.shipped.rows.every(row => row.statusText));
 assert.equal(out.drilldowns.bottlenecks.overseasTransit.rows[0].containerNo, 'OV1');
 assert.ok(out.drilldowns.bottlenecks.overseasTransit.rows.every(row => row.statusText === '国外在途'));
+assert.equal(out.drilldowns.bottlenecks.overseasTransit.rows[0].location, '泰国南部在途');
+assert.equal(out.drilldowns.bottlenecks.onShore.rows[0].location, '磨憨口岸');
+assert.ok(out.drilldowns.risks.rows.some(row => row.type === '温度缺失' && row.containerNo === 'OV2'));
+assert.ok(!out.drilldowns.risks.rows.some(row => row.type === '温度缺失' && row.containerNo === 'SH1'));
+assert.ok(!out.drilldowns.risks.rows.some(row => row.type === '温度缺失' && row.containerNo === 'DO1'));
 assert.equal(out.drilldowns.risks.rows.length, out.risks.length);
 assert.equal(out.drilldowns.riskItems[0].rows.length, 1);
 assert.equal(out.drilldowns.riskItems[1].rows.length, 1);

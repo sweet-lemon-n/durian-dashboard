@@ -17,7 +17,7 @@ assert.ok(
 ['orderPanel', 'newsPanel', 'riskPanel', 'orderChartPanel', 'moduleDock'].forEach(marker => {
   assert.ok(!html.includes(marker), `Thailand dashboard should not include ${marker}`);
 });
-['国外在途', '口岸等待', '国内在途', '柜号', '位置', '停留'].forEach(copy => {
+['国外在途', '口岸等待', '国内在途', '柜号', '位置', '停留', '温度缺失', 'temperatureStatusText'].forEach(copy => {
   assert.ok(html.includes(copy), `Thailand dashboard should show ${copy}`);
 });
 assert.ok(
