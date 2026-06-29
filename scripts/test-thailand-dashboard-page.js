@@ -11,12 +11,19 @@ assert.ok(
   /country=%E6%B3%B0%E5%9B%BD/.test(html) || /country=泰国/.test(html),
   'Thailand dashboard should request overview data with fixed Thailand country filter'
 );
-['orderPanel', 'logisticsPanel', 'temperaturePanel', 'ganttGrid'].forEach(marker => {
+['logisticsPanel', 'temperaturePanel', 'ganttGrid', 'stage-grid', 'status-section'].forEach(marker => {
   assert.ok(html.includes(marker), `Thailand dashboard should contain ${marker}`);
 });
-['newsPanel', 'riskPanel', 'orderChartPanel', 'moduleDock'].forEach(marker => {
+['orderPanel', 'newsPanel', 'riskPanel', 'orderChartPanel', 'moduleDock'].forEach(marker => {
   assert.ok(!html.includes(marker), `Thailand dashboard should not include ${marker}`);
 });
+['国外在途', '口岸等待', '国内在途', '柜号', '位置', '停留'].forEach(copy => {
+  assert.ok(html.includes(copy), `Thailand dashboard should show ${copy}`);
+});
+assert.ok(
+  /function activeTransitRows/.test(html) && /function locationText/.test(html),
+  'Thailand dashboard should derive active transit rows with location text'
+);
 assert.ok(
   /function renderTemperature/.test(html) && /gantt-cell/.test(html),
   'Thailand dashboard should render a temperature gantt chart'
