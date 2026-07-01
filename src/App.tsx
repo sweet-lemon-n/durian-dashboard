@@ -5,6 +5,8 @@ import { ProtectedRoute } from '@/components/auth/ProtectedRoute';
 import { AdminRoute } from '@/components/auth/AdminRoute';
 import LoginPage from '@/pages/LoginPage';
 import DashboardPage from '@/pages/DashboardPage';
+import DashboardSentryPage from '@/pages/DashboardSentryPage';
+import DashboardTvPage from '@/pages/DashboardTvPage';
 
 export default function App() {
   return (
@@ -14,6 +16,8 @@ export default function App() {
           <Route path="/login" element={<LoginPage />} />
           <Route element={<ProtectedRoute />}>
             <Route index element={<DashboardPage />} />
+            <Route path="/sentry" element={<DashboardSentryPage />} />
+            <Route path="/tv" element={<DashboardTvPage />} />
             <Route element={<AdminRoute />}>
               <Route path="/admin" element={<div>Admin Panel</div>} />
             </Route>
