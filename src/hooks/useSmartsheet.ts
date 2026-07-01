@@ -73,3 +73,21 @@ export function useAddField() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ['smartsheet', 'sheets'] }),
   });
 }
+
+export function useDeleteField() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (data: { sheetId: string; fieldIds: string[] }) =>
+      api('/api/smartsheet/fields/delete', { method: 'POST', body: JSON.stringify(data) }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['smartsheet', 'sheets'] }),
+  });
+}
+
+export function useUpdateField() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (data: { sheetId: string; fieldId: string; fieldTitle: string; fieldType: string }) =>
+      api('/api/smartsheet/fields/update', { method: 'POST', body: JSON.stringify(data) }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['smartsheet', 'sheets'] }),
+  });
+}

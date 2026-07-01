@@ -12,3 +12,5 @@ Minor: _ts type hack in ganttData, double iteration, App.tsx test route skipped 
 Task 7: complete (commits 348adf0..388e3c8, review clean)
 Minor: StatusPill casing, as never casts, hardcoded "0" in CategorySection, _source naming
 Task 8: complete (commits 388e3c8..30df63c, review clean)
+Task 9: complete (commits 30df63c..0d1cc5a, review clean)
+Task 10: complete (commits 0d1cc5a..e2db3a6, review clean)
