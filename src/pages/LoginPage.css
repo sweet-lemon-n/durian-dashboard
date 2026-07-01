@@ -1,0 +1,112 @@
+.login-page {
+  height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #070b16;
+  font-family: "Noto Sans SC", "Microsoft YaHei", sans-serif;
+}
+
+.login-card {
+  background: rgba(20, 28, 48, 0.85);
+  border: 1px solid rgba(99, 124, 168, 0.2);
+  border-radius: 16px;
+  padding: 40px 36px;
+  width: 380px;
+  max-width: 90vw;
+  text-align: center;
+  backdrop-filter: blur(12px);
+}
+
+.login-card h1 {
+  font-size: 1.4rem;
+  font-weight: 900;
+  color: #eef3ff;
+  letter-spacing: 0.04em;
+  margin-bottom: 6px;
+}
+
+.login-subtitle {
+  color: #6c7e9c;
+  font-size: 0.85rem;
+  margin-bottom: 28px;
+}
+
+.login-form {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  text-align: left;
+}
+
+.form-group label {
+  display: block;
+  font-size: 0.8rem;
+  color: #9fb0cc;
+  margin-bottom: 6px;
+  font-weight: 600;
+}
+
+.form-input {
+  width: 100%;
+  padding: 10px 14px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(99, 124, 168, 0.25);
+  border-radius: 8px;
+  color: #eef3ff;
+  font-size: 0.95rem;
+  font-family: inherit;
+  outline: none;
+  transition: border-color 0.15s;
+  box-sizing: border-box;
+}
+
+.form-input:focus {
+  border-color: #f5c451;
+}
+
+.form-input::placeholder {
+  color: #6c7e9c;
+}
+
+.remember-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.85rem;
+  color: #9fb0cc;
+  cursor: pointer;
+}
+
+.remember-row input[type="checkbox"] {
+  accent-color: #f5c451;
+}
+
+.login-btn {
+  padding: 11px;
+  background: linear-gradient(135deg, #f5c451, #eab308);
+  color: #000;
+  border: none;
+  border-radius: 8px;
+  font-size: 1rem;
+  font-weight: 700;
+  cursor: pointer;
+  letter-spacing: 0.08em;
+  transition: opacity 0.15s;
+  font-family: inherit;
+}
+
+.login-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.login-error {
+  margin-top: 16px;
+  padding: 10px 14px;
+  background: rgba(248, 113, 113, 0.12);
+  border: 1px solid rgba(248, 113, 113, 0.3);
+  border-radius: 8px;
+  color: #fca5a5;
+  font-size: 0.85rem;
+}
