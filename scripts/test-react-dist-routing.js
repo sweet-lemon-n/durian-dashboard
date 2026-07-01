@@ -49,8 +49,13 @@ assert(
 );
 
 assert(
-  bundle.includes('basename:"/react"'),
+  bundle.includes('d.jsx(Y1,{basename:"/react",children:d.jsx(Bx'),
   'React BrowserRouter bundle should use basename="/react"'
+);
+
+assert(
+  !bundle.includes('d.jsx(Bb,{basename:"/react"'),
+  'React basename should not be attached to a non-router provider'
 );
 
 console.log('React dist routing checks passed');
