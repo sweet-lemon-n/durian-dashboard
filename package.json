@@ -4,13 +4,9 @@
   "description": "榴莲运输温度监控看板 - 数据源来自企业微信智能表格",
   "main": "server.js",
   "scripts": {
-    "start": "node server.js",
-    "dev": "vite",
-    "build": "tsc -b && vite build",
-    "preview": "vite preview"
+    "start": "node server.js"
   },
   "dependencies": {
-    "@tanstack/react-query": "^5.101.2",
     "axios": "^1.7.0",
     "bcryptjs": "^2.4.3",
     "better-sqlite3": "^11.0.0",
@@ -18,18 +14,6 @@
     "dotenv": "^16.4.0",
     "express": "^4.21.0",
     "gsap": "^3.15.0",
-    "jsonwebtoken": "^9.0.2",
-    "react": "^19.2.7",
-    "react-bits": "^1.0.5",
-    "react-dom": "^19.2.7",
-    "react-router": "^7.18.1"
-  },
-  "devDependencies": {
-    "@types/node": "^26.0.1",
-    "@types/react": "^19.2.17",
-    "@types/react-dom": "^19.2.3",
-    "@vitejs/plugin-react": "^4.7.0",
-    "typescript": "^5.9.3",
-    "vite": "^6.4.3"
+    "jsonwebtoken": "^9.0.2"
   }
 }

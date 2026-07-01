@@ -8,7 +8,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 **Domain:** `www.sweetlemon.club` (pending ICP filing; after filing: Nginx reverse proxy → `https://www.sweetlemon.club`). Until then, access via `http://124.221.92.98:3000`.
 
-**Tech stack:** Node.js + Express (backend), **React + TypeScript + Vite (frontend)**, SQLite (auth DB), JSON file (editable board content), `xlsx` for one-off Excel imports. Deployed on Tencent Cloud Ubuntu Lighthouse server.
+**Tech stack:** Node.js + Express (backend), vanilla HTML/CSS/JS (frontend), SQLite (auth DB), JSON file (editable board content), `xlsx` for one-off Excel imports. Deployed on Tencent Cloud Ubuntu Lighthouse server.
 
 **Auth system:** JWT-based login with httpOnly cookies. `lib/db.js` (SQLite via better-sqlite3) and `lib/auth.js` (JWT + middleware). Two roles: `admin` (full access) and `viewer` (read-only). All `/api/*` routes require authentication; write/manage routes additionally require `admin` role. Login page at `/login`.
 
@@ -27,12 +27,7 @@ Smart sheet sub-tables (titles, not IDs, are matched at runtime):
 ```bash
 # Local development
 npm install                    # install dependencies
-npm run dev                    # Vite dev server (http://localhost:5173, proxies /api → :3000)
-node server.js                 # Express backend (http://localhost:3000)
-
-# Production build
-npm run build                  # tsc -b && vite build → dist/
-npm start                      # Express :3000 hosts API + serves dist/ (SPA fallback)
+node server.js                 # start server (http://localhost:3000)
 
 # First-time auth setup (after initial deploy):
 node scripts/init-db.js        # create admin account interactively
@@ -43,7 +38,7 @@ node scripts/init-db.js        # create admin account interactively
 ./deploy.sh "commit message"   # git add/commit/push to GitHub (or run add/commit/push manually)
 
 # After push, the USER pulls on the server themselves:
-cd /home/ubuntu/温度看板 && git pull && npm install && npm run build && pm2 restart durian-dashboard
+cd /home/ubuntu/温度看板 && git pull && pm2 restart durian-dashboard
 
 # One-time smart-sheet setup scripts (need IP whitelisted, run locally or on server):
 node scripts/create-sheets.js   # create 陆运明细/海运明细/国内段明细/海运国内 sheets + fields
@@ -89,13 +84,10 @@ node scripts/init-db.js
 ## Architecture
 
 ```
-Browser (SPA / 旧版 HTML)
+Browser (看板 / 管理后台 / 登录页)
     ↓ HTTP (JWT in httpOnly cookie)
 Express server (server.js)
     ├── cookie-parser → 解析 token cookie
-    ├── dist/ static serving (production: Vite build output, SPA fallback for /flow /overview /thailand etc.)
-    ├── 301 redirects for legacy .html URLs
-    ├── public/ static serving (fallback for old HTML pages)
     ├── Auth guard (/api/* 除 /api/auth/login|logout 外均需 requireAuth)
     ├── requireRole('admin') on write/management routes
     ├── lib/db.js → SQLite (data/auth.db, users/audit_logs tables)
@@ -118,17 +110,14 @@ Express server (server.js)
 ```
 1. express.json()              — body parsing
 2. cookieParser()              — cookie parsing (must come before auth)
-3. Legacy 301 redirects        — old .html URLs → new SPA routes (BEFORE static, so .html copies in dist/ don't short-circuit)
-4. express.static('dist')      — Vite build output (production, if dist/ exists)
-5. SPA fallback                — regex match: non-/api /callback /login /admin → dist/index.html (production only)
-6. express.static('public')    — static files (index.html, admin.html, login.html, gantt.js, admin-smartsheet.js, style.css)
-7. /login, /admin routes       — page serving (fallback for dev / backward compat)
-8. CORS                        — permissive headers
-9. /callback raw body parsers  — XML for WeChat Work
-10. /api/auth/login, /api/auth/logout  — PUBLIC (before auth guard)
-11. app.use('/api', guard)      — skips /auth/login|logout, requireAuth for everything else
-12. /api/auth/me                — AUTHENDICATED (after guard)
-13. All other /api/* routes    — AUTHENTICATED + admin routes add requireRole('admin')
+3. express.static('public')    — static files (index.html, admin.html, login.html, gantt.js, admin-smartsheet.js, style.css)
+4. /login, /admin routes       — page serving
+5. CORS                        — permissive headers
+6. /callback raw body parsers  — XML for WeChat Work
+7. /api/auth/login, /api/auth/logout  — PUBLIC (before auth guard)
+8. app.use('/api', guard)      — skips /auth/login|logout, requireAuth for everything else
+9. /api/auth/me                — AUTHENTICATED (after guard)
+10. All other /api/* routes    — AUTHENTICATED + admin routes add requireRole('admin')
 ```
 
 ### Project structure
@@ -137,9 +126,6 @@ Express server (server.js)
 温度看板/
 ├── server.js              # Express backend (all API routes; mounts board-routes after the auth guard)
 ├── deploy.sh              # git add/commit/push helper
-├── package.json           # npm scripts: dev (Vite), build (tsc+vite), start (Express)
-├── tsconfig.json          # TypeScript project references
-├── vite.config.ts         # Vite config (@ alias, proxy /api → :3000, output → dist/)
 ├── lib/
 │   ├── wecom.js           # WeChat Work API wrapper (token, CRUD, views, groups)
 │   ├── crypto.js          # Callback crypto (SHA1 verify, AES-256-CBC encrypt/decrypt)
@@ -148,28 +134,7 @@ Express server (server.js)
 │   ├── content-store.js   # JSON store for editable board content (data/board-content.json) + seed defaults
 │   ├── board-routes.js    # express.Router: /api/aggregate + orders/logistics/news CRUD; exports { router, aggregate }
 │   └── news-fetcher.js    # Auto news: 新浪财经API + 水果RSS + 搜狗/头条搜索 → caches in memory, 30-min refresh
-├── src/                   # React + TypeScript frontend (Vite SPA)
-│   ├── App.tsx            # Root component with all 9 routes (/, /sentry, /tv, /flow, /overview, /thailand, /admin, /admin-sentry, /login)
-│   ├── main.tsx           # React entry point
-│   ├── pages/             # Page components
-│   │   ├── DashboardPage.tsx         # / — 泰越交付总览 (React rewrite)
-│   │   ├── DashboardSentryPage.tsx   # /sentry — Sentry-style dashboard
-│   │   ├── DashboardTvPage.tsx       # /tv — TV-style dashboard
-│   │   ├── FlowPage.tsx              # /flow — 流程看板 (placeholder)
-│   │   ├── OverviewPage.tsx          # /overview — 总览看板 (placeholder)
-│   │   ├── ThailandPage.tsx          # /thailand — 泰国看板 (placeholder)
-│   │   ├── LoginPage.tsx            # /login — Login page
-│   │   └── AdminPage.tsx            # /admin /admin-sentry — Admin panel
-│   ├── components/        # React components
-│   │   ├── layout/        # DashboardShell, AdminShell, ThemeDots
-│   │   ├── auth/          # ProtectedRoute, AdminRoute
-│   │   ├── dashboard/     # GlobalAgg, CountryPanel, LogisticsPanel, NewsPanel
-│   │   ├── admin/         # OrdersTab, LogisticsTab, NewsTab, SmartSheetTab
-│   │   ├── gantt/         # GanttChart component
-│   │   └── ui/            # Clock, etc.
-│   ├── stores/            # React context stores (AuthContext, ThemeContext)
-│   └── hooks/             # Custom hooks (useAggregate)
-├── public/                # Legacy HTML/CSS/JS frontend (served when dist/ doesn't exist)
+├── public/                # Frontend static files
 │   ├── index.html         # [Original] Dashboard: 泰越交付总览 board (dark blue/gold theme)
 │   ├── index-sentry.html  # [Sentry] Dashboard: violet-canvas marketing-page layout with lime keyword accents
 │   ├── index-tv.html      # [TV] Dashboard: single-viewport zero-scroll layout with 5-theme switcher (forest/ocean/amber/slate/violet)
@@ -179,7 +144,6 @@ Express server (server.js)
 │   ├── admin-smartsheet.js# Smart-sheet management logic (shared by both admin variants; globals, lazy-init on tab open)
 │   ├── login.html         # Login page (shared by all variants — dark theme, JWT cookie auth)
 │   └── style.css          # Dark-theme styles for login.html only
-├── dist/                  # Vite build output (production, gitignored)
 ├── DESIGN-sentry.md       # Sentry design system reference (color tokens, typography, components, dos/don'ts)
 ├── data/                  # auth.db (SQLite) + board-content.json (gitignored, auto-seeded) + import sources
 ├── scripts/
@@ -193,7 +157,7 @@ Express server (server.js)
 
 ### Backend (`server.js`)
 
-Express server with static file serving from `dist/` (production Vite build, if exists) and `public/` (legacy/fallback). In production, an SPA fallback serves `dist/index.html` for all non-API, non-callback routes. All API routes return JSON `{ success, data/error }`. Schema auto-detection with 5-minute cache.
+Express server with static file serving from `public/`. All API routes return JSON `{ success, data/error }`. Schema auto-detection with 5-minute cache.
 
 **Permission levels:** All `/api/*` routes require login (JWT cookie). Write/management routes additionally require `admin` role. Exceptions: `/callback` and auth login/logout are public.
 
@@ -266,18 +230,17 @@ Cached in memory, refreshed every 30 min. Exports: `initNewsFetcher()`, `getAuto
 Aggregate response includes auto news under `news.auto[]`. API: `GET /api/news/auto`, `POST /api/news/auto/refresh` (admin).
 Server IP (124.221.92.98) is known to be blocked by some search engines; if all sources return 0, register a juhe.cn AppKey.
 
-### Frontend
+### Frontend (`public/`)
 
-The frontend has two modes:
+Dashboard and admin are **self-contained** (inline CSS + JS) — a polished dark gold/red template (Oswald/Noto Sans fonts). Only `login.html` uses the external `style.css`.
 
-1. **React SPA (`src/`)** — Built via `npm run build` (tsc + vite build) → `dist/`. In production (`dist/` exists), Express serves `dist/` and provides an SPA fallback (`dist/index.html`) for all non-API routes: `/`, `/sentry`, `/tv`, `/flow`, `/overview`, `/thailand`, `/admin`, `/admin-sentry`, `/login`.
-2. **Legacy HTML (`public/`)** — Self-contained vanilla HTML/CSS/JS pages. Used when `dist/` doesn't exist (development mode). A polished dark gold/red template (Oswald/Noto Sans fonts). Only `login.html` uses the external `style.css`.
-   - **`login.html`** — Dark-theme login page, checks `/api/auth/me` on load (auto-redirect if logged in), submits to `POST /api/auth/login`, supports `?redirect=` param. "记住登录状态（7天）" maps to JWT 7d expiry.
-   - **`index.html`** — 泰越交付总览 board. `boot()`: `loadUser()` (`/api/auth/me`, 401→login, shows name + logout + an 后台 link for admins) → `loadData()` (`/api/aggregate`) → `paint()` (TH/VN country panels with FRESH/FROZEN rows, global aggregate, logistics monitoring, single combined news column with TH/VN sections inside, live clock), 30s poll. **All placeholder data except the bottom gantt.**
-   - **`gantt.js`** — Loaded after the inline board script. Independent fetch loop against the real `/api/dashboard?hours=168` (temperature), renders the柜号×7-day color-coded heatmap (blue≤6°C→green→red≥20°C). Scoped under `#ganttContainer`. Locally without IP whitelist it just shows 「暂无温度数据」 (errors are swallowed); real data appears once deployed.
-   - **`admin.html`** — 4-tab admin. Inline script (`api()` helper, 401→login / 403→toast) manages 订单/物流/新闻 against the board-content CRUD endpoints with autosave + 10s sync. The 4th tab **🗄 智能表格管理** holds the wecom smart-sheet management UI; its logic is in `admin-smartsheet.js` (globals, lazy-`initSmartsheet()` on first tab open). Auth via `checkAuth()` (non-admin → bounced to `/`).
-     - **Orders tab specifics:** rows are `draggable=true` and ↑↓ buttons appear on hover (`.ord-arrows`); both paths call `persistOrder(idsInView)` → `PUT /api/orders/reorder` and merge the filtered view back into the global order list. `<tfoot>` renders an Excel/飞书-style 合计行: each column has a per-cell `<select>` with `求和/平均/计数/去重/不显示`; choices persist to `localStorage` under `admin.ordersAgg.v1`. Defaults: numeric columns → sum, country/category/brand → distinct-count, rate → avg.
-     - **JS collision rule:** both the inline admin script and `admin-smartsheet.js` share global scope. The inline script renamed its modal closer to `closeModalById` and its escape helpers to `esc`/`md`; `admin-smartsheet.js` uses `ssCloseModal`, `escHtml`/`escAttr`. Don't reintroduce a name defined in the other file.
+- **`login.html`** — Dark-theme login page, checks `/api/auth/me` on load (auto-redirect if logged in), submits to `POST /api/auth/login`, supports `?redirect=` param. "记住登录状态（7天）" maps to JWT 7d expiry.
+
+- **`index.html`** — 泰越交付总览 board. `boot()`: `loadUser()` (`/api/auth/me`, 401→login, shows name + logout + an 后台 link for admins) → `loadData()` (`/api/aggregate`) → `paint()` (TH/VN country panels with FRESH/FROZEN rows, global aggregate, logistics monitoring, single combined news column with TH/VN sections inside, live clock), 30s poll. **All placeholder data except the bottom gantt.**
+- **`gantt.js`** — Loaded after the inline board script. Independent fetch loop against the real `/api/dashboard?hours=168` (temperature), renders the柜号×7-day color-coded heatmap (blue≤6°C→green→red≥20°C). Scoped under `#ganttContainer`. Locally without IP whitelist it just shows 「暂无温度数据」 (errors are swallowed); real data appears once deployed.
+- **`admin.html`** — 4-tab admin. Inline script (`api()` helper, 401→login / 403→toast) manages 订单/物流/新闻 against the board-content CRUD endpoints with autosave + 10s sync. The 4th tab **🗄 智能表格管理** holds the wecom smart-sheet management UI; its logic is in `admin-smartsheet.js` (globals, lazy-`initSmartsheet()` on first tab open). Auth via `checkAuth()` (non-admin → bounced to `/`).
+  - **Orders tab specifics:** rows are `draggable=true` and ↑↓ buttons appear on hover (`.ord-arrows`); both paths call `persistOrder(idsInView)` → `PUT /api/orders/reorder` and merge the filtered view back into the global order list. `<tfoot>` renders an Excel/飞书-style 合计行: each column has a per-cell `<select>` with `求和/平均/计数/去重/不显示`; choices persist to `localStorage` under `admin.ordersAgg.v1`. Defaults: numeric columns → sum, country/category/brand → distinct-count, rate → avg.
+  - **JS collision rule:** both the inline admin script and `admin-smartsheet.js` share global scope. The inline script renamed its modal closer to `closeModalById` and its escape helpers to `esc`/`md`; `admin-smartsheet.js` uses `ssCloseModal`, `escHtml`/`escAttr`. Don't reintroduce a name defined in the other file.
 - **`style.css`** — Dark-theme styles for `login.html` only.
 
 ### Dashboard variants (all share the same `/api/aggregate` data)
