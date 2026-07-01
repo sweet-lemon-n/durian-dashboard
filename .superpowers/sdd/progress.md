@@ -14,3 +14,4 @@ Minor: StatusPill casing, as never casts, hardcoded "0" in CategorySection, _sou
 Task 8: complete (commits 388e3c8..30df63c, review clean)
 Task 9: complete (commits 30df63c..0d1cc5a, review clean)
 Task 10: complete (commits 0d1cc5a..e2db3a6, review clean)
+Task 11: complete (commits e2db3a6..216aa23, review clean)

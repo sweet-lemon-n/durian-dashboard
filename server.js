@@ -564,24 +564,14 @@ const distPath = path.join(__dirname, 'dist');
 if (fs.existsSync(distPath)) {
   app.use(express.static(distPath));
 
-  // SPA fallback: 非 /api /callback 和非精确 /login /admin 的路由 → dist/index.html
-  app.get(/^\/(?!api\/|callback|login(?=\/|$)|admin(?=\/|$)).*/, (req, res) => {
+  // SPA fallback: 非 /api /callback 的路由 → dist/index.html（包括 /login /admin 由 React Router 处理）
+  app.get(/^\/(?!api\/|callback).*/, (req, res) => {
     res.sendFile(path.join(distPath, 'index.html'));
   });
 }
 
-// 开发环境兼容：仍然托管 public/ 目录
+// 开发环境兼容：仍然托管 public/ 目录（旧 HTML 文件可通过 .html 后缀直接访问）
 app.use(express.static(path.join(__dirname, 'public')));
-
-// /admin 路由 → admin.html
-app.get('/admin', (req, res) => {
-  res.sendFile(path.join(__dirname, 'public', 'admin.html'));
-});
-
-// /login 路由 → login.html
-app.get('/login', (req, res) => {
-  res.sendFile(path.join(__dirname, 'public', 'login.html'));
-});
 
 // ---- 认证 API（登录/登出/当前用户）----
 app.use('/api/auth', authRouter);
