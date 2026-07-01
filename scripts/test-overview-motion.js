@@ -67,6 +67,17 @@ assert.ok(
   'temperature gantt body should allow manual user scrolling'
 );
 assert.ok(
+  /function renderGanttCell/.test(html)
+    && /cell\.segments/.test(html)
+    && /gantt-segment/.test(html),
+  'temperature gantt cells should render one segment per temperature record'
+);
+assert.ok(
+  /\.gantt-segment\.alarm/.test(html)
+    && /tempWarnPulse/.test(html),
+  'temperature gantt alarm segments should breathe and flash'
+);
+assert.ok(
   !/conic-gradient/.test(html),
   'donut charts should not fall back to static conic-gradient backgrounds'
 );

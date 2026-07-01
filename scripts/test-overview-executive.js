@@ -4,6 +4,11 @@ const { buildExecutiveOverview } = require('../lib/overview-executive');
 const now = Date.now();
 const day = 86400000;
 const isoDaysAgo = days => new Date(now - days * day).toISOString();
+const hourOnDayAgo = (days, hour) => {
+  const d = new Date(now - days * day);
+  d.setHours(hour, 0, 0, 0);
+  return d.toISOString();
+};
 const dateKey = value => {
   const d = new Date(value);
   const p = n => String(n).padStart(2, '0');
@@ -21,15 +26,17 @@ const aggregate = {
   logistics: {
     kpis: {
       tempRecords: 60,
-      tempAlarms: 2,
+      tempAlarms: 0,
       avgReturnTemp: 6.2,
       portDelayed: 1,
     },
     inTransitContainers: [
       { container: 'TCLU1', status: 'ALARM', setTemp: 5, returnTemp: 10, note: '▲异常' },
-      { container: 'TCLU2', status: 'OK', setTemp: 5, returnTemp: 6.6, note: '注意' },
+      { container: 'TCLU2', status: 'OK', setTemp: 5, returnTemp: 6.2, note: '注意' },
       { container: 'TCLU3', status: 'OK', setTemp: 5, returnTemp: 5.4, recordedAt: isoDaysAgo(2), note: '正常' },
-      { container: 'OV1', status: 'OK', setTemp: 13, returnTemp: 13.4, releaseDate: isoDaysAgo(9), recordedAt: isoDaysAgo(0), location: '泰国南部在途', note: '正常' },
+      { container: 'OV1', status: 'OK', setTemp: 13, returnTemp: 13.4, releaseDate: isoDaysAgo(9), recordedAt: hourOnDayAgo(1, 9), location: '泰国南部在途', note: '正常' },
+      { container: 'OV1', status: 'OK', setTemp: 13, returnTemp: 14.2, releaseDate: isoDaysAgo(9), recordedAt: hourOnDayAgo(1, 15), location: '泰国南部在途', note: '同日第二条' },
+      { container: 'OV1', status: 'OK', setTemp: 13, returnTemp: 14.8, releaseDate: isoDaysAgo(9), recordedAt: isoDaysAgo(0), location: '泰国南部在途', note: '次日预警' },
       { container: 'OV2', status: 'OK', setTemp: 13, returnTemp: 13.5, releaseDate: isoDaysAgo(10), location: '越南旧趟在途', note: '同柜号不同放柜日期' },
       { container: 'TEMPONLY1', status: 'OK', setTemp: 13, returnTemp: 13.2, releaseDate: isoDaysAgo(1), recordedAt: isoDaysAgo(1), location: '泰国海外在途', note: '温度表海外在途' },
       { container: 'SH1', status: 'OK', setTemp: 13, returnTemp: 13.1, location: '口岸旧温度', note: '已到岸旧记录' },
@@ -98,7 +105,7 @@ assert.equal(out.headline.totalOrders, 2);
 assert.equal(out.headline.totalBoxes, 40);
 assert.equal(out.headline.shipped, 7);
 assert.equal(out.headline.signed, 3);
-assert.equal(out.headline.totalRisks, 6);
+assert.equal(out.headline.totalRisks, 8);
 assert.equal(out.headline.healthRule.baseScore, 100);
 assert.equal(out.headline.healthRule.highRiskDeduction, 12);
 assert.equal(out.headline.healthRule.mediumRiskDeduction, 5);
@@ -157,7 +164,13 @@ assert.ok(out.drilldowns.temperatureByContainer.TCLU1.rows.every(row => row.cont
 assert.equal(out.temperature.details.find(row => row.containerNo === 'TCLU2').status, 'WARN');
 assert.equal(out.temperature.details.find(row => row.containerNo === 'TCLU2').statusText, '温度预警');
 assert.deepEqual(out.temperature.gantt.rows.map(row => row.containerNo), ['OV1', 'TEMPONLY1', 'OV2']);
-assert.equal(out.temperature.gantt.rows.find(row => row.containerNo === 'OV1').cells.at(-1).level, 'ok');
+const ov1Today = out.temperature.gantt.rows.find(row => row.containerNo === 'OV1').cells.at(-1);
+const ov1Yesterday = out.temperature.gantt.rows.find(row => row.containerNo === 'OV1').cells.find(cell => cell.date === dateKey(isoDaysAgo(1)));
+assert.equal(ov1Today.level, 'alarm');
+assert.equal(ov1Today.segments.length, 1);
+assert.equal(ov1Today.segments[0].level, 'alarm');
+assert.equal(ov1Yesterday.level, 'warn');
+assert.deepEqual(ov1Yesterday.segments.map(segment => segment.level), ['ok', 'warn']);
 assert.equal(out.temperature.gantt.rows.find(row => row.containerNo === 'TEMPONLY1').cells.find(cell => cell.date === dateKey(isoDaysAgo(1))).level, 'ok');
 assert.equal(out.temperature.gantt.rows.find(row => row.containerNo === 'TEMPONLY1').cells.at(-1).level, 'none');
 assert.equal(out.temperature.gantt.rows.find(row => row.containerNo === 'OV2').cells.at(-1).level, 'missing');
