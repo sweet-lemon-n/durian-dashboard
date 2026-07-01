@@ -4,6 +4,7 @@ import { ThemeProvider } from '@/stores/ThemeContext';
 import { ProtectedRoute } from '@/components/auth/ProtectedRoute';
 import { AdminRoute } from '@/components/auth/AdminRoute';
 import LoginPage from '@/pages/LoginPage';
+import DashboardPage from '@/pages/DashboardPage';
 
 export default function App() {
   return (
@@ -12,7 +13,7 @@ export default function App() {
         <Routes>
           <Route path="/login" element={<LoginPage />} />
           <Route element={<ProtectedRoute />}>
-            <Route path="/" element={<div>Dashboard</div>} />
+            <Route index element={<DashboardPage />} />
             <Route element={<AdminRoute />}>
               <Route path="/admin" element={<div>Admin Panel</div>} />
             </Route>

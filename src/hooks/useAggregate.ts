@@ -35,6 +35,8 @@ export interface BrandData {
   boxes: number;
   signed: number;
   delivered: number;
+  transit: number;
+  pending: number;
   rate: number;
 }
 
@@ -51,6 +53,9 @@ export interface KpiData {
 export interface OverallData {
   signed: number;
   delivered: number;
+  transit?: number;
+  port?: number;
+  pending?: number;
 }
 
 export function useAggregate() {
