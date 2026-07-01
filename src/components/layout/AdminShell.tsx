@@ -1,171 +1,73 @@
-import { type ReactNode } from 'react';
+import { type ReactNode, useState } from 'react';
 import { useAuth } from '@/stores/AuthContext';
 
 interface Tab {
   key: string;
   label: string;
   icon: string;
-  adminOnly?: boolean;
 }
 
-interface Props {
-  children: ReactNode;
-  tabs: Tab[];
-  activeTab: string;
-  onTabChange: (key: string) => void;
-  title?: string;
-}
+const TABS: Tab[] = [
+  { key: 'orders', label: '订单管理', icon: '📦' },
+  { key: 'logistics', label: '物流监控', icon: '🚢' },
+  { key: 'news', label: '资讯管理', icon: '📰' },
+  { key: 'smartsheet', label: '智能表格', icon: '🗄' },
+];
 
-export function AdminShell({
-  children,
-  tabs,
-  activeTab,
-  onTabChange,
-  title,
-}: Props) {
+export function AdminShell({ children }: { children: (activeTab: string) => ReactNode }) {
   const { user, logout } = useAuth();
-  const isAdmin = user?.role === 'admin';
+  const [activeTab, setActiveTab] = useState('orders');
 
   return (
-    <div
-      style={{
-        minHeight: '100vh',
-        background: 'var(--bg)',
-        color: 'var(--txt)',
-        display: 'flex',
-        flexDirection: 'column',
-      }}
-    >
+    <div style={{ background: '#0f1421', color: '#e8edf7', minHeight: '100vh', fontFamily: '"Noto Sans SC", sans-serif' }}>
       {/* Header */}
-      <header
-        style={{
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          padding: '12px 24px',
-          background: 'var(--bg2)',
-          borderBottom: '1px solid var(--line)',
-        }}
-      >
-        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-          <span style={{ fontSize: '24px' }}>🍈</span>
-          <span
-            style={{
-              fontWeight: 700,
-              fontSize: '18px',
-              color: 'var(--accent)',
-            }}
-          >
-            {title || '管理后台'}
-          </span>
-        </div>
-
-        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-          <span
-            style={{
-              fontSize: '14px',
-              color: 'var(--txt2)',
-            }}
-          >
-            {user?.displayName || user?.username}
-            <span
-              style={{
-                marginLeft: '8px',
-                fontSize: '12px',
-                color: 'var(--txt3)',
-                fontStyle: 'italic',
-              }}
-            >
-              ({user?.role === 'admin' ? '管理员' : '查看者'})
-            </span>
-          </span>
-          <a
-            href="/"
-            style={{
-              color: 'var(--accent)',
-              textDecoration: 'none',
-              fontSize: '13px',
-              border: '1px solid var(--line)',
-              padding: '4px 12px',
-              borderRadius: '6px',
-            }}
-          >
-            看板
-          </a>
-          <a
-            href="#"
-            onClick={(e) => {
-              e.preventDefault();
-              logout();
-            }}
-            style={{
-              color: 'var(--txt2)',
-              textDecoration: 'none',
-              fontSize: '13px',
-              border: '1px solid var(--line)',
-              padding: '4px 12px',
-              borderRadius: '6px',
-            }}
-          >
-            退出
-          </a>
-        </div>
+      <header style={{
+        display: 'flex', alignItems: 'center', gap: '16px', padding: '14px 24px',
+        background: '#161d2e', borderBottom: '1px solid #2c3654', position: 'sticky', top: 0, zIndex: 10,
+      }}>
+        <h1 style={{ fontSize: '18px', fontWeight: 900 }}>
+          管理后台 <small style={{ color: '#6b7896', fontWeight: 500, marginLeft: '8px', fontSize: '12px' }}>
+            榴莲运输温度监控看板
+          </small>
+        </h1>
+        <div style={{ flex: 1 }} />
+        <span style={{ fontSize: '13px', color: '#9aa8c4' }}>
+          👤 <b style={{ color: '#f5c451' }}>{user?.displayName || user?.username}</b>
+        </span>
+        <a href="/" style={{ color: '#f5c451', textDecoration: 'none', fontSize: '13px', padding: '6px 14px', border: '1px solid #f5c451', borderRadius: '6px' }}>
+          看板
+        </a>
+        <a href="#" onClick={(e) => { e.preventDefault(); logout(); }} style={{
+          color: '#f87171', textDecoration: 'none', fontSize: '13px', padding: '6px 14px',
+          border: '1px solid rgba(248,113,113,.4)', borderRadius: '6px',
+        }}>
+          退出
+        </a>
       </header>
 
-      {/* Tabs */}
-      <nav
-        style={{
-          display: 'flex',
-          gap: '4px',
-          padding: '8px 24px 0',
-          background: 'var(--bg2)',
-          borderBottom: '1px solid var(--line)',
-          overflowX: 'auto',
-        }}
-      >
-        {tabs
-          .filter((tab) => !tab.adminOnly || isAdmin)
-          .map((tab) => (
+      <div style={{ maxWidth: '1400px', margin: '0 auto', padding: '20px' }}>
+        {/* Tabs */}
+        <div style={{ display: 'flex', gap: '6px', marginBottom: '18px', flexWrap: 'wrap' }}>
+          {TABS.map((tab) => (
             <button
               key={tab.key}
-              onClick={() => onTabChange(tab.key)}
+              onClick={() => setActiveTab(tab.key)}
               style={{
-                padding: '10px 20px',
-                border: 'none',
-                background:
-                  activeTab === tab.key ? 'var(--bg)' : 'transparent',
-                color:
-                  activeTab === tab.key
-                    ? 'var(--accent)'
-                    : 'var(--txt2)',
-                cursor: 'pointer',
-                fontSize: '14px',
-                fontWeight: activeTab === tab.key ? 700 : 400,
-                borderTopLeftRadius: '8px',
-                borderTopRightRadius: '8px',
-                borderBottom:
-                  activeTab === tab.key
-                    ? '2px solid var(--accent)'
-                    : '2px solid transparent',
-                transition: 'all 0.15s',
-                whiteSpace: 'nowrap',
+                padding: '9px 18px', border: '1px solid #2c3654', borderRadius: '8px 8px 0 0',
+                cursor: 'pointer', fontWeight: 600, fontSize: '14px', transition: '.15s',
+                background: activeTab === tab.key ? '#f5c451' : '#1b2236',
+                color: activeTab === tab.key ? '#000' : '#9aa8c4',
+                borderColor: activeTab === tab.key ? '#f5c451' : '#2c3654',
               }}
             >
               {tab.icon} {tab.label}
             </button>
           ))}
-      </nav>
+        </div>
 
-      {/* Content */}
-      <main
-        style={{
-          flex: 1,
-          padding: '24px',
-          overflow: 'auto',
-        }}
-      >
-        {children}
-      </main>
+        {/* Panel */}
+        {children(activeTab)}
+      </div>
     </div>
   );
 }
