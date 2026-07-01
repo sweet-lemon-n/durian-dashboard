@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useMemo } from 'react';
 import { useDashboard, type TempRecord } from '@/hooks/useDashboard';
 import { tempColor, textColor, getLast7Days } from './colorUtils';
 import './GanttChart.css';
@@ -10,8 +10,8 @@ interface Props {
 
 export function GanttChart({ tempType = 'returnTemp', onContainerClick }: Props) {
   const { data, isLoading, isError } = useDashboard(168, 500);
-  const [now] = useState(() => new Date());
-  const days = useMemo(() => getLast7Days(now), [now]);
+  // Compute days dynamically from current time so headers update when new data arrives
+  const days = useMemo(() => getLast7Days(new Date()), [data]);
 
   const ganttData = useMemo(() => {
     const map: Record<string, Record<string, { value: number }>> = {};
