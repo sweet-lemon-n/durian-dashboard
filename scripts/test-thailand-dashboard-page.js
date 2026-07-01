@@ -29,6 +29,14 @@ assert.ok(
   'Thailand dashboard should render a temperature gantt chart'
 );
 assert.ok(
+  /function backendGanttRows/.test(html) && /model\.temperature&&model\.temperature\.gantt/.test(html),
+  'Thailand dashboard should render the backend temperature gantt instead of rebuilding by container only'
+);
+assert.ok(
+  /function temperatureMatchesTransit/.test(html) && /releaseDate/.test(html),
+  'Thailand dashboard temperature details should match transit rows by container and release date'
+);
+assert.ok(
   /setInterval\(load,\s*60000\)/.test(html),
   'Thailand dashboard should auto-refresh'
 );

@@ -24,7 +24,9 @@ const aggregate = {
       { container: 'TCLU1', status: 'ALARM', setTemp: 5, returnTemp: 10, note: '▲异常' },
       { container: 'TCLU2', status: 'OK', setTemp: 5, returnTemp: 6.6, note: '注意' },
       { container: 'TCLU3', status: 'OK', setTemp: 5, returnTemp: 5.4, recordedAt: isoDaysAgo(2), note: '正常' },
-      { container: 'OV1', status: 'OK', setTemp: 13, returnTemp: 13.4, location: '泰国南部在途', note: '正常' },
+      { container: 'OV1', status: 'OK', setTemp: 13, returnTemp: 13.4, releaseDate: isoDaysAgo(9), location: '泰国南部在途', note: '正常' },
+      { container: 'OV2', status: 'OK', setTemp: 13, returnTemp: 13.5, releaseDate: isoDaysAgo(10), location: '越南旧趟在途', note: '同柜号不同放柜日期' },
+      { container: 'TEMPONLY1', status: 'OK', setTemp: 13, returnTemp: 13.2, releaseDate: isoDaysAgo(1), location: '泰国海外在途', note: '温度表海外在途' },
       { container: 'SH1', status: 'OK', setTemp: 13, returnTemp: 13.1, location: '口岸旧温度', note: '已到岸旧记录' },
       { container: 'DO1', status: 'OK', setTemp: 13, returnTemp: 13.2, location: '国内旧温度', note: '国内旧记录' },
     ],
@@ -135,6 +137,7 @@ assert.ok(out.drilldowns.shipped.rows.every(row => row.statusText));
 assert.equal(out.drilldowns.bottlenecks.overseasTransit.rows[0].containerNo, 'OV1');
 assert.ok(out.drilldowns.bottlenecks.overseasTransit.rows.every(row => row.statusText === '国外在途'));
 assert.equal(out.drilldowns.bottlenecks.overseasTransit.rows[0].location, '泰国南部在途');
+assert.equal(out.drilldowns.bottlenecks.overseasTransit.rows.find(row => row.containerNo === 'OV2').temperatureStatusText, '温度缺失');
 assert.equal(out.drilldowns.bottlenecks.onShore.rows[0].location, '磨憨口岸');
 assert.equal(out.drilldowns.bottlenecks.onShore.rows[0].temperatureStatusText, '');
 assert.ok(out.drilldowns.risks.rows.some(row => row.type === '温度缺失' && row.containerNo === 'OV2'));
@@ -148,7 +151,7 @@ assert.ok(out.drilldowns.temperatureDetails.rows.some(row => row.containerNo ===
 assert.ok(out.drilldowns.temperatureByContainer.TCLU1.rows.every(row => row.containerNo === 'TCLU1'));
 assert.equal(out.temperature.details.find(row => row.containerNo === 'TCLU2').status, 'WARN');
 assert.equal(out.temperature.details.find(row => row.containerNo === 'TCLU2').statusText, '温度预警');
-assert.deepEqual(out.temperature.gantt.rows.map(row => row.containerNo).sort(), ['OV1', 'OV2']);
+assert.deepEqual(out.temperature.gantt.rows.map(row => row.containerNo).sort(), ['OV1', 'OV2', 'TEMPONLY1']);
 assert.equal(out.temperature.gantt.rows.find(row => row.containerNo === 'OV1').cells.at(-1).level, 'ok');
 assert.equal(out.temperature.gantt.rows.find(row => row.containerNo === 'OV2').cells.at(-1).level, 'missing');
 assert.ok(!out.temperature.gantt.rows.some(row => ['SH1', 'DO1', 'TCLU1'].includes(row.containerNo)));
