@@ -59,8 +59,9 @@ assert.ok(
     && /addEventListener\('wheel',markUserIntervened/.test(html)
     && /addEventListener\('touchstart',markUserIntervened/.test(html)
     && /addEventListener\('pointerdown',markUserIntervened/.test(html)
-    && /if\(!userIntervened\)tween\.resume\(\)/.test(html),
-  'auto-scrolling lists should pause permanently after user interaction instead of resuming on mouse leave'
+    && /restartAutoScroll/.test(html)
+    && /el\.removeAttribute\('data-user-scroll'\)/.test(html),
+  'auto-scrolling lists should pause during user interaction and resume from the current position after mouse leave'
 );
 assert.ok(
   /\.mini-gantt-body\{[^}]*overflow:auto/.test(html),
