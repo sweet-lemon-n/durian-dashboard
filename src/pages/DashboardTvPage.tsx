@@ -76,6 +76,10 @@ function LoadingScreen() {
 
 export default function DashboardTvPage() {
   const { data, isLoading, isError } = useAggregate();
+  const visibility = data?.visibility ?? {};
+  const hasTH = visibility.th !== false;
+  const hasVN = visibility.vn !== false;
+  const showGantt = visibility.gantt !== false;
 
   if (isLoading) {
     return <LoadingScreen />;
@@ -195,19 +199,21 @@ export default function DashboardTvPage() {
           minHeight: 0,
         }}
       >
-        {data.th != null && data.th && <CountryPanel data={data.th} side="TH" />}
-        {data.vn != null && data.vn && <CountryPanel data={data.vn} side="VN" />}
+        {hasTH && data.th != null && data.th && <CountryPanel data={data.th} side="TH" />}
+        {hasVN && data.vn != null && data.vn && <CountryPanel data={data.vn} side="VN" />}
       </div>
 
       {/* Gantt at bottom */}
-      <div
-        style={{
-          maxHeight: '18vh',
-          overflow: 'hidden',
-        }}
-      >
-        <GanttChart />
-      </div>
+      {showGantt && (
+        <div
+          style={{
+            maxHeight: '18vh',
+            overflow: 'hidden',
+          }}
+        >
+          <GanttChart />
+        </div>
+      )}
 
       <ThemeDots />
     </div>

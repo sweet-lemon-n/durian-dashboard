@@ -37,11 +37,18 @@ function LoadingScreen() {
 
 export default function DashboardSentryPage() {
   const { data, isLoading, isError } = useAggregate();
-  const { setTheme } = useTheme();
+  const { theme: prevTheme, setTheme } = useTheme();
 
   useEffect(() => {
+    const saved = prevTheme;
     setTheme('violet');
-  }, [setTheme]);
+    return () => setTheme(saved);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const visibility = data?.visibility ?? {};
+  const hasTH = visibility.th !== false;
+  const hasVN = visibility.vn !== false;
+  const showGantt = visibility.gantt !== false;
 
   if (isLoading) {
     return (
@@ -107,19 +114,21 @@ export default function DashboardSentryPage() {
           minHeight: 0,
         }}
       >
-        {data?.th && <CountryPanel data={data.th} side="TH" />}
-        {data?.vn && <CountryPanel data={data.vn} side="VN" />}
+        {hasTH && data?.th && <CountryPanel data={data.th} side="TH" />}
+        {hasVN && data?.vn && <CountryPanel data={data.vn} side="VN" />}
       </div>
 
-      <div
-        style={{
-          maxHeight: '22vh',
-          overflow: 'hidden',
-          marginTop: '1.1vh',
-        }}
-      >
-        <GanttChart />
-      </div>
+      {showGantt && (
+        <div
+          style={{
+            maxHeight: '22vh',
+            overflow: 'hidden',
+            marginTop: '1.1vh',
+          }}
+        >
+          <GanttChart />
+        </div>
+      )}
     </DashboardShell>
   );
 }
