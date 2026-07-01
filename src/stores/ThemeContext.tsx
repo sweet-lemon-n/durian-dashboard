@@ -23,7 +23,10 @@ const ThemeContext = createContext<ThemeState>({
 export function ThemeProvider({ children }: { children: ReactNode }) {
   const [theme, setThemeState] = useState<Theme>(() => {
     const stored = localStorage.getItem('tv-theme');
-    return THEMES.includes(stored as Theme) ? (stored as Theme) : 'amber';
+    const initial = THEMES.includes(stored as Theme) ? (stored as Theme) : 'amber';
+    // Set data-theme synchronously before first paint to prevent FOUC
+    document.documentElement.setAttribute('data-theme', initial);
+    return initial;
   });
 
   useEffect(() => {
