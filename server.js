@@ -8,6 +8,7 @@
 require('dotenv').config();
 const express = require('express');
 const path = require('path');
+const fs = require('fs');
 const cookieParser = require('cookie-parser');
 const axios = require('axios');
 const wecom = require('./lib/wecom');
@@ -538,6 +539,38 @@ app.use(cookieParser());
 app.get('/vendor/gsap/gsap.min.js', (req, res) => {
   res.sendFile(require.resolve('gsap/dist/gsap.min.js'));
 });
+// ---- 旧 URL 301 重定向到新路由 ----
+// 放在静态文件之前，确保旧 .html URL 不会被 dist/ 中的副本直接响应
+const LEGACY_REDIRECTS = {
+  '/index.html': '/',
+  '/index-sentry.html': '/sentry',
+  '/index-tv.html': '/tv',
+  '/index-flow.html': '/flow',
+  '/app-overview.html': '/overview',
+  '/app-thailand.html': '/thailand',
+  '/admin-sentry.html': '/admin-sentry',
+};
+
+app.use((req, res, next) => {
+  const target = LEGACY_REDIRECTS[req.path];
+  if (target) {
+    return res.redirect(301, target);
+  }
+  next();
+});
+
+// ---- 生产环境：托管 Vite 构建产物 ----
+const distPath = path.join(__dirname, 'dist');
+if (fs.existsSync(distPath)) {
+  app.use(express.static(distPath));
+
+  // SPA fallback: 非 /api /callback 和非精确 /login /admin 的路由 → dist/index.html
+  app.get(/^\/(?!api\/|callback|login(?=\/|$)|admin(?=\/|$)).*/, (req, res) => {
+    res.sendFile(path.join(distPath, 'index.html'));
+  });
+}
+
+// 开发环境兼容：仍然托管 public/ 目录
 app.use(express.static(path.join(__dirname, 'public')));
 
 // /admin 路由 → admin.html

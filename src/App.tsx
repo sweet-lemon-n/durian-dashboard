@@ -7,6 +7,9 @@ import LoginPage from '@/pages/LoginPage';
 import DashboardPage from '@/pages/DashboardPage';
 import DashboardSentryPage from '@/pages/DashboardSentryPage';
 import DashboardTvPage from '@/pages/DashboardTvPage';
+import FlowPage from '@/pages/FlowPage';
+import OverviewPage from '@/pages/OverviewPage';
+import ThailandPage from '@/pages/ThailandPage';
 import AdminPage from '@/pages/AdminPage';
 
 export default function App() {
@@ -19,6 +22,9 @@ export default function App() {
             <Route index element={<DashboardPage />} />
             <Route path="/sentry" element={<DashboardSentryPage />} />
             <Route path="/tv" element={<DashboardTvPage />} />
+            <Route path="/flow" element={<FlowPage />} />
+            <Route path="/overview" element={<OverviewPage />} />
+            <Route path="/thailand" element={<ThailandPage />} />
             <Route element={<AdminRoute />}>
               <Route path="/admin" element={<AdminPage />} />
               <Route path="/admin-sentry" element={<AdminPage />} />
