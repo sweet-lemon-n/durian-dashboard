@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>登录 - 榴莲运输温度监控看板</title>
+  <link rel="stylesheet" href="style.css?v=5">
+</head>
+<body class="login-page">
+  <div class="login-card">
+    <h1>🍈 榴莲运输温度监控看板</h1>
+    <p class="login-subtitle">请登录以访问数据</p>
+
+    <form class="login-form" id="loginForm">
+      <div class="form-group">
+        <label for="username">用户名</label>
+        <input
+          type="text"
+          id="username"
+          class="form-input"
+          placeholder="请输入用户名"
+          autocomplete="username"
+          required
+          autofocus
+        >
+      </div>
+
+      <div class="form-group">
+        <label for="password">密码</label>
+        <input
+          type="password"
+          id="password"
+          class="form-input"
+          placeholder="请输入密码"
+          autocomplete="current-password"
+          required
+        >
+      </div>
+
+      <label class="remember-row">
+        <input type="checkbox" id="rememberMe">
+        <span>记住登录状态（7天）</span>
+      </label>
+
+      <button type="submit" class="login-btn" id="loginBtn">登 录</button>
+    </form>
+
+    <div class="login-error" id="loginError"></div>
+  </div>
+
+  <script>
+    /**
+     * 登录页逻辑
+     */
+
+    // 检查是否已登录 — 已登录直接跳转
+    (async function checkAuth() {
+      try {
+        const resp = await fetch('/api/auth/me');
+        if (resp.ok) {
+          const params = new URLSearchParams(window.location.search);
+          const redirect = params.get('redirect') || '/';
+          window.location.href = redirect;
+        }
+      } catch (_) {
+        // 未登录，留在登录页
+      }
+    })();
+
+    // 表单提交
+    document.getElementById('loginForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+
+      const username = document.getElementById('username').value.trim();
+      const password = document.getElementById('password').value;
+      const rememberMe = document.getElementById('rememberMe').checked;
+
+      const errorEl = document.getElementById('loginError');
+      const btn = document.getElementById('loginBtn');
+
+      // 清除之前的错误
+      errorEl.style.display = 'none';
+      errorEl.textContent = '';
+
+      // 基本校验
+      if (!username || !password) {
+        errorEl.textContent = '请输入用户名和密码';
+        errorEl.style.display = 'block';
+        return;
+      }
+
+      // 显示加载状态
+      btn.disabled = true;
+      btn.textContent = '登录中...';
+
+      try {
+        const resp = await fetch('/api/auth/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ username, password, rememberMe }),
+        });
+
+        const json = await resp.json();
+
+        if (json.success) {
+          // 登录成功，跳转
+          const params = new URLSearchParams(window.location.search);
+          const redirect = params.get('redirect') || '/';
+          window.location.href = redirect;
+        } else {
+          // 显示错误
+          errorEl.textContent = json.error || '登录失败，请重试';
+          errorEl.style.display = 'block';
+        }
+      } catch (err) {
+        errorEl.textContent = '网络错误，请检查连接后重试';
+        errorEl.style.display = 'block';
+      } finally {
+        btn.disabled = false;
+        btn.textContent = '登 录';
+      }
+    });
+
+    // 回车键提交（密码框回车）
+    document.getElementById('password').addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        document.getElementById('loginForm').dispatchEvent(new Event('submit'));
+      }
+    });
+  </script>
+</body>
+</html>

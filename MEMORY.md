@@ -181,6 +181,10 @@ server.js 从约 2100 行降到约 1990 行。后续模块按需继续提取到 
 - 修改基础看板时编辑 `public/index.html`。
 - 修改后台智能表逻辑时注意 `public/admin.html` 与 `public/admin-smartsheet.js` 的全局变量冲突。
 
+### React 重写旁路接入
+
+React 重写版构建产物放在 `dist/`，当前只作为旁路入口接入，不替换 `public/` 下的旧生产页面。服务端托管 `dist/assets` 到 `/assets`，并让 `/flow`、`/overview`、`/thailand`、`/sentry`、`/tv` 等无扩展路径返回 `dist/index.html`。旧的 `/index.html`、`/index-flow.html`、`/app-overview.html`、`/admin.html` 等 `.html` 页面继续由 `public/` 提供；`/admin` 和 `/login` 仍优先返回旧页面，等 React 旁路跑通后再考虑替换入口。
+
 ### 认证和权限
 
 系统使用 JWT + httpOnly Cookie。所有 `/api/*` 默认需要登录，写操作和管理操作需要管理员或相应权限。

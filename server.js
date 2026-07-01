@@ -538,6 +538,19 @@ app.use(cookieParser());
 app.get('/vendor/gsap/gsap.min.js', (req, res) => {
   res.sendFile(require.resolve('gsap/dist/gsap.min.js'));
 });
+const reactDistIndexPath = path.join(__dirname, 'dist', 'index.html');
+const reactAppRoutes = [
+  '/',
+  '/sentry',
+  '/tv',
+  '/flow',
+  '/overview',
+  '/thailand',
+  '/admin',
+  '/admin-sentry',
+  '/login',
+];
+app.use('/assets', express.static(path.join(__dirname, 'dist', 'assets')));
 app.use(express.static(path.join(__dirname, 'public')));
 
 // /admin 路由 → admin.html
@@ -548,6 +561,11 @@ app.get('/admin', (req, res) => {
 // /login 路由 → login.html
 app.get('/login', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'login.html'));
+});
+
+// React 旁路入口：不替换旧的 *.html 页面；旧 /admin 和 /login 路由仍优先命中上面的 public 页面。
+app.get(reactAppRoutes, (req, res) => {
+  res.sendFile(reactDistIndexPath);
 });
 
 // ---- 认证 API（登录/登出/当前用户）----

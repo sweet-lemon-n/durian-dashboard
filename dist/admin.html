@@ -1,0 +1,1456 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>管理后台 · 榴莲看板</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;500;700;900&family=Oswald:wght@500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#0f1421; --bg2:#161d2e; --panel:#1b2236; --panel2:#232c44;
+    --line:#2c3654; --txt:#e8edf7; --txt2:#9aa8c4; --txt3:#6b7896;
+    --gold:#f5c451; --th:#eab308; --vn:#ef4444; --signed:#22c55e;
+    --delivered:#2dd4bf; --transit:#f59e0b; --port:#fbbf24; --pending:#5b6b8a;
+    --blue:#3b82f6; --danger:#f87171;
+    /* 兼容「智能表格管理」tab 的旧组件变量别名 → 自动套用金色主题 */
+    --text:var(--txt); --text-muted:var(--txt3); --text-secondary:var(--txt2);
+    --bg-card:var(--panel); --border:var(--line); --accent:var(--gold);
+    --warning:#fbbf24; --info:#3b82f6; --radius:10px; --radius-sm:6px;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:var(--bg);color:var(--txt);font-family:"Noto Sans SC",sans-serif;min-height:100vh;font-size:14px;}
+  .num{font-family:"Oswald",sans-serif;font-weight:700;}
+
+  /* 顶栏 */
+  header{display:flex;align-items:center;gap:16px;padding:14px 24px;background:var(--bg2);
+    border-bottom:1px solid var(--line);position:sticky;top:0;z-index:10;}
+  header h1{font-size:18px;font-weight:900;}
+  header h1 small{color:var(--txt3);font-weight:500;margin-left:8px;font-size:12px;}
+  header .spacer{flex:1;}
+  header .user{font-size:13px;color:var(--txt2);}
+  header .user b{color:var(--gold);}
+  header a{color:var(--gold);text-decoration:none;font-size:13px;padding:6px 14px;border:1px solid var(--gold);border-radius:6px;}
+  header a:hover{background:var(--gold);color:#000;}
+  header a.logout{color:var(--danger);border-color:rgba(248,113,113,.4);}
+  header a.logout:hover{background:var(--danger);color:#fff;}
+  #connStatus{font-size:12px;padding:4px 10px;border-radius:12px;}
+  #connStatus.ok{background:rgba(34,197,94,.15);color:#86efac;}
+  #connStatus.err{background:rgba(248,113,113,.15);color:#fca5a5;}
+  /* 数据源切换器 */
+  .ds-switch{display:flex;align-items:center;gap:8px;font-size:12px;color:var(--txt2);
+    background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:4px 10px;}
+  .ds-switch label{font-weight:500;}
+  .ds-switch select{background:var(--panel2);border:1px solid var(--line);color:var(--gold);
+    padding:3px 8px;border-radius:6px;font-size:12px;font-weight:700;cursor:pointer;}
+  .ds-switch select:focus{outline:none;border-color:var(--gold);}
+  .ds-switch.wecom select{color:var(--signed);}
+
+  /* 布局 */
+  .wrap{max-width:1400px;margin:0 auto;padding:20px;}
+  .tabs{display:flex;gap:6px;margin-bottom:18px;flex-wrap:wrap;}
+  .tab{padding:9px 18px;background:var(--panel);border:1px solid var(--line);border-radius:8px 8px 0 0;
+    cursor:pointer;color:var(--txt2);font-weight:600;font-size:14px;transition:.15s;}
+  .tab.active{background:var(--gold);color:#000;border-color:var(--gold);}
+  .tab:hover:not(.active){color:var(--txt);background:var(--panel2);}
+  .panel{display:none;background:var(--panel);border:1px solid var(--line);border-radius:0 10px 10px 10px;padding:20px;}
+  .panel.active{display:block;animation:fade .2s;}
+  @keyframes fade{from{opacity:0;transform:translateY(4px)}}
+
+  /* 工具条 */
+  .toolbar{display:flex;align-items:center;gap:10px;margin-bottom:16px;flex-wrap:wrap;}
+  .toolbar h2{font-size:16px;margin-right:auto;}
+  .filter{display:flex;align-items:center;gap:6px;font-size:13px;color:var(--txt2);}
+  .filter select,.filter input{background:var(--panel2);border:1px solid var(--line);color:var(--txt);
+    padding:6px 10px;border-radius:6px;font-size:13px;}
+  .btn{padding:7px 14px;border:none;border-radius:6px;cursor:pointer;font-size:13px;font-weight:600;transition:.15s;}
+  .btn.primary{background:var(--blue);color:#fff;}
+  .btn.primary:hover{background:#2563eb;}
+  .btn.danger{background:transparent;color:var(--danger);border:1px solid rgba(248,113,113,.4);}
+  .btn.danger:hover{background:rgba(248,113,113,.15);}
+  .btn.sm{padding:4px 10px;font-size:12px;}
+
+  /* 表格（订单/物流/新闻） */
+  #panel-orders table,#panel-logistics table,#panel-news table,#panel-accounts table{width:100%;border-collapse:collapse;}
+  #panel-orders th,#panel-orders td,#panel-logistics th,#panel-logistics td,#panel-accounts th,#panel-accounts td{padding:9px 10px;text-align:left;border-bottom:1px solid var(--line);font-size:13px;}
+  #panel-orders th,#panel-logistics th,#panel-accounts th{color:var(--txt3);font-weight:600;font-size:12px;text-transform:uppercase;letter-spacing:.03em;white-space:nowrap;}
+  #panel-orders td input,#panel-orders td select,#panel-logistics td input,#panel-logistics td select{background:var(--panel2);border:1px solid var(--line);color:var(--txt);
+    padding:5px 8px;border-radius:5px;font-size:13px;width:100%;max-width:110px;}
+  #panel-orders td input:focus,#panel-logistics td input:focus{outline:none;border-color:var(--gold);}
+  #panel-orders tr:hover,#panel-logistics tr:hover,#panel-accounts tr:hover{background:rgba(255,255,255,.02);}
+  .pill{display:inline-block;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:700;}
+  .pill.th{background:rgba(234,179,8,.18);color:#fde68a;}
+  .pill.vn{background:rgba(239,68,68,.18);color:#fca5a5;}
+  .pill.fresh{background:rgba(239,68,68,.18);color:#fca5a5;}
+  .pill.frozen{background:rgba(56,189,248,.18);color:#7dd3fc;}
+  .pill.ok{background:rgba(34,197,94,.18);color:#86efac;}
+  .pill.warn{background:rgba(251,191,36,.18);color:#fde68a;}
+  .pill.alarm{background:rgba(248,113,113,.2);color:#fca5a5;}
+  .rate{font-weight:700;}
+  .rate.good{color:#86efac;} .rate.low{color:#fca5a5;}
+  .row-actions{display:flex;gap:6px;white-space:nowrap;align-items:center;}
+  .row-actions .btn{padding:3px 9px;font-size:11px;}
+  /* 订单排序：拖拽 + 悬停箭头 */
+  #ordersTable tbody tr{cursor:move;}
+  #ordersTable tbody tr.dragging{opacity:.4;}
+  #ordersTable tbody tr.drop-above td{box-shadow:0 -2px 0 var(--gold) inset;}
+  #ordersTable tbody tr.drop-below td{box-shadow:0 2px 0 var(--gold) inset;}
+  .ord-arrows{display:none;flex-direction:column;gap:1px;margin-right:4px;}
+  #ordersTable tbody tr:hover .ord-arrows{display:inline-flex;}
+  .ord-arrows button{width:18px;height:14px;padding:0;border:1px solid var(--line);background:var(--panel2);
+    color:var(--txt2);font-size:10px;line-height:1;cursor:pointer;border-radius:3px;}
+  .ord-arrows button:hover{color:var(--gold);border-color:var(--gold);}
+  .ord-arrows button:disabled{opacity:.3;cursor:not-allowed;}
+  /* 合计行 */
+  #ordersTable tfoot td{padding:6px 10px;border-top:2px solid var(--gold);background:rgba(245,196,81,.05);
+    font-size:13px;color:var(--txt);font-family:"Oswald";font-weight:700;white-space:nowrap;}
+  #ordersTable tfoot select{background:var(--panel2);border:1px solid var(--line);color:var(--txt2);
+    padding:2px 6px;border-radius:4px;font-size:10px;font-weight:500;font-family:inherit;
+    margin-bottom:3px;display:block;width:100%;max-width:88px;}
+  #ordersTable tfoot select:focus{outline:none;border-color:var(--gold);}
+  #ordersTable tfoot .agg-val{font-size:14px;color:var(--gold);}
+  #ordersTable tfoot .agg-val.muted{color:var(--txt3);font-weight:500;}
+  .empty{padding:40px;text-align:center;color:var(--txt3);}
+  .summary{display:flex;gap:24px;margin-bottom:16px;flex-wrap:wrap;}
+  .summary .item{background:var(--panel2);padding:12px 18px;border-radius:8px;border:1px solid var(--line);}
+  .summary .item .v{font-size:22px;color:var(--gold);}
+  .summary .item .l{font-size:12px;color:var(--txt3);margin-top:2px;}
+
+  /* 新闻编辑 */
+  .news-grid{display:grid;grid-template-columns:1fr 1fr;gap:20px;}
+  .news-col h3{font-size:14px;margin-bottom:10px;padding-bottom:8px;border-bottom:1px solid var(--line);}
+  .news-card{background:var(--panel2);border:1px solid var(--line);border-radius:8px;padding:12px;margin-bottom:10px;}
+  .news-card .ico{font-size:18px;margin-right:6px;}
+  .news-card .t{font-weight:700;font-size:14px;display:inline;}
+  .news-card .d{color:var(--txt2);font-size:12px;margin-top:4px;line-height:1.5;}
+  .news-card .d b{color:var(--gold);}
+  .news-card .actions{margin-top:8px;}
+  .source-card{background:var(--panel2);border:1px solid var(--line);border-radius:8px;padding:14px;margin-bottom:16px;}
+  .source-card h3{font-size:14px;margin-bottom:10px;}
+  .source-grid{display:grid;grid-template-columns:1.4fr 1fr;gap:12px;}
+  .source-grid label{display:block;font-size:12px;color:var(--txt3);margin-bottom:4px;}
+  .source-grid input{width:100%;background:var(--bg);border:1px solid var(--line);color:var(--txt);padding:8px 10px;border-radius:6px;font-size:13px;}
+  .source-grid textarea{width:100%;background:var(--bg);border:1px solid var(--line);color:var(--txt);padding:8px 10px;border-radius:6px;font-size:13px;min-height:72px;resize:vertical;font-family:inherit;}
+  .source-meta{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px;color:var(--txt3);font-size:12px;}
+  .source-diagnostics{margin-top:10px;color:var(--txt2);font-size:12px;line-height:1.5;white-space:pre-wrap;}
+
+  /* 物流 KPI 编辑 */
+  .lkpi-grid{display:grid;grid-template-columns:repeat(5,1fr);gap:12px;margin-bottom:20px;}
+  .lkpi{background:var(--panel2);border:1px solid var(--line);border-radius:8px;padding:12px;text-align:center;}
+  .lkpi label{display:block;font-size:12px;color:var(--txt3);margin-bottom:6px;}
+  .lkpi input{background:var(--bg);border:1px solid var(--line);color:var(--gold);font-size:20px;
+    font-family:"Oswald";font-weight:700;text-align:center;width:100%;padding:6px;border-radius:6px;}
+  .lkpi input:focus{outline:none;border-color:var(--gold);}
+
+  /* 模态框（订单/物流/新闻 新增） */
+  .modal{position:fixed;inset:0;background:rgba(0,0,0,.6);display:none;align-items:center;justify-content:center;z-index:50;}
+  .modal.show{display:flex;}
+  .modal-box{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:24px;width:90%;max-width:520px;max-height:90vh;overflow:auto;}
+  .modal-box h3{margin-bottom:16px;font-size:17px;}
+  .form-row2{margin-bottom:12px;}
+  .form-row2 label{display:block;font-size:12px;color:var(--txt3);margin-bottom:4px;}
+  .form-row2 input,.form-row2 select,.form-row2 textarea{width:100%;background:var(--panel2);border:1px solid var(--line);
+    color:var(--txt);padding:8px 10px;border-radius:6px;font-size:14px;font-family:inherit;}
+  .form-row2 textarea{min-height:60px;resize:vertical;}
+  .form-grid2{display:grid;grid-template-columns:1fr 1fr;gap:12px;}
+  .modal-actions{display:flex;gap:10px;justify-content:flex-end;margin-top:18px;}
+
+  /* Toast */
+  #toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:#22c55e;color:#fff;
+    padding:10px 22px;border-radius:8px;font-size:14px;z-index:100;opacity:0;transition:.3s;pointer-events:none;}
+  #toast.show{opacity:1;} #toast.err{background:var(--danger);}
+  .hint{color:var(--txt3);font-size:12px;margin-top:8px;}
+
+  .perm-list{display:flex;flex-wrap:wrap;gap:6px;}
+  .perm-tag{display:inline-flex;align-items:center;gap:4px;padding:3px 8px;border-radius:999px;background:rgba(59,130,246,.16);color:#93c5fd;font-size:11px;font-weight:700;}
+  .perm-checks{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:6px;}
+  .perm-checks label{display:flex;align-items:center;gap:6px;background:var(--panel2);border:1px solid var(--line);border-radius:6px;padding:8px;color:var(--txt2);font-size:13px;}
+  .perm-checks input{width:auto;accent-color:var(--gold);}
+  .status-dot{display:inline-block;padding:2px 8px;border-radius:999px;font-size:11px;font-weight:700;}
+  .status-dot.on{background:rgba(34,197,94,.18);color:#86efac;}
+  .status-dot.off{background:rgba(248,113,113,.18);color:#fca5a5;}
+
+  /* ===== 「智能表格管理」tab 的旧组件样式（全部限定在 #panel-smartsheet 内）===== */
+  #panel-smartsheet .card{background:var(--panel2);border:1px solid var(--line);border-radius:var(--radius);padding:20px;margin-bottom:20px;}
+  #panel-smartsheet .card h2{font-size:1rem;margin-bottom:16px;padding-bottom:8px;border-bottom:1px solid var(--line);display:flex;align-items:center;gap:8px;}
+  #panel-smartsheet .status-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;}
+  #panel-smartsheet .status-item{background:rgba(255,255,255,.03);border-radius:var(--radius-sm);padding:16px;text-align:center;}
+  #panel-smartsheet .status-item .label{font-size:.8rem;color:var(--text-muted);margin-bottom:6px;}
+  #panel-smartsheet .status-item .value{font-size:1.1rem;font-weight:600;word-break:break-all;}
+  #panel-smartsheet .status-ok{color:var(--signed);}
+  #panel-smartsheet .status-err{color:var(--danger);}
+  #panel-smartsheet .status-warn{color:var(--warning);}
+  #panel-smartsheet .btn{padding:10px 20px;border:1px solid var(--line);border-radius:var(--radius-sm);
+    background:var(--panel);color:var(--txt);cursor:pointer;font-size:.9rem;transition:.2s;margin-right:8px;margin-bottom:8px;font-weight:500;}
+  #panel-smartsheet .btn:hover{border-color:var(--accent);background:#283250;}
+  #panel-smartsheet .btn-primary{background:var(--accent);color:#000;border-color:var(--accent);font-weight:700;}
+  #panel-smartsheet .btn-primary:hover{filter:brightness(1.1);}
+  #panel-smartsheet .btn-danger{border-color:var(--danger);color:var(--danger);background:transparent;}
+  #panel-smartsheet .btn-danger:hover{background:var(--danger);color:#fff;}
+  #panel-smartsheet .btn-sm{padding:4px 10px;font-size:.75rem;margin-right:4px;margin-bottom:0;}
+  #panel-smartsheet .btn:disabled{opacity:.4;cursor:not-allowed;}
+  #panel-smartsheet .output{background:#0a0f1c;border:1px solid var(--line);border-radius:var(--radius-sm);
+    padding:14px;margin-top:12px;font-family:monospace;font-size:.82rem;white-space:pre-wrap;max-height:400px;overflow-y:auto;color:var(--text-muted);}
+  #panel-smartsheet .output.success{color:var(--signed);}
+  #panel-smartsheet .output.error{color:var(--danger);}
+  #panel-smartsheet .form-row{display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap;margin-bottom:12px;}
+  #panel-smartsheet .form-group{display:flex;flex-direction:column;gap:4px;}
+  #panel-smartsheet .form-group label{font-size:.8rem;color:var(--text-muted);}
+  #panel-smartsheet .form-input{padding:8px 12px;border:1px solid var(--line);border-radius:var(--radius-sm);
+    background:var(--bg);color:var(--txt);font-size:.9rem;outline:none;}
+  #panel-smartsheet textarea.form-input{min-height:150px;resize:vertical;line-height:1.55;font-family:inherit;}
+  #panel-smartsheet .form-input:focus{border-color:var(--accent);}
+  #panel-smartsheet .ai-preview{border:1px solid var(--line);border-radius:var(--radius-sm);padding:12px;margin-top:12px;background:rgba(255,255,255,.03);}
+  #panel-smartsheet .ai-preview h3{font-size:.95rem;margin-bottom:8px;color:var(--accent);}
+  #panel-smartsheet .ai-preview table{width:100%;border-collapse:collapse;font-size:.82rem;margin-top:8px;}
+  #panel-smartsheet .ai-preview th,#panel-smartsheet .ai-preview td{padding:7px 8px;border-bottom:1px solid var(--line);text-align:left;}
+  #panel-smartsheet .ai-preview th{color:var(--text-muted);font-weight:600;}
+  #panel-smartsheet .ai-preview input{width:100%;padding:6px 8px;border:1px solid var(--line);border-radius:var(--radius-sm);background:var(--bg);color:var(--txt);}
+  #panel-smartsheet .data-table-wrap{max-height:500px;overflow:auto;margin-top:8px;border:1px solid var(--line);border-radius:var(--radius-sm);}
+  #panel-smartsheet .data-table{width:100%;border-collapse:collapse;font-size:.82rem;}
+  #panel-smartsheet .data-table thead{position:sticky;top:0;z-index:2;}
+  #panel-smartsheet .data-table thead th{background:#152033;text-align:left;padding:8px 10px;border-bottom:2px solid var(--line);color:var(--text-muted);font-weight:600;white-space:nowrap;font-size:.75rem;}
+  #panel-smartsheet .data-table tbody td{padding:6px 10px;border-bottom:1px solid rgba(255,255,255,.04);white-space:nowrap;max-width:200px;overflow:hidden;text-overflow:ellipsis;}
+  #panel-smartsheet .data-table tbody tr:hover{background:rgba(255,255,255,.03);}
+  #panel-smartsheet .data-table .cell-num{text-align:right;font-variant-numeric:tabular-nums;}
+  #panel-smartsheet .data-table .cell-mono{font-family:monospace;font-size:.75rem;}
+  #panel-smartsheet .data-table .cell-json{font-family:monospace;font-size:.7rem;color:var(--text-muted);max-width:160px;}
+  #panel-smartsheet .data-table input[type="checkbox"]{accent-color:var(--accent);}
+  #panel-smartsheet .view-bar{display:flex;align-items:center;gap:8px;margin-bottom:6px;}
+  #panel-smartsheet .view-bar .btn-toggle{padding:3px 10px;font-size:.75rem;border-radius:12px;border:1px solid var(--line);background:transparent;color:var(--text-muted);cursor:pointer;}
+  #panel-smartsheet .view-bar .btn-toggle.active{background:var(--accent);color:#000;border-color:var(--accent);}
+  #panel-smartsheet .view-bar .view-label{font-size:.75rem;color:var(--text-muted);margin-left:auto;}
+  #panel-smartsheet .empty-hint{color:var(--text-muted);font-size:.85rem;text-align:center;padding:20px;}
+  /* 智能表格管理的记录编辑模态框 */
+  #panel-smartsheet .modal-overlay,#modalContainer .modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.65);z-index:1000;display:flex;align-items:center;justify-content:center;backdrop-filter:blur(3px);}
+  #modalContainer .modal-panel{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);width:620px;max-width:95vw;max-height:90vh;overflow-y:auto;box-shadow:0 8px 40px rgba(0,0,0,.5);}
+  #modalContainer .modal-header{display:flex;justify-content:space-between;align-items:center;padding:16px 20px;border-bottom:1px solid var(--line);position:sticky;top:0;background:var(--panel);z-index:1;}
+  #modalContainer .modal-header h3{font-size:1rem;}
+  #modalContainer .modal-close{width:30px;height:30px;border:none;border-radius:var(--radius-sm);background:transparent;color:var(--text-secondary);cursor:pointer;font-size:1.1rem;}
+  #modalContainer .modal-close:hover{background:rgba(255,255,255,.08);color:var(--txt);}
+  #modalContainer .modal-body{padding:20px;}
+  #modalContainer .modal-body .form-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px 16px;}
+  #modalContainer .modal-body .form-grid .form-group{width:100%;}
+  #modalContainer .modal-body .form-grid .form-input{padding:8px 12px;border:1px solid var(--line);border-radius:var(--radius-sm);background:var(--bg);color:var(--txt);font-size:.9rem;width:100%;}
+  #modalContainer .modal-body .form-group label{font-size:.8rem;color:var(--text-muted);}
+  #modalContainer .modal-footer{display:flex;gap:8px;padding:12px 20px;border-top:1px solid var(--line);justify-content:flex-end;position:sticky;bottom:0;background:var(--panel);}
+  #modalContainer .btn{padding:8px 16px;border:1px solid var(--line);border-radius:var(--radius-sm);background:var(--panel2);color:var(--txt);cursor:pointer;font-size:.85rem;}
+  #modalContainer .btn-primary{background:var(--accent);color:#000;border-color:var(--accent);font-weight:700;}
+</style>
+</head>
+<body>
+
+<header>
+  <h1>⚙️ 榴莲看板管理后台 <small>Durian Dashboard Admin</small></h1>
+  <span id="connStatus">检测中</span>
+  <div class="ds-switch" id="dsSwitch" title="切换看板数据源">
+    <label>📊 数据源</label>
+    <select id="dsSelect">
+      <option value="manual">手动后台</option>
+      <option value="wecom">企微智能表</option>
+    </select>
+  </div>
+  <div class="spacer"></div>
+  <span class="user" id="headerUser"></span>
+  <a href="/" target="_blank">📺 打开看板</a>
+  <a href="/index-flow.html" target="_blank">🔀 流向看板</a>
+  <a href="#" class="logout" id="btnLogout">退出登录</a>
+</header>
+
+<div class="wrap">
+  <div class="tabs">
+    <div class="tab active" data-tab="orders" data-permission="orders">📦 订单管理</div>
+    <div class="tab" data-tab="logistics" data-permission="logistics">🚚 物流监控</div>
+    <div class="tab" data-tab="news" data-permission="news">📢 新闻快讯</div>
+    <div class="tab" data-tab="accounts" data-admin="true">👥 账号管理</div>
+    <div class="tab" data-tab="settings" data-admin="true">📐 统计设置</div>
+    <div class="tab" data-tab="smartsheet" data-permission="smartsheet">🗄 智能表格管理</div>
+  </div>
+
+  <!-- ========== 订单 ========== -->
+  <div class="panel active" id="panel-orders">
+    <div class="summary" id="orderSummary"></div>
+    <div class="toolbar">
+      <h2>订单明细（改完自动保存）</h2>
+      <div class="filter"><label>国家</label>
+        <select id="filterCountry"><option value="">全部</option><option value="TH">泰国</option><option value="VN">越南</option></select></div>
+      <div class="filter"><label>品类</label>
+        <select id="filterCat"><option value="">全部</option><option value="FRESH">鲜果</option><option value="FROZEN">冻肉/冻果</option></select></div>
+      <button class="btn primary" onclick="openOrderModal()">+ 新增订单</button>
+    </div>
+    <table id="ordersTable">
+      <thead><tr><th>国家</th><th>品类</th><th>品牌/品种</th><th>订单数</th><th>箱量</th>
+        <th>已签收</th><th>已交付</th><th>在途</th><th>口岸</th><th>待发</th><th>完成率</th><th>操作</th></tr></thead>
+      <tbody></tbody>
+      <tfoot></tfoot>
+    </table>
+  </div>
+
+  <!-- ========== 物流 ========== -->
+  <div class="panel" id="panel-logistics">
+    <div class="toolbar"><h2>物流 KPI（改完自动保存）</h2></div>
+    <div class="lkpi-grid" id="lkpiGrid"></div>
+
+    <div class="toolbar" style="margin-top:20px"><h2>关口滞留预警</h2><button class="btn primary" onclick="openPortDelayModal()">+ 新增滞留记录</button></div>
+    <table id="portDelaysTable">
+      <thead><tr><th>柜号</th><th>路线/客户</th><th>品类</th><th>滞留天数</th><th>原因</th><th>操作</th></tr></thead>
+      <tbody></tbody>
+    </table>
+
+    <div class="toolbar" style="margin-top:24px"><h2>在途冷柜 · 温度监控</h2><button class="btn primary" onclick="openContainerModal()">+ 新增在途柜</button></div>
+    <table id="containersTable">
+      <thead><tr><th>柜号</th><th>品牌</th><th>设定℃</th><th>回风℃</th><th>偏差</th><th>当前位置</th><th>状态</th><th>备注</th><th>操作</th></tr></thead>
+      <tbody></tbody>
+    </table>
+  </div>
+
+  <!-- ========== 新闻 ========== -->
+  <div class="panel" id="panel-news">
+    <div class="toolbar"><h2>新闻快讯管理</h2>
+      <button class="btn primary" onclick="openNewsModal('TH')">+ 泰国</button>
+      <button class="btn primary" onclick="openNewsModal('VN')">+ 越南</button>
+    </div>
+    <div class="source-card">
+      <h3>自动新闻源配置</h3>
+      <div class="source-grid">
+        <div style="grid-column:1 / -1"><label><input id="metasoEnabled" type="checkbox" style="width:auto;margin-right:6px">启用秘塔付费搜索（受每日上限和冷却时间控制；上限为 0 时不扣费）</label></div>
+        <div><label>秘塔 MCP 地址</label><input id="metasoMcpUrl" placeholder="ModelScope MCP server URL"></div>
+        <div><label>秘塔 MCP Key</label><input id="metasoMcpApiKey" type="password" placeholder="留空则保留当前 Key"></div>
+        <div><label>秘塔直连 API 地址（可选）</label><input id="metasoApiUrl" placeholder="没有 MCP 时才使用"></div>
+        <div><label>秘塔直连 API Key（可选）</label><input id="metasoApiKey" type="password" placeholder="留空则保留当前 Key"></div>
+        <div><label>秘塔每日调用上限</label><input id="metasoDailyLimit" type="number" min="0" step="1" value="0"></div>
+        <div><label>秘塔冷却时间（分钟）</label><input id="metasoCooldownMinutes" type="number" min="0" step="1" value="60"></div>
+        <div style="grid-column:1 / -1"><label>搜索关键词（每行一个）</label><textarea id="newsKeywords" placeholder="榴莲进口&#10;东南亚 榴莲&#10;榴莲 通关 口岸&#10;榴莲 冷链 物流"></textarea></div>
+      </div>
+      <div class="source-meta">
+        <span id="newsSourceStatus">未加载</span>
+        <button class="btn sm" onclick="loadNewsSourceConfig()">读取配置</button>
+        <button class="btn primary sm" onclick="saveNewsSourceConfig()">保存配置</button>
+        <button class="btn sm" onclick="refreshAutoNews()">刷新自动新闻</button>
+      </div>
+      <div class="source-diagnostics" id="newsDiagnostics"></div>
+    </div>
+    <div class="news-grid">
+      <div class="news-col"><h3>🇹🇭 泰国 · 产业快讯</h3><div id="newsListTH"></div></div>
+      <div class="news-col"><h3>🇻🇳 越南 · 市场动向</h3><div id="newsListVN"></div></div>
+    </div>
+  </div>
+
+
+  <!-- ========== 账号管理 ========== -->
+  <div class="panel" id="panel-accounts">
+    <div class="toolbar"><h2>账号管理</h2><button class="btn primary" onclick="openAccountModal()">+ 新增账号</button></div>
+    <table id="accountsTable">
+      <thead><tr><th>用户名</th><th>显示名</th><th>角色</th><th>后台权限</th><th>首页显示</th><th>状态</th><th>创建时间</th><th>操作</th></tr></thead>
+      <tbody></tbody>
+    </table>
+  </div>
+
+  <!-- ========== 统计设置 ========== -->
+  <div class="panel" id="panel-settings">
+    <div class="toolbar"><h2>看板统计口径</h2></div>
+    <div class="source-card">
+      <h3>企微数据源 · 交付率计算</h3>
+      <div class="source-grid">
+        <div>
+          <label>交付率分子</label>
+          <select id="statsNumerator" class="form-input">
+            <option value="arrived">到岸柜数（到岸时间非空）</option>
+            <option value="signed">签收柜数（签收日期非空）</option>
+            <option value="shipped">发货柜数（发货日期非空）</option>
+            <option value="detailed">分柜登记柜数</option>
+          </select>
+        </div>
+        <div>
+          <label>交付率分母</label>
+          <select id="statsDenominator" class="form-input">
+            <option value="orderBoxes">订单总柜数（订单主表鲜果/冻果柜数）</option>
+            <option value="detailRows">分柜登记柜数（分柜明细记录数）</option>
+          </select>
+        </div>
+        <div>
+          <label>分柜明细去重方式</label>
+          <select id="statsDedup" class="form-input">
+            <option value="categoryContainer">按品类 + 柜号去重（推荐）</option>
+            <option value="record">按记录行统计（不去重）</option>
+          </select>
+        </div>
+        <div>
+          <label>0 柜数订单行</label>
+          <select id="statsHideZero" class="form-input">
+            <option value="true">隐藏</option>
+            <option value="false">显示</option>
+          </select>
+        </div>
+      </div>
+      <div class="hint">当前第一版只作用于“企微智能表”数据源。保存后首页下一次刷新会按新口径计算。</div>
+      <div class="source-meta">
+        <span id="statsConfigStatus">未加载</span>
+        <button class="btn sm" onclick="loadDashboardStatsConfig()">读取配置</button>
+        <button class="btn primary sm" onclick="saveDashboardStatsConfig()">保存配置</button>
+      </div>
+      <div class="source-diagnostics">代码口径位置：lib/wecom-aggregate.js；说明文档：docs/statistics-logic.md</div>
+    </div>
+    <div class="source-card">
+      <h3>柜量流向看板配置</h3>
+      <div class="source-grid">
+        <div><label>订单主表</label><select id="flowOrderSheet" onchange="renderFlowFieldSelectors()" class="form-input"></select></div>
+        <div><label>分柜明细表</label><select id="flowDetailSheet" onchange="renderFlowFieldSelectors()" class="form-input"></select></div>
+        <div><label>订单编号（订单主表）</label><select id="flow_orderNo" class="form-input"></select></div>
+        <div><label>鲜果柜数</label><select id="flow_freshBoxes" class="form-input"></select></div>
+        <div><label>冻果柜数</label><select id="flow_frozenBoxes" class="form-input"></select></div>
+        <div><label>订单编号（分柜明细）</label><select id="flow_detailOrderNo" class="form-input"></select></div>
+        <div><label>柜号</label><select id="flow_containerNo" class="form-input"></select></div>
+        <div><label>发货日期</label><select id="flow_shipDate" class="form-input"></select></div>
+        <div><label>到岸日期</label><select id="flow_arrivalDate" class="form-input"></select></div>
+        <div><label>国内发货时间</label><select id="flow_domesticShipDate" class="form-input"></select></div>
+        <div><label>签收日期</label><select id="flow_signedDate" class="form-input"></select></div>
+        <div><label>国家（可选）</label><select id="flow_country" class="form-input"></select></div>
+        <div><label>产品品类（可选）</label><select id="flow_category" class="form-input"></select></div>
+        <div><label>品牌（可选）</label><select id="flow_brand" class="form-input"></select></div>
+        <div><label>国外在途超时天数</label><input id="flowOverseasDays" type="number" min="0" step="1" value="7"></div>
+        <div><label>在岸待叫车超时天数</label><input id="flowOnShoreDays" type="number" min="0" step="1" value="2"></div>
+        <div><label>国内在途超时天数</label><input id="flowDomesticDays" type="number" min="0" step="1" value="2"></div>
+      </div>
+      <div class="hint">保存字段 ID，字段改名后仍按同一列统计；如果字段用途变化，请重新选择字段。</div>
+      <div class="source-meta">
+        <span id="flowConfigStatus">未加载</span>
+        <button class="btn sm" onclick="loadFlowDashboardConfig()">读取配置</button>
+        <button class="btn primary sm" onclick="saveFlowDashboardConfig()">保存配置</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ========== 智能表格管理（连接企业微信真实数据）========== -->
+  <div class="panel" id="panel-smartsheet">
+    <!-- 系统状态 -->
+    <div class="card">
+      <h2>📊 系统状态</h2>
+      <div class="status-grid">
+        <div class="status-item"><div class="label">服务状态</div><div class="value status-ok">运行中</div></div>
+        <div class="status-item"><div class="label">DOCID</div><div class="value" id="statusDocid">-</div></div>
+        <div class="status-item"><div class="label">API 连通</div><div class="value" id="statusApi">检查中...</div></div>
+        <div class="status-item"><div class="label">子表数量</div><div class="value" id="statusSheets">-</div></div>
+      </div>
+      <button class="btn" onclick="refreshStatus()" style="margin-top:12px">🔄 刷新状态</button>
+    </div>
+
+    <!-- 一键初始化 -->
+    <div class="card">
+      <h2>🛠 创建智能表格</h2>
+      <p style="font-size:0.85rem;color:var(--text-muted);margin-bottom:12px">
+        通过 API 创建属于此应用的新表格，自动生成「温度记录」子表和字段。
+      </p>
+      <div class="form-row">
+        <div class="form-group"><label>文档名称</label><input class="form-input" id="docName" value="榴莲温度监控数据" style="width:240px"></div>
+        <div class="form-group"><label>子表名称</label><input class="form-input" id="sheetTitle" value="温度记录" style="width:160px"></div>
+      </div>
+      <button class="btn btn-primary" id="btnSetup" onclick="runSetup()">🚀 一键创建</button>
+      <button class="btn btn-danger" id="btnStopSetup" onclick="stopSetup()" style="display:none">取消</button>
+      <div class="output" id="setupOutput" style="display:none"></div>
+    </div>
+
+    <!-- 快捷操作 -->
+    <div class="card">
+      <h2>🔧 快捷操作</h2>
+      <div style="display:flex;flex-wrap:wrap;gap:8px">
+        <button class="btn" onclick="doAction('schema/refresh', 'POST')">清除缓存</button>
+        <button class="btn" onclick="viewTableStructure()">查看表格结构</button>
+        <button class="btn" onclick="viewDashboardData()">查看看板数据</button>
+        <button class="btn" onclick="testCallback()">测试回调接口</button>
+      </div>
+      <div id="actionOutputWrap" style="display:none;margin-top:12px"></div>
+    </div>
+
+    <!-- AI 录入 -->
+    <div class="card">
+      <h2>🤖 智能解析录入</h2>
+      <p style="font-size:0.85rem;color:var(--text-muted);margin-bottom:12px">
+        粘贴自然语言温度信息，DeepSeek 会结合当前智能表结构判断目标子表和字段，确认后才写入智能表。
+      </p>
+      <div class="form-row">
+        <div class="form-group"><label>DeepSeek Base URL</label><input class="form-input" id="aiImportBaseUrl" value="https://api.deepseek.com" style="width:240px"></div>
+        <div class="form-group"><label>模型</label><input class="form-input" id="aiImportModel" value="deepseek-v4-flash" style="width:180px"></div>
+        <div class="form-group"><label>API Key</label><input class="form-input" id="aiImportApiKey" type="password" placeholder="留空则保留当前 Key" style="width:220px"></div>
+        <div class="form-group"><label>温度</label><input class="form-input" id="aiImportTemperature" type="number" min="0" max="2" step="0.1" value="0.1" style="width:90px"></div>
+      </div>
+      <div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:12px">
+        <button class="btn" onclick="loadAiImportConfig()">读取 DeepSeek 配置</button>
+        <button class="btn btn-primary" onclick="saveAiImportConfig()">保存 DeepSeek 配置</button>
+        <span style="font-size:0.8rem;color:var(--text-muted);align-self:center" id="aiImportConfigStatus">未加载</span>
+      </div>
+      <div class="form-row" style="align-items:stretch">
+        <div class="form-group" style="flex:1;min-width:320px">
+          <label>自然语言 / 截图文字</label>
+          <textarea class="form-input" id="aiImportText" placeholder="南部 第11柜&#10;品牌：烨荣&#10;柜号：LYGU0023499&#10;放柜时间：6/21 12.15&#10;设定温度：13.0°C&#10;送风温度：13.0°C&#10;回风温度：14.8°C&#10;风口设定：30%&#10;当前位置：泰国在途&#10;口岸：友谊关&#10;味道：无"></textarea>
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-group"><label>目标子表</label><select id="aiImportSheetId" class="form-input" style="width:240px" onchange="handleAiImportSheetChange()"></select></div>
+        <div class="form-group"><label>写入模式</label><select id="aiImportMode" class="form-input" style="width:120px" onchange="handleAiImportModeChange()"><option value="add">新增记录</option><option value="update">修改记录</option></select></div>
+        <div class="form-group"><label>修改记录</label><input class="form-input" id="aiImportRecordSearch" placeholder="搜索柜号/品牌/订单号" style="width:360px;margin-bottom:6px" oninput="handleAiImportRecordSearch()"><select class="form-input" id="aiImportRecordId" style="width:360px"><option value="">先选子表，再选择要修改的记录</option></select></div>
+      </div>
+      <div style="display:flex;flex-wrap:wrap;gap:8px">
+        <button class="btn btn-primary" onclick="parseAiImport()">智能解析</button>
+        <button class="btn" onclick="buildManualAiImportPreview()">手工录入</button>
+        <button class="btn" onclick="document.getElementById('aiImportImage').click()">上传截图</button>
+        <input id="aiImportImage" type="file" accept="image/*" style="display:none" onchange="handleAiImportImage(this)">
+        <button class="btn btn-danger" id="aiImportCommitBtn" onclick="commitAiImport()" disabled>确认写入智能表</button>
+      </div>
+      <div id="aiImportOutput" class="output" style="display:none"></div>
+      <div id="aiImportPreview"></div>
+    </div>
+
+    <!-- 记录管理 -->
+    <div class="card">
+      <h2>📋 记录管理</h2>
+      <p style="font-size:0.85rem;color:var(--text-muted);margin-bottom:12px">查看、添加、编辑或删除温度记录</p>
+      <div class="form-row">
+        <div class="form-group"><label>目标子表</label><select id="recSheetId" class="form-input" style="width:200px"></select></div>
+        <div class="form-group" style="align-self:flex-end"><label>&nbsp;</label><button class="btn btn-primary" onclick="openAddModal()">➕ 添加记录</button></div>
+      </div>
+      <div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:12px">
+        <button class="btn" onclick="loadRecords()">📥 加载记录</button>
+        <button class="btn btn-danger" onclick="deleteSelectedRecords()" id="btnDelRecords" disabled>🗑 删除选中</button>
+        <span style="font-size:0.8rem;color:var(--text-muted);margin-left:auto;align-self:center" id="recCount"></span>
+      </div>
+      <div id="recViewWrap" style="display:none"></div>
+    </div>
+
+    <!-- 字段管理 -->
+    <div class="card">
+      <h2>🏷 字段管理</h2>
+      <p style="font-size:0.85rem;color:var(--text-muted);margin-bottom:12px">查看字段信息、重命名字段标题</p>
+      <div class="form-row">
+        <div class="form-group"><label>目标子表</label><select id="fldSheetId" class="form-input" style="width:200px" onchange="loadFields()"></select></div>
+      </div>
+      <button class="btn" onclick="loadFields()">🔄 加载字段列表</button>
+      <div class="output" id="fieldOutput" style="display:none"></div>
+      <div id="fieldList" style="margin-top:8px"></div>
+    </div>
+
+    <!-- 视图管理 -->
+    <div class="card">
+      <h2>👁 视图管理</h2>
+      <p style="font-size:0.85rem;color:var(--text-muted);margin-bottom:12px">查看、添加和删除表格视图</p>
+      <div class="form-row">
+        <div class="form-group"><label>目标子表</label><select id="viewSheetId" class="form-input" style="width:200px" onchange="loadViews()"></select></div>
+        <div class="form-group"><label>新视图标题</label><input class="form-input" id="viewTitle" placeholder="如：表格视图" style="width:160px"></div>
+        <div class="form-group"><label>视图类型</label>
+          <select id="viewType" class="form-input">
+            <option value="VIEW_TYPE_GRID">表格视图</option>
+            <option value="VIEW_TYPE_KANBAN">看板视图</option>
+            <option value="VIEW_TYPE_GALLERY">画册视图</option>
+            <option value="VIEW_TYPE_GANTT">甘特视图</option>
+            <option value="VIEW_TYPE_CALENDAR">日历视图</option>
+          </select>
+        </div>
+      </div>
+      <div style="display:flex;flex-wrap:wrap;gap:8px">
+        <button class="btn btn-primary" onclick="addView()">➕ 添加视图</button>
+        <button class="btn" onclick="loadViews()">🔄 加载视图列表</button>
+      </div>
+      <div class="output" id="viewOutput" style="display:none"></div>
+      <div id="viewList" style="margin-top:8px"></div>
+    </div>
+
+    <!-- 编组管理 -->
+    <div class="card">
+      <h2>📁 字段编组</h2>
+      <p style="font-size:0.85rem;color:var(--text-muted);margin-bottom:12px">管理字段编组（折叠分组）</p>
+      <div class="form-row">
+        <div class="form-group"><label>目标子表</label><select id="grpSheetId" class="form-input" style="width:200px" onchange="loadGroups()"></select></div>
+        <div class="form-group"><label>编组名称</label><input class="form-input" id="grpName" placeholder="如：温度信息" style="width:160px"></div>
+      </div>
+      <div style="display:flex;flex-wrap:wrap;gap:8px">
+        <button class="btn btn-primary" onclick="addGroup()">➕ 添加编组</button>
+        <button class="btn" onclick="loadGroups()">🔄 加载编组列表</button>
+      </div>
+      <div class="output" id="groupOutput" style="display:none"></div>
+      <div id="groupList" style="margin-top:8px"></div>
+    </div>
+
+    <!-- 文档操作 -->
+    <div class="card">
+      <h2>📄 文档操作</h2>
+      <p style="font-size:0.85rem;color:var(--text-muted);margin-bottom:12px">当前文档管理操作</p>
+      <div class="form-row">
+        <div class="form-group"><label>新文档名称</label><input class="form-input" id="newDocName" placeholder="重命名文档" style="width:240px"></div>
+      </div>
+      <div style="display:flex;flex-wrap:wrap;gap:8px">
+        <button class="btn btn-primary" onclick="renameDocument()">✏ 重命名文档</button>
+        <button class="btn" onclick="getDocumentInfo()">ℹ 查看文档信息</button>
+        <button class="btn btn-danger" onclick="deleteDocument()">⚠ 删除当前文档</button>
+      </div>
+      <div class="output" id="docOutput" style="display:none"></div>
+    </div>
+
+    <!-- 模态框容器（记录添加/编辑） -->
+    <div id="modalContainer"></div>
+  </div>
+</div>
+
+<!-- 新增订单模态框 -->
+<div class="modal" id="orderModal">
+  <div class="modal-box">
+    <h3>新增订单</h3>
+    <div class="form-grid2">
+      <div class="form-row2"><label>国家</label><select id="o_country"><option value="TH">泰国</option><option value="VN">越南</option></select></div>
+      <div class="form-row2"><label>品类</label><select id="o_category"><option value="FRESH">鲜果</option><option value="FROZEN">冻肉/冻果</option></select></div>
+    </div>
+    <div class="form-row2"><label>品牌/品种</label><input id="o_brand" placeholder="如 KK 鲜果"></div>
+    <div class="form-grid2">
+      <div class="form-row2"><label>订单数</label><input id="o_orders" type="number" value="1"></div>
+      <div class="form-row2"><label>箱量(柜)</label><input id="o_boxes" type="number" value="0"></div>
+      <div class="form-row2"><label>已签收</label><input id="o_signed" type="number" value="0"></div>
+      <div class="form-row2"><label>已交付</label><input id="o_delivered" type="number" value="0"></div>
+      <div class="form-row2"><label>在途</label><input id="o_transit" type="number" value="0"></div>
+      <div class="form-row2"><label>口岸</label><input id="o_port" type="number" value="0"></div>
+    </div>
+    <div class="form-row2"><label>待发</label><input id="o_pending" type="number" value="0"></div>
+    <div class="modal-actions"><button class="btn danger" onclick="closeModalById('orderModal')">取消</button><button class="btn primary" onclick="submitOrder()">保存</button></div>
+  </div>
+</div>
+
+<!-- 新增滞留模态框 -->
+<div class="modal" id="portDelayModal">
+  <div class="modal-box">
+    <h3>新增滞留预警</h3>
+    <div class="form-row2"><label>柜号</label><input id="pd_container" placeholder="如 TSTU8536507"></div>
+    <div class="form-grid2">
+      <div class="form-row2"><label>路线/客户</label><input id="pd_route" placeholder="如 南沙"></div>
+      <div class="form-row2"><label>品类</label><select id="pd_category"><option value="FRESH">鲜果</option><option value="FROZEN">冻果</option></select></div>
+      <div class="form-row2"><label>滞留天数</label><input id="pd_delay" type="number" step="0.1" value="1.0"></div>
+    </div>
+    <div class="form-row2"><label>原因</label><input id="pd_reason" placeholder="如 查验 / 虫检"></div>
+    <div class="modal-actions"><button class="btn danger" onclick="closeModalById('portDelayModal')">取消</button><button class="btn primary" onclick="submitPortDelay()">保存</button></div>
+  </div>
+</div>
+
+<!-- 新增在途柜模态框 -->
+<div class="modal" id="containerModal">
+  <div class="modal-box">
+    <h3>新增在途冷柜</h3>
+    <div class="form-row2"><label>柜号</label><input id="tc_container" placeholder="如 TEMU8123456"></div>
+    <div class="form-grid2">
+      <div class="form-row2"><label>品牌</label><input id="tc_brand" placeholder="如 汇食"></div>
+      <div class="form-row2"><label>设定温度℃</label><input id="tc_set" type="number" step="0.1" value="13"></div>
+      <div class="form-row2"><label>回风温度℃</label><input id="tc_ret" type="number" step="0.1" value="14"></div>
+      <div class="form-row2"><label>状态</label><select id="tc_status"><option value="OK">正常</option><option value="WARN">注意</option><option value="ALARM">异常</option></select></div>
+    </div>
+    <div class="form-row2"><label>当前位置</label><input id="tc_location" placeholder="如 广西·凭祥"></div>
+    <div class="form-row2"><label>备注</label><input id="tc_note" placeholder="如 友谊关滞留"></div>
+    <div class="modal-actions"><button class="btn danger" onclick="closeModalById('containerModal')">取消</button><button class="btn primary" onclick="submitContainer()">保存</button></div>
+  </div>
+</div>
+
+<!-- 新增新闻模态框 -->
+<div class="modal" id="newsModal">
+  <div class="modal-box">
+    <h3>新增新闻</h3>
+    <div class="form-grid2">
+      <div class="form-row2"><label>国家</label><select id="n_country"><option value="TH">泰国</option><option value="VN">越南</option></select></div>
+      <div class="form-row2"><label>图标(emoji)</label><input id="n_icon" value="📌"></div>
+    </div>
+    <div class="form-row2"><label>标题</label><input id="n_title" placeholder="如 价格持续走低"></div>
+    <div class="form-row2"><label>详情（**文字** 会高亮成金色）</label><textarea id="n_detail" placeholder="如 金枕 **19元/斤** 同比跌超40%"></textarea></div>
+    <div class="modal-actions"><button class="btn danger" onclick="closeModalById('newsModal')">取消</button><button class="btn primary" onclick="submitNews()">保存</button></div>
+  </div>
+</div>
+
+
+<!-- 账号模态框 -->
+<div class="modal" id="accountModal">
+  <div class="modal-box">
+    <h3 id="accountModalTitle">新增账号</h3>
+    <input id="a_id" type="hidden">
+    <div class="form-grid2">
+      <div class="form-row2"><label>用户名</label><input id="a_username" placeholder="登录用户名"></div>
+      <div class="form-row2"><label>显示名</label><input id="a_display" placeholder="看板显示名称"></div>
+      <div class="form-row2"><label>初始密码</label><input id="a_password" type="password" placeholder="新增时必填，编辑时留空"></div>
+      <div class="form-row2"><label>角色</label><select id="a_role" onchange="syncAccountRole()"><option value="viewer">普通账号</option><option value="admin">管理员</option></select></div>
+    </div>
+    <div class="form-row2"><label>后台模块权限</label><div class="perm-checks" id="a_permissions"></div><div class="hint">管理员默认拥有全部后台权限；普通账号按勾选模块进入后台。</div></div>
+    <div class="form-row2"><label>首页显示权限</label><div class="perm-checks" id="a_dashboard_permissions"></div><div class="hint">控制首页能看到哪些板块；管理员也按这里的勾选显示。</div></div>
+    <div class="form-row2"><label><input id="a_active" type="checkbox" checked style="width:auto;margin-right:6px">账号启用</label></div>
+    <div class="modal-actions"><button class="btn danger" onclick="closeModalById('accountModal')">取消</button><button class="btn primary" onclick="submitAccount()">保存</button></div>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<script>
+// ===== 订单 / 物流 / 新闻 管理（占位内容，写后端 JSON）=====
+const API = '';
+const $ = (s) => document.querySelector(s);
+const $$ = (s) => document.querySelectorAll(s);
+let orders = [], logistics = {}, news = [], accounts = [], currentUser = null, autoNewsInfo = null, flowSchema = null, flowConfig = null;
+
+// ===== API（带登录认证）=====
+async function api(path, method='GET', body){
+  const opt = { method, headers:{'Content-Type':'application/json'} };
+  if(body) opt.body = JSON.stringify(body);
+  const r = await fetch(API+path, opt);
+  if(r.status===401){ window.location.href='/login?redirect=/admin'; throw new Error('Unauthorized'); }
+  let data = null;
+  try{ data = await r.json(); }catch(_){ data = null; }
+  if(r.status===403){ toast((data && data.error) || '权限不足', true); throw new Error('Forbidden'); }
+  if(!r.ok) throw new Error((data && data.error) || ('API '+r.status));
+  return data;
+}
+
+// ===== Toast =====
+function toast(msg, isErr){
+  const t = $('#toast'); t.textContent = msg; t.className = 'show'+(isErr?' err':'');
+  clearTimeout(t._t); t._t = setTimeout(()=>t.className=isErr?'err':'', 1800);
+}
+function setConn(ok){ $('#connStatus').textContent = ok?'● 已连接':'● 未连接'; $('#connStatus').className = ok?'ok':'err'; }
+
+// ===== Tab =====
+function openTab(t){
+  if(!t || t.hidden) return;
+  $$('.tab').forEach(x=>x.classList.remove('active'));
+  $$('.panel').forEach(x=>x.classList.remove('active'));
+  t.classList.add('active');
+  $('#panel-'+t.dataset.tab).classList.add('active');
+  if(t.dataset.tab==='smartsheet' && typeof initSmartsheet==='function') initSmartsheet();
+  if(t.dataset.tab==='accounts') loadUsers();
+}
+$$('.tab').forEach(t => t.onclick = () => openTab(t));
+
+// ===== 认证 =====
+async function checkAuth(){
+  try{
+    const r = await fetch('/api/auth/me',{cache:'no-store'});
+    if(r.status===401){ window.location.href='/login?redirect=/admin'; return false; }
+    const j = await r.json();
+    if(!j.success || !j.data){ window.location.href='/login?redirect=/admin'; return false; }
+    currentUser = j.data;
+    $('#headerUser').innerHTML = '👤 <b>'+esc(j.data.displayName||j.data.username)+'</b>';
+    applyPermissions(j.data);
+    if(j.data.role!=='admin' && !(j.data.permissions||[]).length){ alert('您没有后台权限，即将返回看板'); window.location.href='/'; return false; }
+    return true;
+  }catch(e){ setConn(false); return false; }
+}
+
+function applyPermissions(user){
+  const isAdmin = user.role === 'admin';
+  const perms = new Set(user.permissions || []);
+  $$('.tab').forEach(t => {
+    const needAdmin = t.dataset.admin === 'true';
+    const needPerm = t.dataset.permission;
+    const ok = (needAdmin && isAdmin) || (!needAdmin && (!needPerm || isAdmin || perms.has(needPerm)));
+    t.hidden = !ok;
+    t.style.display = ok ? '' : 'none';
+    const panel = $('#panel-'+t.dataset.tab);
+    if(panel) {
+      panel.hidden = !ok;
+      panel.style.display = ok ? '' : 'none';
+    }
+  });
+  $('#dsSwitch').style.display = isAdmin ? '' : 'none';
+  const active = $('.tab.active');
+  if(!active || active.hidden) openTab(Array.from($$('.tab')).find(t=>!t.hidden));
+}
+
+
+function canUse(permission){
+  return currentUser && (currentUser.role==='admin' || (currentUser.permissions||[]).includes(permission));
+}
+
+// ===== 加载 =====
+async function loadAll(){
+  try{
+    const tasks = [];
+    if(canUse('orders')) tasks.push(api('/api/orders').then(r=>{ orders = r; renderOrders(); }));
+    if(canUse('logistics')) tasks.push(api('/api/logistics').then(r=>{ logistics = r; renderLogistics(); }));
+    if(canUse('news')) {
+      tasks.push(api('/api/news').then(r=>{ news = r; renderNews(); }));
+      tasks.push(loadNewsSourceConfig(false));
+      tasks.push(loadAutoNewsInfo(false));
+    }
+    if(currentUser && currentUser.role==='admin') {
+      tasks.push(loadDashboardStatsConfig(false));
+      tasks.push(loadFlowDashboardConfig(false).catch(e=>{ const el=$('#flowConfigStatus'); if(el) el.textContent='配置未加载：'+e.message; }));
+    }
+    await Promise.all(tasks);
+    setConn(true);
+  }catch(e){
+    setConn(false);
+    if(e.message!=='Unauthorized') toast('无法连接后端，请确认服务已启动', true);
+    console.error(e);
+  }
+}
+
+// ===== 看板统计设置 =====
+function renderStatsConfigStatus(c){
+  const el = $('#statsConfigStatus');
+  if(!el) return;
+  const numerator = {arrived:'到岸柜数',signed:'签收柜数',shipped:'发货柜数',detailed:'分柜登记柜数'}[c.deliveryNumerator] || c.deliveryNumerator;
+  const denominator = c.deliveryDenominator === 'detailRows' ? '分柜登记柜数' : '订单总柜数';
+  const dedup = c.detailDedup === 'record' ? '按记录行统计' : '按品类+柜号去重';
+  el.textContent = `交付率 = ${numerator} / ${denominator} · ${dedup}`;
+}
+async function loadDashboardStatsConfig(showToast=true){
+  try{
+    const r = await api('/api/dashboard/stats-config');
+    const c = r.data || {};
+    $('#statsNumerator').value = c.deliveryNumerator || 'arrived';
+    $('#statsDenominator').value = c.deliveryDenominator || 'orderBoxes';
+    $('#statsDedup').value = c.detailDedup || 'categoryContainer';
+    $('#statsHideZero').value = String(c.hideZeroBoxRows !== false);
+    renderStatsConfigStatus(c);
+    if(showToast) toast('统计设置已读取');
+  }catch(e){ if(showToast) toast('统计设置读取失败：'+e.message, true); }
+}
+async function saveDashboardStatsConfig(){
+  const body = {
+    deliveryNumerator: $('#statsNumerator').value,
+    deliveryDenominator: $('#statsDenominator').value,
+    detailDedup: $('#statsDedup').value,
+    hideZeroBoxRows: $('#statsHideZero').value === 'true',
+  };
+  try{
+    const r = await api('/api/dashboard/stats-config','PUT',body);
+    renderStatsConfigStatus(r.data || body);
+    toast('统计设置已保存');
+  }catch(e){ toast('保存统计设置失败：'+e.message, true); }
+}
+
+// ===== 柜量流向看板配置 =====
+const FLOW_FIELD_KEYS = ['orderNo','freshBoxes','frozenBoxes','detailOrderNo','containerNo','shipDate','arrivalDate','domesticShipDate','signedDate','country','category','brand'];
+const FLOW_ORDER_KEYS = ['orderNo','freshBoxes','frozenBoxes'];
+const FLOW_DETAIL_KEYS = FLOW_FIELD_KEYS.filter(k=>!FLOW_ORDER_KEYS.includes(k));
+const FLOW_HINTS = {
+  orderNo:['订单编号','订单号'], freshBoxes:['鲜果(柜数)','鲜果'], frozenBoxes:['冻果(柜数)','冻果','冻肉'],
+  detailOrderNo:['订单编号','订单号'], containerNo:['柜号','箱号'], shipDate:['发货日期','发货时间'],
+  arrivalDate:['到岸时间','到岸日期','到港时间'], domesticShipDate:['国内发货时间'],
+  signedDate:['签收日期','签收时间'], country:['国家'], category:['产品品类','品类'], brand:['品牌']
+};
+async function ensureFlowSchema(){
+  if(flowSchema) return flowSchema;
+  const r = await api('/api/config/info');
+  flowSchema = r.data;
+  return flowSchema;
+}
+function flowSheetById(id){ return (flowSchema && flowSchema.sheets || []).find(s=>s.sheet_id===id); }
+function flowFindField(sheet, key, current){
+  const fields = sheet && sheet.fields ? sheet.fields : [];
+  if(current && current.fieldId){
+    const hit = fields.find(f=>f.field_id===current.fieldId);
+    if(hit) return hit.field_id;
+  }
+  const hints = FLOW_HINTS[key] || [];
+  const hit = fields.find(f=>hints.some(h=>String(f.field_title||'').includes(h)));
+  return hit ? hit.field_id : '';
+}
+function flowFieldOptions(sheet, selected, optional=false){
+  const base = optional ? '<option value="">不使用</option>' : '<option value="">请选择字段</option>';
+  const opts = (sheet && sheet.fields || []).map(f=>`<option value="${esc(f.field_id)}" ${selected===f.field_id?'selected':''}>${esc(f.field_title)} · ${fieldTypeShort(f.field_type)}</option>`).join('');
+  return base + opts;
+}
+function fieldTypeShort(t){
+  const s = String(t||'').replace('FIELD_TYPE_','');
+  if(s.includes('DATE')) return '日期';
+  if(s.includes('NUMBER')) return '数字';
+  if(s.includes('TEXT')) return '文本';
+  if(s.includes('SELECT')) return '选项';
+  return s || '-';
+}
+function renderFlowSheetSelectors(){
+  const sheets = flowSchema && flowSchema.sheets || [];
+  const opts = sheets.map(s=>`<option value="${esc(s.sheet_id)}">${esc(s.title)}</option>`).join('');
+  $('#flowOrderSheet').innerHTML = opts;
+  $('#flowDetailSheet').innerHTML = opts;
+  const orderId = flowConfig?.orderSheetId || (sheets.find(s=>s.title==='订单主表')||{}).sheet_id || '';
+  const detailId = flowConfig?.detailSheetId || (sheets.find(s=>s.title==='分柜明细表')||{}).sheet_id || '';
+  $('#flowOrderSheet').value = orderId;
+  $('#flowDetailSheet').value = detailId;
+}
+function renderFlowFieldSelectors(){
+  if(!flowSchema) return;
+  const orderSheet = flowSheetById($('#flowOrderSheet').value);
+  const detailSheet = flowSheetById($('#flowDetailSheet').value);
+  FLOW_FIELD_KEYS.forEach(key=>{
+    const sheet = FLOW_ORDER_KEYS.includes(key) ? orderSheet : detailSheet;
+    const selected = flowFindField(sheet, key, flowConfig && flowConfig.fields && flowConfig.fields[key]);
+    const optional = ['country','category','brand'].includes(key);
+    $('#flow_'+key).innerHTML = flowFieldOptions(sheet, selected, optional);
+  });
+}
+function selectedFlowField(key){
+  const id = $('#flow_'+key).value;
+  const sheet = FLOW_ORDER_KEYS.includes(key) ? flowSheetById($('#flowOrderSheet').value) : flowSheetById($('#flowDetailSheet').value);
+  const field = (sheet && sheet.fields || []).find(f=>f.field_id===id);
+  return { fieldId:id, title: field ? field.field_title : '' };
+}
+function renderFlowConfigStatus(c){
+  const el = $('#flowConfigStatus');
+  if(!el) return;
+  el.textContent = `${c.orderSheetTitle || '订单主表'} + ${c.detailSheetTitle || '分柜明细表'} · 按订单/柜号/发货日期去重`;
+}
+async function loadFlowDashboardConfig(showToast=true){
+  try{
+    await ensureFlowSchema();
+    const r = await api('/api/flow-dashboard/config');
+    flowConfig = r.data || {};
+    renderFlowSheetSelectors();
+    renderFlowFieldSelectors();
+    $('#flowOverseasDays').value = flowConfig.thresholds?.overseasTransitDays ?? 7;
+    $('#flowOnShoreDays').value = flowConfig.thresholds?.onShoreDays ?? 2;
+    $('#flowDomesticDays').value = flowConfig.thresholds?.domesticTransitDays ?? 2;
+    renderFlowConfigStatus(flowConfig);
+    if(showToast) toast('流向看板配置已读取');
+  }catch(e){
+    const el = $('#flowConfigStatus');
+    if(el) el.textContent = '配置未加载：' + e.message;
+    if(showToast) toast('流向看板配置读取失败：'+e.message, true);
+  }
+}
+async function saveFlowDashboardConfig(){
+  try{
+    await ensureFlowSchema();
+    const orderSheet = flowSheetById($('#flowOrderSheet').value);
+    const detailSheet = flowSheetById($('#flowDetailSheet').value);
+    const body = {
+      orderSheetId: orderSheet?.sheet_id || '',
+      orderSheetTitle: orderSheet?.title || '',
+      detailSheetId: detailSheet?.sheet_id || '',
+      detailSheetTitle: detailSheet?.title || '',
+      fields: Object.fromEntries(FLOW_FIELD_KEYS.map(k=>[k, selectedFlowField(k)])),
+      thresholds: {
+        overseasTransitDays:+$('#flowOverseasDays').value || 0,
+        onShoreDays:+$('#flowOnShoreDays').value || 0,
+        domesticTransitDays:+$('#flowDomesticDays').value || 0,
+      },
+    };
+    const r = await api('/api/flow-dashboard/config','PUT',body);
+    flowConfig = r.data || body;
+    renderFlowConfigStatus(flowConfig);
+    toast('流向看板配置已保存');
+  }catch(e){ toast('保存流向看板配置失败：'+e.message, true); }
+}
+
+// ===== 订单渲染（拖拽排序 + 悬停箭头 + tfoot 合计行）=====
+const ORDER_NUM_COLS = ['orders','boxes','signed','delivered','transit','port','pending'];
+const ORDER_AGG_KEY = 'admin.ordersAgg.v1';
+const ORDER_AGG_DEFAULT = {
+  country:'distinct', category:'distinct', brand:'count',
+  orders:'sum', boxes:'sum', signed:'sum', delivered:'sum', transit:'sum', port:'sum', pending:'sum',
+  rate:'avg'
+};
+const ORDER_AGG_LABEL = {sum:'求和',avg:'平均',count:'计数',distinct:'去重',none:'—'};
+function loadOrderAgg(){
+  try{ return Object.assign({}, ORDER_AGG_DEFAULT, JSON.parse(localStorage.getItem(ORDER_AGG_KEY)||'{}')); }
+  catch(_){ return {...ORDER_AGG_DEFAULT}; }
+}
+function saveOrderAgg(a){ localStorage.setItem(ORDER_AGG_KEY, JSON.stringify(a)); }
+let orderAgg = loadOrderAgg();
+
+function renderOrders(){
+  const fc = $('#filterCountry').value, fcat = $('#filterCat').value;
+  let rows = orders.filter(o => (!fc||o.country===fc) && (!fcat||o.category===fcat));
+  const sum = {orders:0,boxes:0,done:0};
+  orders.forEach(o=>{ sum.orders+=+o.orders||0; sum.boxes+=+o.boxes||0; sum.done+= +o.delivered||0; });
+  $('#orderSummary').innerHTML = `
+    <div class="item"><div class="v num">${orders.length}</div><div class="l">订单品种数</div></div>
+    <div class="item"><div class="v num">${sum.orders}</div><div class="l">合计订单/单</div></div>
+    <div class="item"><div class="v num">${sum.boxes}</div><div class="l">合计箱量/柜</div></div>
+    <div class="item"><div class="v num">${sum.done}</div><div class="l">累计完成/柜</div></div>`;
+
+  const tb = $('#ordersTable tbody');
+  const tf = $('#ordersTable tfoot');
+  if(!rows.length){ tb.innerHTML = '<tr><td colspan="12" class="empty">暂无数据</td></tr>'; tf.innerHTML=''; return; }
+  tb.innerHTML = rows.map((o,i) => {
+    const done = +o.delivered||0;
+    const rate = (+o.boxes||0) ? (done/+o.boxes*100).toFixed(1)+'%' : '0%';
+    const rateCls = done>0 ? 'good' : 'low';
+    const isFirst = i===0, isLast = i===rows.length-1;
+    return `<tr draggable="true" data-id="${o.id}">
+      <td><span class="pill ${o.country.toLowerCase()}">${o.country==='TH'?'泰国':'越南'}</span></td>
+      <td><span class="pill ${o.category.toLowerCase()}">${o.category==='FRESH'?'鲜果':'冻肉'}</span></td>
+      <td>${esc(o.brand)}</td>
+      ${ORDER_NUM_COLS.map(k =>
+        `<td><input type="number" data-field="${k}" value="${o[k]||0}" onchange="editOrder('${o.id}','${k}',this.value)"></td>`).join('')}
+      <td><span class="rate ${rateCls} num">${rate}</span></td>
+      <td><div class="row-actions">
+        <span class="ord-arrows">
+          <button title="上移" onclick="moveOrder('${o.id}',-1)" ${isFirst?'disabled':''}>▲</button>
+          <button title="下移" onclick="moveOrder('${o.id}',1)" ${isLast?'disabled':''}>▼</button>
+        </span>
+        <button class="btn danger" onclick="delOrder('${o.id}')">删除</button>
+      </div></td>
+    </tr>`;
+  }).join('');
+  bindOrderDnD();
+  renderOrderAggRow(rows);
+}
+
+async function editOrder(id, field, val){
+  const o = orders.find(x=>x.id===id); if(!o) return;
+  o[field] = +val || 0;
+  try{ await api('/api/orders/'+id, 'PUT', o); renderOrders(); toast('已保存'); }
+  catch(e){ toast('保存失败', true); }
+}
+async function delOrder(id){
+  if(!confirm('确定删除该订单？')) return;
+  try{ await api('/api/orders/'+id,'DELETE'); orders = orders.filter(o=>o.id!==id); renderOrders(); toast('已删除'); }
+  catch(e){ toast('删除失败', true); }
+}
+
+// ===== 订单排序：拖拽 + 上下箭头 =====
+async function persistOrder(idsInView){
+  // idsInView 是当前视图过滤后的顺序；合并到全量 orders 的全局顺序里再持久化
+  const filteredSet = new Set(idsInView);
+  const merged = [];
+  let p = 0;
+  orders.forEach(o => {
+    if(filteredSet.has(o.id)) merged.push(idsInView[p++]);
+    else merged.push(o.id);
+  });
+  // 同步本地 orders 顺序，便于立即重渲染
+  const byId = new Map(orders.map(o=>[o.id,o]));
+  orders = merged.map(id=>byId.get(id));
+  try{
+    await api('/api/orders/reorder','PUT',{ids:merged});
+    renderOrders(); toast('排序已保存');
+  }catch(e){ toast('排序保存失败', true); }
+}
+function moveOrder(id, dir){
+  const fc = $('#filterCountry').value, fcat = $('#filterCat').value;
+  const view = orders.filter(o => (!fc||o.country===fc) && (!fcat||o.category===fcat));
+  const i = view.findIndex(o=>o.id===id);
+  const j = i + dir;
+  if(i<0 || j<0 || j>=view.length) return;
+  [view[i], view[j]] = [view[j], view[i]];
+  persistOrder(view.map(o=>o.id));
+}
+function bindOrderDnD(){
+  const tb = $('#ordersTable tbody');
+  let dragId = null;
+  tb.querySelectorAll('tr[draggable]').forEach(tr=>{
+    tr.ondragstart = (e)=>{
+      // 拖拽时不触发 input change
+      if(e.target.tagName==='INPUT'){ e.preventDefault(); return; }
+      dragId = tr.dataset.id; tr.classList.add('dragging');
+      e.dataTransfer.effectAllowed='move';
+    };
+    tr.ondragend = ()=>{ tr.classList.remove('dragging'); tb.querySelectorAll('tr').forEach(r=>r.classList.remove('drop-above','drop-below')); };
+    tr.ondragover = (e)=>{
+      if(!dragId || tr.dataset.id===dragId) return;
+      e.preventDefault();
+      const rect = tr.getBoundingClientRect();
+      const above = e.clientY < rect.top + rect.height/2;
+      tr.classList.toggle('drop-above', above);
+      tr.classList.toggle('drop-below', !above);
+    };
+    tr.ondragleave = ()=>{ tr.classList.remove('drop-above','drop-below'); };
+    tr.ondrop = (e)=>{
+      e.preventDefault();
+      if(!dragId || tr.dataset.id===dragId) return;
+      const above = tr.classList.contains('drop-above');
+      const ids = Array.from(tb.querySelectorAll('tr')).map(r=>r.dataset.id).filter(Boolean);
+      const from = ids.indexOf(dragId);
+      ids.splice(from,1);
+      let to = ids.indexOf(tr.dataset.id);
+      if(!above) to += 1;
+      ids.splice(to, 0, dragId);
+      tr.classList.remove('drop-above','drop-below');
+      persistOrder(ids);
+    };
+  });
+}
+
+// ===== 合计行（Excel/飞书风格：每列下拉选聚合方式）=====
+function aggValue(rows, field, type){
+  if(type==='none') return '';
+  const vals = rows.map(r=>r[field]);
+  if(type==='count') return vals.filter(v=>v!=null && v!=='').length;
+  if(type==='distinct') return new Set(vals.filter(v=>v!=null && v!=='')).size;
+  const nums = vals.map(v=>{
+    if(typeof v==='string' && v.endsWith('%')) return parseFloat(v);
+    const n = +v; return isNaN(n) ? null : n;
+  }).filter(v=>v!==null);
+  if(!nums.length) return 0;
+  if(type==='sum')  return nums.reduce((a,b)=>a+b,0).toFixed(2).replace(/\.?0+$/,'');
+  if(type==='avg')  return (nums.reduce((a,b)=>a+b,0)/nums.length).toFixed(2);
+  return '';
+}
+function renderOrderAggRow(rows){
+  const tf = $('#ordersTable tfoot');
+  // 给 rows 加上一个派生 rate 列方便聚合
+  const enriched = rows.map(o=>{
+    const done = +o.delivered||0;
+    const rate = (+o.boxes||0) ? +(done/+o.boxes*100).toFixed(1) : 0;
+    return {...o, rate};
+  });
+  const cell = (field, allowed) => {
+    const cur = orderAgg[field] || 'none';
+    const opts = allowed.map(t=>`<option value="${t}" ${cur===t?'selected':''}>${ORDER_AGG_LABEL[t]}</option>`).join('');
+    const v = aggValue(enriched, field, cur);
+    const cls = cur==='none' ? 'agg-val muted' : 'agg-val';
+    return `<td>
+      <select onchange="changeOrderAgg('${field}',this.value)">${opts}</select>
+      <div class="${cls}">${cur==='none'?'—':esc(String(v))}</div>
+    </td>`;
+  };
+  const TEXT = ['count','distinct','none'];
+  const NUM = ['sum','avg','count','distinct','none'];
+  tf.innerHTML = '<tr>'
+    + cell('country', TEXT)
+    + cell('category', TEXT)
+    + cell('brand', TEXT)
+    + ORDER_NUM_COLS.map(k=>cell(k, NUM)).join('')
+    + cell('rate', NUM)
+    + '<td><span style="color:var(--txt3);font-size:11px">合计</span></td>'
+    + '</tr>';
+}
+function changeOrderAgg(field, type){
+  orderAgg[field] = type;
+  saveOrderAgg(orderAgg);
+  renderOrders();
+}
+function openOrderModal(){ $('#orderModal').classList.add('show'); }
+async function submitOrder(){
+  const o = {
+    country: $('#o_country').value, category: $('#o_category').value, brand: $('#o_brand').value.trim(),
+    orders:+$('#o_orders').value||0, boxes:+$('#o_boxes').value||0, signed:+$('#o_signed').value||0,
+    delivered:+$('#o_delivered').value||0, transit:+$('#o_transit').value||0, port:+$('#o_port').value||0,
+    pending:+$('#o_pending').value||0
+  };
+  if(!o.brand){ toast('请填写品牌', true); return; }
+  try{ const created = await api('/api/orders','POST',o); orders.push(created); closeModalById('orderModal'); renderOrders(); toast('已新增'); $('#o_brand').value=''; }
+  catch(e){ toast('新增失败', true); }
+}
+
+// ===== 物流渲染 =====
+const LKPI_FIELDS = [
+  ['inTransit','在途批次(柜)'],['tempRecords','温度记录(条)'],['avgReturnTemp','平均回风温度℃'],
+  ['tempAlarms','温度异常(条)'],['portDelayed','关口滞留(柜)']
+];
+function renderLogistics(){
+  const k = logistics.kpis||{};
+  $('#lkpiGrid').innerHTML = LKPI_FIELDS.map(([f,label]) =>
+    `<div class="lkpi"><label>${label}</label><input type="number" step="0.1" value="${k[f]||0}" onchange="editKpi('${f}',this.value)"></div>`).join('');
+
+  const pd = logistics.portDelays||[];
+  $('#portDelaysTable tbody').innerHTML = pd.length ? pd.map(r=>`<tr data-id="${r.id}">
+    <td>${esc(r.container)}</td><td>${esc(r.route)}</td>
+    <td><span class="pill ${r.category==='FROZEN'?'frozen':'fresh'}">${r.category==='FROZEN'?'冻果':'鲜果'}</span></td>
+    <td><input type="number" step="0.1" value="${r.delayDays||0}" onchange="editPd('${r.id}','delayDays',this.value)"></td>
+    <td><input type="text" value="${esc(r.reason)}" onchange="editPd('${r.id}','reason',this.value)" style="max-width:140px"></td>
+    <td><div class="row-actions"><button class="btn danger" onclick="delPd('${r.id}')">删除</button></div></td></tr>`).join('')
+    : '<tr><td colspan="6" class="empty">暂无滞留</td></tr>';
+
+  const tc = logistics.inTransitContainers||[];
+  $('#containersTable tbody').innerHTML = tc.length ? tc.map(r=>{
+    const dev = (+r.returnTemp||0)-(+r.setTemp||0);
+    return `<tr data-id="${r.id}">
+    <td>${esc(r.container)}</td><td>${esc(r.brand)}</td>
+    <td><input type="number" step="0.1" value="${r.setTemp||0}" onchange="editTc('${r.id}','setTemp',this.value)" style="max-width:70px"></td>
+    <td><input type="number" step="0.1" value="${r.returnTemp||0}" onchange="editTc('${r.id}','returnTemp',this.value)" style="max-width:70px"></td>
+    <td class="${dev>=3?'rate low':(dev>=2?'':'rate good')} num">${dev>=0?'+':''}${dev.toFixed(1)}°</td>
+    <td><input type="text" value="${esc(r.location)}" onchange="editTc('${r.id}','location',this.value)" style="max-width:130px"></td>
+    <td><span class="pill ${r.status==='ALARM'?'alarm':(r.status==='WARN'?'warn':'ok')}">${r.status==='ALARM'?'异常':(r.status==='WARN'?'注意':'正常')}</span></td>
+    <td><input type="text" value="${esc(r.note)}" onchange="editTc('${r.id}','note',this.value)" style="max-width:100px"></td>
+    <td><div class="row-actions">
+      <button class="btn sm" onclick="cycleTcStatus('${r.id}')">切换状态</button>
+      <button class="btn danger" onclick="delTc('${r.id}')">删除</button></div></td></tr>`;
+  }).join('') : '<tr><td colspan="9" class="empty">暂无在途柜</td></tr>';
+}
+
+async function editKpi(f, v){ logistics.kpis[f] = +v||0; await api('/api/logistics/kpis','PUT',logistics.kpis); toast('KPI 已保存'); }
+async function editPd(id,f,v){ const r=logistics.portDelays.find(x=>x.id===id); r[f]=f==='delayDays'?+v||0:v; await api('/api/logistics/portDelays/'+id,'PUT',r); }
+async function delPd(id){ if(!confirm('删除该滞留记录？'))return; await api('/api/logistics/portDelays/'+id,'DELETE'); logistics.portDelays=logistics.portDelays.filter(x=>x.id!==id); renderLogistics(); toast('已删除'); }
+function openPortDelayModal(){ $('#portDelayModal').classList.add('show'); }
+async function submitPortDelay(){
+  const r={container:$('#pd_container').value.trim(),route:$('#pd_route').value.trim(),category:$('#pd_category').value,delayDays:+$('#pd_delay').value||0,reason:$('#pd_reason').value.trim()};
+  if(!r.container){toast('请填柜号',true);return;}
+  const c=await api('/api/logistics/portDelays','POST',r); logistics.portDelays.push(c); closeModalById('portDelayModal'); renderLogistics(); toast('已新增'); $('#pd_container').value='';$('#pd_route').value='';$('#pd_reason').value='';
+}
+async function editTc(id,f,v){ const r=logistics.inTransitContainers.find(x=>x.id===id); r[f]=(f==='setTemp'||f==='returnTemp')?+v||0:v; await api('/api/logistics/inTransitContainers/'+id,'PUT',r); renderLogistics(); }
+async function cycleTcStatus(id){ const r=logistics.inTransitContainers.find(x=>x.id===id); const order=['OK','WARN','ALARM']; r.status=order[(order.indexOf(r.status)+1)%3]; await api('/api/logistics/inTransitContainers/'+id,'PUT',r); renderLogistics(); }
+async function delTc(id){ if(!confirm('删除该在途柜？'))return; await api('/api/logistics/inTransitContainers/'+id,'DELETE'); logistics.inTransitContainers=logistics.inTransitContainers.filter(x=>x.id!==id); renderLogistics(); toast('已删除'); }
+function openContainerModal(){ $('#containerModal').classList.add('show'); }
+async function submitContainer(){
+  const r={container:$('#tc_container').value.trim(),brand:$('#tc_brand').value.trim(),setTemp:+$('#tc_set').value||0,returnTemp:+$('#tc_ret').value||0,location:$('#tc_location').value.trim(),status:$('#tc_status').value,note:$('#tc_note').value.trim()};
+  if(!r.container){toast('请填柜号',true);return;}
+  const c=await api('/api/logistics/inTransitContainers','POST',r); logistics.inTransitContainers.push(c); closeModalById('containerModal'); renderLogistics(); toast('已新增');
+  ['tc_container','tc_brand','tc_location','tc_note'].forEach(id=>$('#'+id).value='');
+}
+
+// ===== 新闻 =====
+function renderNews(){
+  ['TH','VN'].forEach(country => {
+    const list = news.filter(n=>n.country===country);
+    const el = $('#newsList'+country);
+    el.innerHTML = list.length ? list.map(n=>`<div class="news-card">
+      <span class="ico">${esc(n.icon||'📌')}</span><span class="t">${esc(n.title)}</span>
+      <div class="d">${md(n.detail||'')}</div>
+      <div class="actions"><button class="btn danger sm" onclick="delNews('${n.id}')">删除</button></div>
+    </div>`).join('') : '<div class="empty">暂无</div>';
+  });
+}
+function renderNewsSourceStatus(){
+  const el = $('#newsSourceStatus');
+  if(!el) return;
+  const cfg = autoNewsInfo && autoNewsInfo.config;
+  const fetchedAt = autoNewsInfo && autoNewsInfo.fetchedAt ? new Date(autoNewsInfo.fetchedAt).toLocaleString('zh-CN') : '未刷新';
+  const count = autoNewsInfo && autoNewsInfo.count != null ? autoNewsInfo.count : '-';
+  const sources = autoNewsInfo && autoNewsInfo.sources ? Object.entries(autoNewsInfo.sources).map(([k,v])=>`${k}:${v}`).join(' / ') : '无';
+  const mcp = cfg && cfg.metasoMcpUrl ? 'MCP 已配置' : 'MCP 未配置';
+  const enabled = cfg && cfg.metasoEnabled
+    ? (Number(cfg.metasoDailyLimit || 0) > 0 ? '秘塔已启用' : '秘塔已勾选，额度 0 暂不调用')
+    : '秘塔已关闭';
+  const key = cfg && cfg.hasMetasoMcpApiKey ? `Key ${cfg.metasoMcpApiKeyMasked}` : 'Key 未配置';
+  el.textContent = `${enabled} · ${mcp} · ${key} · 自动新闻 ${count} 条 · 来源 ${sources} · ${fetchedAt}`;
+  const dEl = $('#newsDiagnostics');
+  if(dEl){
+    const d = autoNewsInfo && autoNewsInfo.diagnostics;
+    const errors = d && d.errors && d.errors.length ? d.errors.map(x=>`- ${x.source}: ${x.message}`).join('\n') : '暂无错误';
+    const keywords = d && d.keywords && d.keywords.length ? d.keywords.join(' / ') : (cfg && cfg.keywords ? cfg.keywords.join(' / ') : '');
+    const stats = d && d.sourceStats ? Object.entries(d.sourceStats).map(([name,s]) =>
+      `${name}: 原始 ${s.raw||0} / 通过 ${s.accepted||0} / 过滤 ${s.filtered||0}\n  原始样例：${(s.samples||[]).join(' | ') || '-'}\n  通过样例：${(s.acceptedSamples||[]).join(' | ') || '-'}`
+    ).join('\n') : '暂无来源统计';
+    const usage = d && d.metasoUsage ? `秘塔用量：${d.metasoUsage.day || '-'} ${d.metasoUsage.calls || 0} 次` : '秘塔用量：-';
+    dEl.textContent = `关键词：${keywords || '未配置'}\n诊断：${(d && d.message) || '尚未刷新'}\n${usage}\n错误：\n${errors}\n来源统计：\n${stats}`;
+  }
+}
+async function loadAutoNewsInfo(showToast=true){
+  try{
+    const r = await api('/api/news/auto');
+    autoNewsInfo = { ...(autoNewsInfo||{}), count:(r.data.items||[]).length, sources:r.data.sources||{}, fetchedAt:r.data.fetchedAt, diagnostics:r.data.diagnostics };
+    renderNewsSourceStatus();
+    if(showToast) toast('自动新闻状态已更新');
+  }catch(e){ if(showToast) toast('自动新闻状态读取失败', true); }
+}
+async function loadNewsSourceConfig(showToast=true){
+  try{
+    const r = await api('/api/news/source-config');
+    const c = r.data || {};
+    autoNewsInfo = { ...(autoNewsInfo||{}), config:c };
+    $('#metasoEnabled').checked = !!c.metasoEnabled;
+    $('#metasoMcpUrl').value = c.metasoMcpUrl || '';
+    $('#metasoApiUrl').value = c.metasoApiUrl || '';
+    $('#metasoDailyLimit').value = c.metasoDailyLimit || 0;
+    $('#metasoCooldownMinutes').value = c.metasoCooldownMinutes || 60;
+    $('#newsKeywords').value = (c.keywords || []).join('\n');
+    $('#metasoMcpApiKey').placeholder = c.hasMetasoMcpApiKey ? `已保存：${c.metasoMcpApiKeyMasked}` : '留空则保留当前 Key';
+    $('#metasoApiKey').placeholder = c.hasMetasoApiKey ? `已保存：${c.metasoApiKeyMasked}` : '留空则保留当前 Key';
+    renderNewsSourceStatus();
+    if(showToast) toast('新闻源配置已读取');
+  }catch(e){ if(showToast) toast('新闻源配置读取失败', true); }
+}
+async function saveNewsSourceConfig(){
+  const body = {
+    metasoMcpUrl: $('#metasoMcpUrl').value.trim(),
+    metasoEnabled: $('#metasoEnabled').checked,
+    metasoMcpApiKey: $('#metasoMcpApiKey').value.trim(),
+    metasoApiUrl: $('#metasoApiUrl').value.trim(),
+    metasoApiKey: $('#metasoApiKey').value.trim(),
+    metasoDailyLimit: +$('#metasoDailyLimit').value || 0,
+    metasoCooldownMinutes: +$('#metasoCooldownMinutes').value || 0,
+    keywords: $('#newsKeywords').value.split(/\n/).map(s=>s.trim()).filter(Boolean),
+  };
+  try{
+    const r = await api('/api/news/source-config','PUT',body);
+    autoNewsInfo = { config:r.data.config, count:r.data.count, sources:r.data.sources, fetchedAt:r.data.fetchedAt, diagnostics:r.data.diagnostics };
+    $('#metasoMcpApiKey').value = '';
+    $('#metasoApiKey').value = '';
+    renderNewsSourceStatus();
+    await loadNewsSourceConfig(false);
+    toast(`已保存配置，当前自动新闻 ${r.data.count} 条`);
+  }catch(e){ toast('保存新闻源失败：'+e.message, true); }
+}
+async function refreshAutoNews(){
+  try{
+    const r = await api('/api/news/auto/refresh','POST',{});
+    await loadAutoNewsInfo(false);
+    toast(`已刷新，自动新闻 ${r.count} 条`);
+  }catch(e){ toast('刷新自动新闻失败：'+e.message, true); }
+}
+async function delNews(id){ if(!confirm('删除该新闻？'))return; await api('/api/news/'+id,'DELETE'); news=news.filter(n=>n.id!==id); renderNews(); toast('已删除'); }
+function openNewsModal(country){ $('#n_country').value=country; $('#newsModal').classList.add('show'); }
+async function submitNews(){
+  const n={country:$('#n_country').value,icon:$('#n_icon').value.trim()||'📌',title:$('#n_title').value.trim(),detail:$('#n_detail').value.trim()};
+  if(!n.title){toast('请填标题',true);return;}
+  const c=await api('/api/news','POST',n); news.push(c); closeModalById('newsModal'); renderNews(); toast('已新增');
+  $('#n_title').value='';$('#n_detail').value='';$('#n_icon').value='📌';
+}
+
+
+// ===== 账号管理 =====
+const PERMISSION_LABELS = {
+  overview:'运营总览', orders:'订单看板', flow:'货柜流向', temperature:'温度监控', logistics:'物流监控', news:'行业新闻', smartsheet:'智能表管理', admin:'系统管理'
+};
+const DASHBOARD_LABELS = {
+  overview:'运营总览', orders:'订单看板', flow:'货柜流向', temperature:'温度监控', logistics:'物流监控', news:'行业新闻'
+};
+const PERMISSION_ALIASES = { accounts:'admin' };
+const DASHBOARD_ALIASES = { summary:'overview', th:'orders', vn:'orders', gantt:'temperature' };
+function normalizeKeys(list, aliases){
+  const out = [];
+  (list || []).forEach(key => {
+    const normalized = aliases[key] || key;
+    if(!out.includes(normalized)) out.push(normalized);
+  });
+  return out;
+}
+function renderPermChecks(selected=[]){
+  const chosen = new Set(normalizeKeys(selected || [], PERMISSION_ALIASES));
+  $('#a_permissions').innerHTML = Object.entries(PERMISSION_LABELS).map(([key,label]) =>
+    `<label><input type="checkbox" value="${key}" ${chosen.has(key)?'checked':''}>${label}</label>`
+  ).join('');
+  syncAccountRole();
+}
+function selectedPerms(){ return Array.from($('#a_permissions').querySelectorAll('input:checked')).map(x=>x.value); }
+function renderDashboardChecks(selected){
+  const initial = selected || Object.keys(DASHBOARD_LABELS);
+  const chosen = new Set(normalizeKeys(initial, DASHBOARD_ALIASES));
+  $('#a_dashboard_permissions').innerHTML = Object.entries(DASHBOARD_LABELS).map(([key,label]) =>
+    `<label><input type="checkbox" value="${key}" ${chosen.has(key)?'checked':''}>${label}</label>`
+  ).join('');
+}
+function selectedDashboardPerms(){ return Array.from($('#a_dashboard_permissions').querySelectorAll('input:checked')).map(x=>x.value); }
+function syncAccountRole(){
+  const isAdmin = $('#a_role').value === 'admin';
+  $('#a_permissions').querySelectorAll('input').forEach(input => { input.checked = isAdmin || input.checked; input.disabled = isAdmin; });
+}
+async function loadUsers(){
+  if(!currentUser || currentUser.role!=='admin') return;
+  try{
+    const r = await api('/api/users');
+    accounts = r.data || [];
+    renderUsers();
+  }catch(e){ if(e.message!=='Unauthorized') toast('账号列表加载失败', true); }
+}
+function roleLabel(role){ return role==='admin' ? '管理员' : '普通账号'; }
+function renderUsers(){
+  const tb = $('#accountsTable tbody');
+  if(!accounts.length){ tb.innerHTML = '<tr><td colspan="8" class="empty">暂无账号</td></tr>'; return; }
+  tb.innerHTML = accounts.map(u=>{
+    const perms = normalizeKeys(u.permissions||[], PERMISSION_ALIASES).map(p=>`<span class="perm-tag">${PERMISSION_LABELS[p]||p}</span>`).join('') || '<span class="hint">无后台模块</span>';
+    const dashPerms = normalizeKeys(u.dashboardPermissions||[], DASHBOARD_ALIASES).map(p=>`<span class="perm-tag">${DASHBOARD_LABELS[p]||p}</span>`).join('') || '<span class="hint">无首页板块</span>';
+    const created = u.createdAt ? new Date(u.createdAt.replace(' ','T')+'Z').toLocaleDateString('zh-CN') : '-';
+    const self = currentUser && currentUser.username === u.username;
+    return `<tr>
+      <td><b>${esc(u.username)}</b>${self?' <span class="hint">当前</span>':''}</td>
+      <td>${esc(u.displayName||'')}</td>
+      <td>${roleLabel(u.role)}</td>
+      <td><div class="perm-list">${perms}</div></td>
+      <td><div class="perm-list">${dashPerms}</div></td>
+      <td><span class="status-dot ${u.isActive?'on':'off'}">${u.isActive?'启用':'禁用'}</span></td>
+      <td>${created}</td>
+      <td><div class="row-actions">
+        <button class="btn sm" onclick="openAccountModal('${u.id}')">编辑</button>
+        <button class="btn sm" onclick="resetPassword('${u.id}')">重置密码</button>
+        <button class="btn sm" onclick="toggleUser('${u.id}')" ${self?'disabled':''}>${u.isActive?'禁用':'启用'}</button>
+        <button class="btn danger sm" onclick="deleteUser('${u.id}')" ${self?'disabled':''}>删除</button>
+      </div></td>
+    </tr>`;
+  }).join('');
+}
+function openAccountModal(id){
+  const u = id ? accounts.find(x=>String(x.id)===String(id)) : null;
+  $('#accountModalTitle').textContent = u ? '编辑账号' : '新增账号';
+  $('#a_id').value = u ? u.id : '';
+  $('#a_username').value = u ? u.username : '';
+  $('#a_username').disabled = !!u;
+  $('#a_display').value = u ? (u.displayName || '') : '';
+  $('#a_password').value = '';
+  $('#a_password').placeholder = u ? '留空则不修改密码' : '新增账号必填';
+  $('#a_role').value = u ? u.role : 'viewer';
+  $('#a_active').checked = u ? !!u.isActive : true;
+  renderPermChecks(u ? u.permissions : ['orders']);
+  renderDashboardChecks(u ? u.dashboardPermissions : null);
+  $('#accountModal').classList.add('show');
+}
+async function submitAccount(){
+  const id = $('#a_id').value;
+  const body = {
+    username: $('#a_username').value.trim(),
+    displayName: $('#a_display').value.trim(),
+    role: $('#a_role').value,
+    isActive: $('#a_active').checked,
+    permissions: selectedPerms(),
+    dashboardPermissions: selectedDashboardPerms(),
+  };
+  const password = $('#a_password').value;
+  if(!id) body.password = password;
+  if(!body.username){ toast('请填写用户名', true); return; }
+  if(!id && !password){ toast('请填写初始密码', true); return; }
+  try{
+    const r = await api(id?'/api/users/'+id:'/api/users', id?'PUT':'POST', body);
+    if(id && password) await api('/api/users/'+id+'/password','POST',{password});
+    const saved = r.data;
+    const i = accounts.findIndex(x=>x.id===saved.id);
+    if(i>=0) accounts[i]=saved; else accounts.push(saved);
+    closeModalById('accountModal'); renderUsers(); toast('账号已保存');
+  }catch(e){ toast('保存账号失败', true); }
+}
+async function resetPassword(id){
+  const pwd = prompt('请输入新密码');
+  if(!pwd) return;
+  try{ await api('/api/users/'+id+'/password','POST',{password:pwd}); toast('密码已重置'); }
+  catch(e){ toast('重置失败', true); }
+}
+async function toggleUser(id){
+  const u = accounts.find(x=>String(x.id)===String(id)); if(!u) return;
+  try{
+    const r = await api('/api/users/'+id,'PUT',{displayName:u.displayName,role:u.role,permissions:u.permissions,dashboardPermissions:u.dashboardPermissions,isActive:!u.isActive});
+    Object.assign(u, r.data); renderUsers(); toast(u.isActive?'账号已启用':'账号已禁用');
+  }catch(e){ toast('状态更新失败', true); }
+}
+async function deleteUser(id){
+  const u = accounts.find(x=>String(x.id)===String(id));
+  if(!confirm('确定删除账号 '+(u?u.username:id)+'？')) return;
+  try{ await api('/api/users/'+id,'DELETE'); accounts=accounts.filter(x=>String(x.id)!==String(id)); renderUsers(); toast('账号已删除'); }
+  catch(e){ toast('删除账号失败', true); }
+}
+
+// ===== 通用 =====
+function closeModalById(id){ $('#'+id).classList.remove('show'); }
+function esc(s){return String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));}
+function md(s){return esc(s).replace(/\*\*(.+?)\*\*/g,'<b>$1</b>');}
+
+// 模态框点背景关闭
+$$('.modal').forEach(m => m.onclick = e => { if(e.target===m) m.classList.remove('show'); });
+$('#filterCountry').onchange = renderOrders;
+$('#filterCat').onchange = renderOrders;
+$('#btnLogout').onclick = async (e)=>{ e.preventDefault(); try{ await fetch('/api/auth/logout',{method:'POST'}); }catch(_){} window.location.href='/login'; };
+
+// ===== 数据源切换器 =====
+async function loadDataSource(){
+  try{
+    const r = await api('/api/data-source');
+    const sel = $('#dsSelect');
+    sel.value = r.current;
+    $('#dsSwitch').classList.toggle('wecom', r.current==='wecom');
+  }catch(e){ console.warn('加载数据源失败', e.message); }
+}
+$('#dsSelect').onchange = async (e)=>{
+  const v = e.target.value;
+  if(!confirm(`切换看板数据源到「${v==='wecom'?'企微智能表':'手动后台'}」？\n切换后会立即影响所有看板访问。`)){
+    loadDataSource(); return; // 还原
+  }
+  try{
+    await api('/api/data-source','PUT',{source:v});
+    $('#dsSwitch').classList.toggle('wecom', v==='wecom');
+    toast(`已切换至「${v==='wecom'?'企微智能表':'手动后台'}」`);
+  }catch(e){ toast('切换失败：'+e.message, true); loadDataSource(); }
+};
+
+// 启动
+(async function(){
+  const ok = await checkAuth();
+  if(!ok) return;
+  await loadDataSource();
+  if(currentUser && currentUser.role==='admin') loadUsers();
+  loadAll();
+  // 每 10 秒同步（不在输入框聚焦时刷新，避免丢焦点）
+  setInterval(()=>{ if(document.activeElement.tagName!=='INPUT') loadAll(); }, 10000);
+})();
+</script>
+<script src="admin-smartsheet.js?v=1"></script>
+</body>
+</html>

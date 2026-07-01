@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>货柜流转看板 · 榴莲运输</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;500;700;900&family=Oswald:wght@500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{--bg:#080b10;--panel:#121821;--panel2:#182231;--line:#263448;--txt:#eef4ff;--txt2:#9aa8bd;--txt3:#64748b;--gold:#f5c451;--blue:#38bdf8;--green:#34d399;--cyan:#2dd4bf;--orange:#f59e0b;--purple:#a78bfa;--red:#fb7185;--gray:#64748b}
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{height:100vh;overflow:hidden;background:radial-gradient(circle at 32% 0%,rgba(245,196,81,.12),transparent 34%),var(--bg);color:var(--txt);font-family:"Noto Sans SC",sans-serif}
+  .num{font-family:"Oswald",sans-serif;font-weight:700;font-feature-settings:"tnum"}
+  .app{height:100vh;display:grid;grid-template-rows:48px 50px 70px minmax(0,1fr) 176px;gap:9px;padding:12px}
+  header{display:flex;align-items:center;gap:14px;border:1px solid var(--line);background:rgba(18,24,33,.84);padding:0 18px;border-radius:8px}
+  h1{font-size:19px;font-weight:900;letter-spacing:0}.sub{color:var(--txt2);font-size:13px}.spacer{flex:1}
+  .pill{border:1px solid var(--line);background:var(--panel2);color:var(--txt2);border-radius:999px;padding:6px 10px;font-size:12px;white-space:nowrap}
+  a{color:var(--gold);text-decoration:none}
+  .filters{display:grid;grid-template-columns:1.3fr repeat(4,1fr) 88px;gap:8px;border:1px solid var(--line);background:rgba(18,24,33,.7);border-radius:8px;padding:8px}
+  .filters input,.filters select{width:100%;height:32px;border:1px solid var(--line);background:#0d131c;color:var(--txt);border-radius:7px;padding:0 10px;font:inherit;font-size:12px}
+  .filters button{height:32px;border:1px solid rgba(245,196,81,.45);background:rgba(245,196,81,.12);color:var(--gold);border-radius:7px;font-weight:800;cursor:pointer}
+  .kpis{display:grid;grid-template-columns:1.2fr repeat(5,1fr);gap:9px}
+  .kpi{border:1px solid var(--line);background:linear-gradient(180deg,rgba(255,255,255,.045),rgba(255,255,255,.012));border-radius:8px;padding:8px 12px;position:relative;overflow:hidden}
+  .kpi:before{content:"";position:absolute;left:0;top:0;bottom:0;width:4px;background:var(--c,var(--gold))}
+  .kpi .label{font-size:12px;color:var(--txt2)}.kpi .value{font-size:25px;line-height:1;margin-top:2px}.kpi .note{font-size:11px;color:var(--txt3);margin-top:3px}
+  .main{display:grid;grid-template-columns:minmax(0,1fr) 300px;gap:9px;min-height:0}
+  .flow{border:1px solid var(--line);border-radius:8px;background:rgba(18,24,33,.7);position:relative;padding:12px;overflow:hidden;min-height:0}
+  .flow:after{content:"";position:absolute;width:260px;height:180px;border-radius:50%;background:radial-gradient(circle,rgba(245,196,81,.18),transparent 62%);left:var(--spot-x,52%);top:var(--spot-y,48%);transform:translate(-50%,-50%);opacity:.55;pointer-events:none;transition:left .35s ease,top .35s ease,opacity .25s ease}
+  .flow-grid{height:100%;display:grid;grid-template-columns:.86fr 1fr 1fr 1fr 1fr;grid-template-rows:1fr 1fr;gap:28px 22px;align-items:stretch;position:relative;z-index:1}
+  .node{border:1px solid color-mix(in srgb,var(--c) 42%,var(--line));background:linear-gradient(180deg,color-mix(in srgb,var(--c) 13%,var(--panel)),rgba(18,24,33,.96));border-radius:8px;padding:10px 12px;min-height:0;cursor:pointer;position:relative;box-shadow:0 10px 34px rgba(0,0,0,.2);display:flex;flex-direction:column;justify-content:center;transition:transform .18s ease,border-color .18s ease,box-shadow .18s ease,filter .18s ease}
+  .node:hover{transform:translateY(-2px)}.node.active{border-color:var(--c);transform:translateY(-3px) scale(1.018);filter:saturate(1.16);box-shadow:0 0 0 1px color-mix(in srgb,var(--c) 64%,transparent),0 0 32px color-mix(in srgb,var(--c) 22%,transparent),0 18px 46px rgba(0,0,0,.32)}
+  .node.active:after{content:"";position:absolute;inset:-5px;border:1px solid color-mix(in srgb,var(--c) 70%,transparent);border-radius:11px;animation:pulse 1.6s ease-in-out infinite;pointer-events:none}
+  @keyframes pulse{0%,100%{opacity:.28;transform:scale(.99)}50%{opacity:.75;transform:scale(1.015)}}
+  .node.total{grid-column:1;grid-row:1 / 3}.node.unshipped{grid-column:2;grid-row:1}.node.shipped{grid-column:2;grid-row:2}.node.overseasTransit{grid-column:3;grid-row:1}.node.arrived{grid-column:3;grid-row:2}.node.onShore{grid-column:4;grid-row:1}.node.domesticTransfer{grid-column:4;grid-row:2}.node.domesticTransit{grid-column:5;grid-row:1}.node.signed{grid-column:5;grid-row:2}
+  .node .name{color:var(--txt2);font-size:12px}.node .count{font-size:32px;line-height:1.05;margin:4px 0}.node.total .count{font-size:48px}.node .meta{display:flex;gap:6px;flex-wrap:wrap;color:var(--txt3);font-size:11px}.node .hint{position:absolute;right:8px;top:8px;color:var(--c);font-size:10px;border:1px solid color-mix(in srgb,var(--c) 45%,transparent);border-radius:999px;padding:2px 6px}
+  .flow-lines{position:absolute;inset:0;width:100%;height:100%;pointer-events:none;z-index:0}.flow-lines path{fill:none;stroke:rgba(245,196,81,.76);stroke-width:3;stroke-linecap:round;filter:drop-shadow(0 0 8px rgba(245,196,81,.24))}
+  .flow-lines path.active-line{stroke:#f8d77a;stroke-width:4;filter:drop-shadow(0 0 12px rgba(245,196,81,.55))}
+  .side{border:1px solid var(--line);border-radius:8px;background:rgba(18,24,33,.76);padding:12px;min-height:0;display:flex;flex-direction:column}
+  .side h2,.bottom h2{font-size:14px;margin-bottom:8px}.rule{border:1px solid var(--line);background:rgba(255,255,255,.025);border-radius:7px;padding:8px;margin-bottom:8px;color:var(--txt2);font-size:11px;line-height:1.5}.rule b{color:var(--gold)}
+  .alert-list{overflow:auto;display:flex;flex-direction:column;gap:7px}.alert{border:1px solid rgba(251,113,133,.35);background:rgba(251,113,133,.08);border-radius:7px;padding:8px}.alert b{color:#fecdd3}.alert small{display:block;color:var(--txt2);margin-top:3px}
+  .bottom{display:grid;grid-template-columns:1fr 340px;gap:9px;min-height:0}
+  .table-card,.break-card{border:1px solid var(--line);border-radius:8px;background:rgba(18,24,33,.76);padding:12px;min-height:0;overflow:hidden}
+  .toolbar{display:flex;align-items:center;gap:10px;margin-bottom:9px}.toolbar h2{margin:0}.toolbar .tag{color:var(--gold)}
+  table{width:100%;border-collapse:collapse;font-size:12px}th,td{padding:6px 8px;border-bottom:1px solid rgba(255,255,255,.06);text-align:left;white-space:nowrap}th{color:var(--txt3);font-weight:700}.table-wrap{height:124px;overflow:auto}
+  .breaks{display:grid;grid-template-columns:1fr 1fr;gap:10px}.mini h3{font-size:12px;color:var(--txt2);margin-bottom:6px}.bar-row{display:grid;grid-template-columns:70px 1fr 42px;gap:8px;align-items:center;font-size:12px;margin:6px 0}.bar{height:8px;border-radius:999px;background:#243044;overflow:hidden}.bar span{display:block;height:100%;background:var(--green)}
+  .empty{color:var(--txt3);padding:24px;text-align:center}.err{color:#fecdd3}
+</style>
+</head>
+<body>
+<div class="app">
+  <header><h1>货柜流转看板</h1><span class="sub">从下单柜数到签收终端，一屏看清柜子卡在哪</span><span class="spacer"></span><span class="pill" id="clock">--:--:--</span><span class="pill" id="updated">加载中</span><a href="/">返回总览</a></header>
+  <section class="filters">
+    <input id="searchBox" placeholder="搜索订单 / 柜号 / 国家 / 工厂 / 品牌">
+    <select id="filterOrder"><option value="">全部订单</option></select>
+    <select id="filterCountry"><option value="">全部国家</option></select>
+    <select id="filterFactory"><option value="">全部工厂</option></select>
+    <select id="filterCategory"><option value="">全部品类</option></select>
+    <button id="resetFilters">重置</button>
+  </section>
+  <section class="kpis" id="kpis"></section>
+  <section class="main">
+    <div class="flow" id="flow"><svg class="flow-lines" id="flowLines"></svg><div class="flow-grid" id="flowGrid"></div></div>
+    <aside class="side"><h2>待处理提醒</h2><div class="rule" id="ruleText">待处理 = 在岸柜；偏久按后台阈值判断。</div><div class="alert-list" id="alerts"></div></aside>
+  </section>
+  <section class="bottom">
+    <div class="table-card"><div class="toolbar"><h2>状态明细</h2><span class="tag" id="detailTitle">已发货</span><span class="spacer"></span><span class="sub" id="detailCount"></span></div><div class="table-wrap"><table><thead><tr><th>订单</th><th>柜号</th><th>国家</th><th>发货</th><th>到岸</th><th>国内发货</th><th>签收</th><th>品类</th><th>停留</th></tr></thead><tbody id="detailRows"></tbody></table></div></div>
+    <div class="break-card"><h2>拆分概览</h2><div class="breaks"><div class="mini"><h3>国家</h3><div id="countryBreak"></div></div><div class="mini"><h3>品类</h3><div id="catBreak"></div></div></div></div>
+  </section>
+</div>
+<script>
+const $=id=>document.getElementById(id);let data=null,view=null,active='shipped';
+const colors={total:'#f5c451',unshipped:'#64748b',shipped:'#38bdf8',overseasTransit:'#60a5fa',arrived:'#34d399',onShore:'#f59e0b',domesticTransfer:'#2dd4bf',domesticTransit:'#a78bfa',signed:'#22c55e'};
+const labels={total:'总柜数',unshipped:'未发货',shipped:'已发货',overseasTransit:'国外在途',arrived:'已到岸',onShore:'在岸',domesticTransfer:'国内短驳',domesticTransit:'国内在途',signed:'已签收'};
+const hints={total:'订单主表下单柜数',unshipped:'尚未形成柜号',shipped:'分柜明细有柜号',overseasTransit:'已发货未到岸',arrived:'到岸日期非空',onShore:'已到岸未叫车',domesticTransfer:'国内发货时间非空',domesticTransit:'短驳未签收',signed:'签收日期非空'};
+const links=[['total','unshipped'],['total','shipped'],['shipped','overseasTransit'],['shipped','arrived'],['arrived','onShore'],['arrived','domesticTransfer'],['domesticTransfer','domesticTransit'],['domesticTransfer','signed']];
+function n(v){return Number(v||0)} function pct(a,b){return b?Math.round(a/b*1000)/10:0} function p(v){return `${n(v).toFixed(1)}%`} function esc(s){return String(s??'').replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]))}
+async function api(path){const r=await fetch(path,{cache:'no-store'});if(r.status===401){location.href='/login?redirect=/index-flow.html';throw new Error('未登录')}const j=await r.json();if(!r.ok||!j.success)throw new Error(j.error||'加载失败');return j.data}
+function allShipments(){return data?data.details.shipped||[]:[]}
+function allOrders(){return data?data.orders||[]:[]}
+function factoryOf(r){const m=String(r.orderNo||'').match(/^([A-Z]+)-/);return m?m[1]:(r.brand||'其他')}
+function fillSelect(id,values,allLabel){const el=$(id),old=el.value;el.innerHTML=`<option value="">${allLabel}</option>`+values.map(v=>`<option value="${esc(v)}">${esc(v)}</option>`).join('');el.value=values.includes(old)?old:''}
+function initFilters(){const rows=allShipments();const uniq=fn=>Array.from(new Set(rows.map(fn).filter(Boolean))).sort((a,b)=>String(a).localeCompare(String(b),'zh-CN'));fillSelect('filterOrder',uniq(r=>r.orderNo),'全部订单');fillSelect('filterCountry',uniq(r=>r.country),'全部国家');fillSelect('filterFactory',uniq(factoryOf),'全部工厂');fillSelect('filterCategory',uniq(r=>r.categoryText||r.category),'全部品类')}
+function matchFilters(r){const q=$('searchBox').value.trim().toLowerCase();const order=$('filterOrder').value,country=$('filterCountry').value,factory=$('filterFactory').value,cat=$('filterCategory').value;if(order&&r.orderNo!==order)return false;if(country&&r.country!==country)return false;if(factory&&factoryOf(r)!==factory)return false;if(cat&&(r.categoryText||r.category)!==cat)return false;if(!q)return true;return [r.orderNo,r.containerNo,r.country,factoryOf(r),r.brand,r.categoryText,r.category].some(v=>String(v||'').toLowerCase().includes(q))}
+function byStatus(rows){return{unshipped:[],shipped:rows,overseasTransit:rows.filter(s=>s.status==='overseasTransit'),arrived:rows.filter(s=>['onShore','domesticTransit','signed'].includes(s.status)),onShore:rows.filter(s=>s.status==='onShore'),domesticTransfer:rows.filter(s=>['domesticTransit','signed'].includes(s.status)),domesticTransit:rows.filter(s=>s.status==='domesticTransit'),signed:rows.filter(s=>s.status==='signed')}}
+function node(key,count,total,parent){return{key,label:labels[key],count,totalRate:pct(count,total),parentRate:pct(count,parent),hint:hints[key]}}
+function qMatch(r,q){const s=String(q||'').trim().toLowerCase();if(!s)return true;return [r.orderNo,r.country,r.brand,r.categoryText,r.category].some(v=>String(v||'').toLowerCase().includes(s))}
+function recomputeView(){
+  const shipments=allShipments();
+  const orders=allOrders();
+  const query=$('searchBox').value.trim();
+  const filtered=shipments.filter(r=>matchFilters(r)&&qMatch(r,query));
+  const st=byStatus(filtered);
+  const filtersOn=Boolean(query||$('filterOrder').value||$('filterCountry').value||$('filterFactory').value||$('filterCategory').value);
+  const visibleOrders=orders.filter(r=>{
+    if($('filterOrder').value&&r.orderNo!==$('filterOrder').value)return false;
+    if($('filterCountry').value&&r.country!==$('filterCountry').value)return false;
+    if($('filterFactory').value&&factoryOf(r)!==$('filterFactory').value)return false;
+    if($('filterCategory').value){
+      const cat=$('filterCategory').value;
+      if(cat==='鲜果'&&r.category!=='FRESH')return false;
+      if(cat==='冻果'&&r.category!=='FROZEN')return false;
+    }
+    return qMatch(r, query);
+  });
+  const total=filtersOn ? visibleOrders.reduce((sum,r)=>sum+(Number(r.boxes)||0),0) : n(data.nodes.total.count);
+  const shipped=filtered.length, overseasTransit=st.overseasTransit.length, onShore=st.onShore.length, domesticTransit=st.domesticTransit.length, signed=st.signed.length, domesticTransfer=domesticTransit+signed, arrived=onShore+domesticTransfer, unshipped=filtersOn?Math.max(0,total-shipped):n(data.nodes.unshipped.count);
+  view={total,filtersOn,details:st,nodes:{total:node('total',total,total,total),unshipped:node('unshipped',unshipped,total,total),shipped:node('shipped',shipped,total,total),overseasTransit:node('overseasTransit',overseasTransit,total,shipped),arrived:node('arrived',arrived,total,shipped),onShore:node('onShore',onShore,total,arrived),domesticTransfer:node('domesticTransfer',domesticTransfer,total,arrived),domesticTransit:node('domesticTransit',domesticTransit,total,domesticTransfer),signed:node('signed',signed,total,domesticTransfer)}};
+  view.kpis={total,shipped,unshipped,arrived,signed,onShore,shippedRate:pct(shipped,total),signedRate:pct(signed,total)};
+  view.breakdowns={country:breakdown(filtered,r=>r.country||'未填国家',k=>k),category:breakdown(filtered,r=>r.category||'UNKNOWN',k=>({FRESH:'鲜果',FROZEN:'冻果',UNKNOWN:'未填品类'}[k]||k))};
+  view.alerts=alertsFrom(st);
+  if(query&&filtered[0])active=statusBucket(filtered[0]);
+  if(!view.details[active])active='shipped'
+}
+function statusBucket(r){if(r.status==='overseasTransit')return'overseasTransit';if(r.status==='onShore')return'onShore';if(r.status==='domesticTransit')return'domesticTransit';if(r.status==='signed')return'signed';return'shipped'}
+function alertsFrom(st){const t=data.config&&data.config.thresholds||{};return[...st.onShore.filter(s=>(s.dwellDays||0)>=(t.onShoreDays??2)).map(s=>({...s,alertType:'在岸待叫车'})),...st.overseasTransit.filter(s=>(s.dwellDays||0)>=(t.overseasTransitDays??7)).map(s=>({...s,alertType:'国外在途偏久'})),...st.domesticTransit.filter(s=>(s.dwellDays||0)>=(t.domesticTransitDays??2)).map(s=>({...s,alertType:'国内在途偏久'}))].sort((a,b)=>(b.dwellDays||0)-(a.dwellDays||0)).slice(0,20)}
+function breakdown(rows,keyFn,labelFn){const map=new Map();rows.forEach(r=>{const key=keyFn(r)||'UNKNOWN';if(!map.has(key))map.set(key,{key,label:labelFn(key,r),shipped:0});map.get(key).shipped++});return Array.from(map.values()).sort((a,b)=>b.shipped-a.shipped)}
+function kpi(key,label,note){const x=view.nodes[key];return `<div class="kpi" style="--c:${colors[key]}"><div class="label">${label}</div><div class="value num">${n(x.count)}</div><div class="note">${note||`占当前 ${p(x.totalRate)}`}</div></div>`}
+function renderKpis(){const k=view.kpis;$('kpis').innerHTML=[kpi('total','总柜数',view.filtersOn?'当前筛选命中柜数':'订单主表下单柜数'),kpi('shipped','已发货',`发货率 ${p(k.shippedRate)}`),kpi('unshipped','未发货',view.filtersOn?'筛选模式不估未发货':'尚未形成柜号'),kpi('arrived','已到岸','到岸日期非空'),kpi('signed','已签收',`签收率 ${p(k.signedRate)}`),kpi('onShore','待处理','已到岸未叫车')].join('')}
+function renderNode(key){const x=view.nodes[key];return `<div class="node ${key} ${active===key?'active':''}" data-node="${key}" style="--c:${colors[key]}" onclick="selectNode('${key}')"><span class="hint">${esc(x.hint||'')}</span><div class="name">${esc(x.label)}</div><div class="count num">${n(x.count)}<small style="font-size:15px;color:var(--txt2)"> 柜</small></div><div class="meta"><span>占当前 ${p(x.totalRate)}</span>${key!=='total'?`<span>占上层 ${p(x.parentRate)}</span>`:''}</div></div>`}
+function drawLines(){const svg=$('flowLines'),flow=$('flow');if(!svg||!flow)return;const fr=flow.getBoundingClientRect();svg.setAttribute('viewBox',`0 0 ${fr.width} ${fr.height}`);const activeAncestors=new Set();links.forEach(([a,b])=>{if(b===active)activeAncestors.add(`${a}-${b}`)});const point=(key,side)=>{const el=document.querySelector(`[data-node="${key}"]`);const r=el.getBoundingClientRect();return{x:(side==='right'?r.right:r.left)-fr.left,y:r.top-fr.top+r.height/2}};svg.innerHTML=links.map(([a,b])=>{const p1=point(a,'right'),p2=point(b,'left'),m=(p1.x+p2.x)/2;return`<path class="${activeAncestors.has(`${a}-${b}`)?'active-line':''}" d="M ${p1.x} ${p1.y} C ${m} ${p1.y}, ${m} ${p2.y}, ${p2.x} ${p2.y}"/>`}).join('');const el=document.querySelector(`[data-node="${active}"]`);if(el){const r=el.getBoundingClientRect();flow.style.setProperty('--spot-x',`${r.left-fr.left+r.width/2}px`);flow.style.setProperty('--spot-y',`${r.top-fr.top+r.height/2}px`)}}
+function renderFlow(){const order=['total','unshipped','shipped','overseasTransit','arrived','onShore','domesticTransfer','domesticTransit','signed'];$('flowGrid').innerHTML=order.map(renderNode).join('');requestAnimationFrame(drawLines)}
+function selectNode(key){active=key;renderFlow();renderDetails()}
+function renderDetails(){const rows=(view.details[active]||[]);$('detailTitle').textContent=(view.filtersOn?'筛选 · ':'')+(view.nodes[active]?.label||active);$('detailCount').textContent=`${rows.length} 柜`;$('detailRows').innerHTML=rows.length?rows.slice(0,120).map(r=>`<tr><td>${esc(r.orderNo||'-')}</td><td>${esc(r.containerNo||'-')}</td><td>${esc(r.country||'-')}</td><td>${esc(r.shipDateText||'-')}</td><td>${esc(r.arrivalDateText||'-')}</td><td>${esc(r.domesticShipDateText||'-')}</td><td>${esc(r.signedDateText||'-')}</td><td>${esc(r.categoryText||r.category||'-')}</td><td>${r.dwellDays==null?'-':esc(r.dwellDays+'天')}</td></tr>`).join(''):'<tr><td colspan="9" class="empty">暂无明细</td></tr>'}
+function renderAlerts(){const list=view.alerts||[];$('alerts').innerHTML=list.length?list.map(a=>`<div class="alert"><b>${esc(a.alertType)}</b> ${esc(a.containerNo||'-')}<small>${esc(a.orderNo||'-')} · ${esc(a.dwellDays||0)}天 · ${esc(a.country||a.brand||a.categoryText||'')}</small></div>`).join(''):'<div class="empty">暂无超时提醒</div>'}
+function bars(id,rows){const max=Math.max(1,...rows.map(r=>r.shipped));$(id).innerHTML=rows.slice(0,6).map(r=>`<div class="bar-row"><span>${esc(r.label)}</span><div class="bar"><span style="width:${r.shipped/max*100}%"></span></div><b class="num">${r.shipped}</b></div>`).join('')||'<div class="empty">暂无</div>'}
+function renderBreaks(){bars('countryBreak',view.breakdowns.country||[]);bars('catBreak',view.breakdowns.category||[])}
+function renderRule(){const t=data.config&&data.config.thresholds||{};$('ruleText').innerHTML=`<b>待处理</b> = 在岸柜，也就是已到岸但没有国内发货时间、没有签收时间。<br><b>偏久标准</b>：国外在途 ${t.overseasTransitDays??7} 天，在岸 ${t.onShoreDays??2} 天，国内在途 ${t.domesticTransitDays??2} 天。`}
+function updateHeaderTime(){const now=new Date(),p2=x=>String(x).padStart(2,'0');$('clock').textContent=`${p2(now.getHours())}:${p2(now.getMinutes())}:${p2(now.getSeconds())}`;if(data){const updated=new Date(data.generatedAt||Date.now()).toLocaleTimeString('zh-CN');const age=data.cache&&data.cache.fetchedAt?Math.max(0,Math.round((Date.now()-new Date(data.cache.fetchedAt).getTime())/1000)):null;$('updated').textContent=`更新 ${updated}${age==null?'':` · 缓存 ${age}s`}`}}
+function renderAll(){recomputeView();renderKpis();renderFlow();renderDetails();renderAlerts();renderBreaks();renderRule();updateHeaderTime()}
+function applyFilters(){if(!data)return;renderAll()}
+async function load(){try{data=await api('/api/flow-dashboard');initFilters();renderAll()}catch(e){$('flowGrid').innerHTML=`<div class="empty err">${esc(e.message)}</div>`;$('updated').textContent='加载失败'}}
+['searchBox','filterOrder','filterCountry','filterFactory','filterCategory'].forEach(id=>$(id).addEventListener('input',applyFilters));$('resetFilters').onclick=()=>{['searchBox','filterOrder','filterCountry','filterFactory','filterCategory'].forEach(id=>$(id).value='');active='shipped';applyFilters()};
+load();setInterval(load,30000);setInterval(updateHeaderTime,1000);window.addEventListener('resize',()=>requestAnimationFrame(drawLines));
+</script>
+</body>
+</html>
