@@ -65,5 +65,13 @@ assert.ok(
   /\.modal-backdrop\{[^}]*position:fixed[^}]*z-index:20/.test(html),
   'drill modal backdrop should stay fixed above the dashboard after motion styles'
 );
+assert.ok(
+  /\.gantt-cell\.missing\{/.test(html),
+  'overview temperature gantt should visually distinguish missing temperature cells'
+);
+assert.ok(
+  /cell\.statusText/.test(html),
+  'overview temperature gantt cell tooltip should include status text such as temperature missing'
+);
 
 console.log('overview motion checks passed');

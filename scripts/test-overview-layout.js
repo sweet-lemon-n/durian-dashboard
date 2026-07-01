@@ -68,5 +68,13 @@ assert.ok(
   /@keyframes donutTurn/.test(html) && /donut-grad-/.test(html),
   'donut charts should use gradient colors slow rotation'
 );
+assert.ok(
+  !/<div class="structure-grid" hidden><\/div>/.test(html),
+  'structure portrait should not render a hidden legacy grid that pushes donut charts out of view'
+);
+assert.ok(
+  /\.donut-grid\{[^}]*height:calc\(100% - 39px\)[^}]*grid-template-columns:repeat\(3/.test(html),
+  'structure portrait should dedicate the panel body to three donut cards'
+);
 
 console.log('overview layout checks passed');
