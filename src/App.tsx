@@ -1,13 +1,21 @@
 import { Routes, Route, Navigate } from 'react-router';
+import { AuthProvider } from '@/stores/AuthContext';
+import { ProtectedRoute } from '@/components/auth/ProtectedRoute';
+import { AdminRoute } from '@/components/auth/AdminRoute';
 
 export default function App() {
   return (
-    <Routes>
-      <Route path="/login" element={<div>Login Page</div>} />
-      {/* Dashboard pages — added in Task 10 */}
-      {/* Admin pages — added in Task 13 */}
-      {/* Other pages — added in Task 17 */}
-      <Route path="*" element={<Navigate to="/" replace />} />
-    </Routes>
+    <AuthProvider>
+      <Routes>
+        <Route path="/login" element={<div>Login Page</div>} />
+        <Route element={<ProtectedRoute />}>
+          <Route path="/" element={<div>Dashboard</div>} />
+          <Route element={<AdminRoute />}>
+            <Route path="/admin" element={<div>Admin Panel</div>} />
+          </Route>
+        </Route>
+        <Route path="*" element={<Navigate to="/" replace />} />
+      </Routes>
+    </AuthProvider>
   );
 }
