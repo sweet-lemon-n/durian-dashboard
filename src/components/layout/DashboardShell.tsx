@@ -1,4 +1,5 @@
 import { type ReactNode } from 'react';
+import { Link } from 'react-router';
 import { useAuth } from '@/stores/AuthContext';
 import { useTheme } from '@/stores/ThemeContext';
 import { Clock } from '@/components/ui/Clock';
@@ -110,8 +111,8 @@ export function DashboardShell({
             {user?.displayName || user?.username}
           </span>
           {user?.role === 'admin' && (
-            <a
-              href="/admin"
+            <Link
+              to="/admin"
               style={{
                 color: 'var(--accent)',
                 textDecoration: 'none',
@@ -122,7 +123,7 @@ export function DashboardShell({
               }}
             >
               后台
-            </a>
+            </Link>
           )}
           <a
             href="#"

@@ -1,4 +1,5 @@
 import { type ReactNode, useState } from 'react';
+import { Link } from 'react-router';
 import { useAuth } from '@/stores/AuthContext';
 
 interface Tab {
@@ -34,9 +35,9 @@ export function AdminShell({ children }: { children: (activeTab: string) => Reac
         <span style={{ fontSize: '13px', color: '#9aa8c4' }}>
           👤 <b style={{ color: '#f5c451' }}>{user?.displayName || user?.username}</b>
         </span>
-        <a href="/" style={{ color: '#f5c451', textDecoration: 'none', fontSize: '13px', padding: '6px 14px', border: '1px solid #f5c451', borderRadius: '6px' }}>
+        <Link to="/" style={{ color: '#f5c451', textDecoration: 'none', fontSize: '13px', padding: '6px 14px', border: '1px solid #f5c451', borderRadius: '6px' }}>
           看板
-        </a>
+        </Link>
         <a href="#" onClick={(e) => { e.preventDefault(); logout(); }} style={{
           color: '#f87171', textDecoration: 'none', fontSize: '13px', padding: '6px 14px',
           border: '1px solid rgba(248,113,113,.4)', borderRadius: '6px',
