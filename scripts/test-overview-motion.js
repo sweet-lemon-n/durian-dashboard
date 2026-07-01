@@ -50,6 +50,11 @@ assert.ok(
   'risk and news panels should auto-scroll when their content overflows'
 );
 assert.ok(
+  /mini-gantt-body/.test(html)
+    && /autoScrollList\('\.mini-gantt-body'/.test(html),
+  'temperature gantt rows should be in a scrollable body and auto-scroll when overflowing'
+);
+assert.ok(
   !/conic-gradient/.test(html),
   'donut charts should not fall back to static conic-gradient backgrounds'
 );

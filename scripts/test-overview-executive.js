@@ -151,7 +151,7 @@ assert.ok(out.drilldowns.temperatureDetails.rows.some(row => row.containerNo ===
 assert.ok(out.drilldowns.temperatureByContainer.TCLU1.rows.every(row => row.containerNo === 'TCLU1'));
 assert.equal(out.temperature.details.find(row => row.containerNo === 'TCLU2').status, 'WARN');
 assert.equal(out.temperature.details.find(row => row.containerNo === 'TCLU2').statusText, '温度预警');
-assert.deepEqual(out.temperature.gantt.rows.map(row => row.containerNo).sort(), ['OV1', 'OV2', 'TEMPONLY1']);
+assert.deepEqual(out.temperature.gantt.rows.map(row => row.containerNo), ['OV1', 'TEMPONLY1', 'OV2']);
 assert.equal(out.temperature.gantt.rows.find(row => row.containerNo === 'OV1').cells.at(-1).level, 'ok');
 assert.equal(out.temperature.gantt.rows.find(row => row.containerNo === 'OV2').cells.at(-1).level, 'missing');
 assert.ok(!out.temperature.gantt.rows.some(row => ['SH1', 'DO1', 'TCLU1'].includes(row.containerNo)));
