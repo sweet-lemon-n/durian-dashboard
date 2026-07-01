@@ -1,3 +1,2 @@
-Task 1: complete (commits ..565cd7c, review clean)
-Task 2: complete (commits ..ac1c594, review clean)
-Task 6: complete (commits ..7ef7a2c, review clean)
+# React Migration — Progress Ledger
+## Branch: react-migration (created from main @ a1307f3)
