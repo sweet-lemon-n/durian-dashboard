@@ -21,17 +21,25 @@ export async function api<T = unknown>(
     },
   });
 
-  if (resp.status === 401) {
-    const params = new URLSearchParams(window.location.search);
-    const redirect = params.get('redirect') || window.location.pathname;
-    if (window.location.pathname !== '/login') {
-      window.location.href = `/login?redirect=${encodeURIComponent(redirect)}`;
+  // Parse body first on 401/403 so server error messages are preserved
+  if (resp.status === 401 || resp.status === 403) {
+    let body: { error?: string } | null = null;
+    try {
+      body = await resp.json();
+    } catch {
+      // body parsing failed, use default fallback
     }
-    throw new ApiError('Unauthorized', 401);
-  }
 
-  if (resp.status === 403) {
-    throw new ApiError('Forbidden', 403);
+    if (resp.status === 401) {
+      const params = new URLSearchParams(window.location.search);
+      const redirect = params.get('redirect') || window.location.pathname;
+      if (window.location.pathname !== '/login') {
+        window.location.href = `/login?redirect=${encodeURIComponent(redirect)}`;
+      }
+    }
+
+    const defaultMsg = resp.status === 401 ? 'Unauthorized' : 'Forbidden';
+    throw new ApiError(body?.error || defaultMsg, resp.status);
   }
 
   const json = await resp.json();
