@@ -14,3 +14,4 @@ data/runtime-config.json.tmp
 data/news-fetcher.log
 data/*.xlsx
 data/*.xls
+dist/
