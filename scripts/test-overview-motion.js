@@ -55,6 +55,18 @@ assert.ok(
   'temperature gantt rows should be in a scrollable body and auto-scroll when overflowing'
 );
 assert.ok(
+  /markUserIntervened/.test(html)
+    && /addEventListener\('wheel',markUserIntervened/.test(html)
+    && /addEventListener\('touchstart',markUserIntervened/.test(html)
+    && /addEventListener\('pointerdown',markUserIntervened/.test(html)
+    && /if\(!userIntervened\)tween\.resume\(\)/.test(html),
+  'auto-scrolling lists should pause permanently after user interaction instead of resuming on mouse leave'
+);
+assert.ok(
+  /\.mini-gantt-body\{[^}]*overflow:auto/.test(html),
+  'temperature gantt body should allow manual user scrolling'
+);
+assert.ok(
   !/conic-gradient/.test(html),
   'donut charts should not fall back to static conic-gradient backgrounds'
 );

@@ -4,6 +4,11 @@ const { buildExecutiveOverview } = require('../lib/overview-executive');
 const now = Date.now();
 const day = 86400000;
 const isoDaysAgo = days => new Date(now - days * day).toISOString();
+const dateKey = value => {
+  const d = new Date(value);
+  const p = n => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
+};
 
 const aggregate = {
   global: {
@@ -24,9 +29,9 @@ const aggregate = {
       { container: 'TCLU1', status: 'ALARM', setTemp: 5, returnTemp: 10, note: '▲异常' },
       { container: 'TCLU2', status: 'OK', setTemp: 5, returnTemp: 6.6, note: '注意' },
       { container: 'TCLU3', status: 'OK', setTemp: 5, returnTemp: 5.4, recordedAt: isoDaysAgo(2), note: '正常' },
-      { container: 'OV1', status: 'OK', setTemp: 13, returnTemp: 13.4, releaseDate: isoDaysAgo(9), location: '泰国南部在途', note: '正常' },
+      { container: 'OV1', status: 'OK', setTemp: 13, returnTemp: 13.4, releaseDate: isoDaysAgo(9), recordedAt: isoDaysAgo(0), location: '泰国南部在途', note: '正常' },
       { container: 'OV2', status: 'OK', setTemp: 13, returnTemp: 13.5, releaseDate: isoDaysAgo(10), location: '越南旧趟在途', note: '同柜号不同放柜日期' },
-      { container: 'TEMPONLY1', status: 'OK', setTemp: 13, returnTemp: 13.2, releaseDate: isoDaysAgo(1), location: '泰国海外在途', note: '温度表海外在途' },
+      { container: 'TEMPONLY1', status: 'OK', setTemp: 13, returnTemp: 13.2, releaseDate: isoDaysAgo(1), recordedAt: isoDaysAgo(1), location: '泰国海外在途', note: '温度表海外在途' },
       { container: 'SH1', status: 'OK', setTemp: 13, returnTemp: 13.1, location: '口岸旧温度', note: '已到岸旧记录' },
       { container: 'DO1', status: 'OK', setTemp: 13, returnTemp: 13.2, location: '国内旧温度', note: '国内旧记录' },
     ],
@@ -153,6 +158,8 @@ assert.equal(out.temperature.details.find(row => row.containerNo === 'TCLU2').st
 assert.equal(out.temperature.details.find(row => row.containerNo === 'TCLU2').statusText, '温度预警');
 assert.deepEqual(out.temperature.gantt.rows.map(row => row.containerNo), ['OV1', 'TEMPONLY1', 'OV2']);
 assert.equal(out.temperature.gantt.rows.find(row => row.containerNo === 'OV1').cells.at(-1).level, 'ok');
+assert.equal(out.temperature.gantt.rows.find(row => row.containerNo === 'TEMPONLY1').cells.find(cell => cell.date === dateKey(isoDaysAgo(1))).level, 'ok');
+assert.equal(out.temperature.gantt.rows.find(row => row.containerNo === 'TEMPONLY1').cells.at(-1).level, 'none');
 assert.equal(out.temperature.gantt.rows.find(row => row.containerNo === 'OV2').cells.at(-1).level, 'missing');
 assert.ok(!out.temperature.gantt.rows.some(row => ['SH1', 'DO1', 'TCLU1'].includes(row.containerNo)));
 assert.equal(out.temperature.gantt.days.length, 7);
