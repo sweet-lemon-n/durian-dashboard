@@ -141,7 +141,10 @@ export function RecordTable({ sheetId }: Props) {
               if (confirm(`确定删除选中的 ${selected.size} 条记录吗？此操作不可撤销！`)) {
                 deleteRecord.mutate(
                   { sheetId, recordIds: Array.from(selected) },
-                  { onSuccess: () => setSelected(new Set()) },
+                  {
+                    onSuccess: () => setSelected(new Set()),
+                    onError: (err) => alert('批量删除失败：' + (err instanceof Error ? err.message : '未知错误')),
+                  },
                 );
               }
             }}
@@ -223,7 +226,9 @@ export function RecordTable({ sheetId }: Props) {
                   <button
                     onClick={() => {
                       if (confirm('确定删除此记录？')) {
-                        deleteRecord.mutate({ sheetId, recordIds: [record.record_id] });
+                        deleteRecord.mutate({ sheetId, recordIds: [record.record_id] }, {
+                          onError: (err) => alert('删除记录失败：' + (err instanceof Error ? err.message : '未知错误')),
+                        });
                       }
                     }}
                     style={{

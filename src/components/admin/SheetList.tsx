@@ -60,7 +60,9 @@ export function SheetList({ selectedId, onSelect }: Props) {
           <button
             onClick={() => {
               if (newTitle.trim()) {
-                addSheet.mutate({ title: newTitle.trim() });
+                addSheet.mutate({ title: newTitle.trim() }, {
+                  onError: (err) => alert('新增子表失败：' + (err instanceof Error ? err.message : '未知错误')),
+                });
                 setNewTitle('');
                 setShowAdd(false);
               }
@@ -100,7 +102,9 @@ export function SheetList({ selectedId, onSelect }: Props) {
                 onClick={(e) => {
                   e.stopPropagation();
                   if (confirm(`确定删除子表「${sheet.title}」？此操作不可撤销！`)) {
-                    deleteSheet.mutate({ sheetId: sheet.sheet_id });
+                    deleteSheet.mutate({ sheetId: sheet.sheet_id }, {
+                      onError: (err) => alert('删除子表失败：' + (err instanceof Error ? err.message : '未知错误')),
+                    });
                     if (selectedId === sheet.sheet_id) onSelect('');
                   }
                 }}

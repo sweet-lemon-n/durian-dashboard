@@ -177,7 +177,9 @@ export function FieldManager({ sheetId }: Props) {
             if (type === 'FIELD_TYPE_SINGLE_SELECT') {
               fieldDef.property_single_select = { is_multiple: false, is_quick_add: true, options: [] };
             }
-            addField.mutate({ sheetId, fields: [fieldDef] });
+            addField.mutate({ sheetId, fields: [fieldDef] }, {
+              onError: (err) => alert('新增字段失败：' + (err instanceof Error ? err.message : '未知错误')),
+            });
             setAdding(false);
           }}
           onCancel={() => setAdding(false)}
@@ -221,7 +223,9 @@ export function FieldManager({ sheetId }: Props) {
                     <button
                       onClick={() => {
                         if (confirm(`确定删除字段「${f.field_title}」？`)) {
-                          deleteField.mutate({ sheetId, fieldIds: [f.field_id] });
+                          deleteField.mutate({ sheetId, fieldIds: [f.field_id] }, {
+                            onError: (err) => alert('删除字段失败：' + (err instanceof Error ? err.message : '未知错误')),
+                          });
                         }
                       }}
                       style={{

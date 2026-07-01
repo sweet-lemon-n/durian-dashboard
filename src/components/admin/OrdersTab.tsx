@@ -49,8 +49,10 @@ export function OrdersTab() {
           options={['', 'FRESH', 'FROZEN']} labels={{ '': '全部', FRESH: '鲜果', FROZEN: '冻果' }} />
         <button className="btn primary" onClick={() => {
           const brand = prompt('品牌名称：');
-          if (!brand) return;
-          createOrder.mutate({ brand, country: 'TH', category: 'FRESH', boxes: 0, sort: (orders?.length ?? 0) + 1 });
+          if (!brand || !brand.trim()) return;
+          createOrder.mutate({ brand: brand.trim(), country: filter.country || 'TH', category: filter.category || 'FRESH', boxes: 0, sort: (orders?.length ?? 0) + 1 }, {
+            onError: (err) => alert('新增失败：' + (err instanceof Error ? err.message : '未知错误')),
+          });
         }} style={{ padding: '7px 14px', background: '#3b82f6', color: '#fff', border: 'none', borderRadius: '6px', cursor: 'pointer' }}>
           + 新增订单
         </button>
@@ -93,7 +95,9 @@ export function OrdersTab() {
               <td style={{ padding: '9px 10px' }}>{order.delivered as number ?? 0}</td>
               <td style={{ padding: '9px 10px' }}>
                 <button onClick={() => {
-                  if (confirm(`确定删除「${order.brand}」？`)) deleteOrder.mutate(order.id as string);
+                  if (confirm(`确定删除「${order.brand}」？`)) deleteOrder.mutate(order.id as string, {
+                    onError: (err) => alert('删除失败：' + (err instanceof Error ? err.message : '未知错误')),
+                  });
                 }} style={{
                   padding: '4px 10px', fontSize: '12px', background: 'transparent', color: '#f87171',
                   border: '1px solid rgba(248,113,113,.4)', borderRadius: '6px', cursor: 'pointer',
