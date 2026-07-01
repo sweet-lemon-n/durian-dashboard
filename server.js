@@ -540,17 +540,18 @@ app.get('/vendor/gsap/gsap.min.js', (req, res) => {
 });
 const reactDistIndexPath = path.join(__dirname, 'dist', 'index.html');
 const reactAppRoutes = [
-  '/',
-  '/sentry',
-  '/tv',
-  '/flow',
-  '/overview',
-  '/thailand',
-  '/admin',
-  '/admin-sentry',
-  '/login',
+  '/react',
+  '/react/',
+  '/react/sentry',
+  '/react/tv',
+  '/react/flow',
+  '/react/overview',
+  '/react/thailand',
+  '/react/admin',
+  '/react/admin-sentry',
+  '/react/login',
 ];
-app.use('/assets', express.static(path.join(__dirname, 'dist', 'assets')));
+app.use('/react/assets', express.static(path.join(__dirname, 'dist', 'assets')));
 app.use(express.static(path.join(__dirname, 'public')));
 
 // /admin 路由 → admin.html
@@ -563,7 +564,7 @@ app.get('/login', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'login.html'));
 });
 
-// React 旁路入口：不替换旧的 *.html 页面；旧 /admin 和 /login 路由仍优先命中上面的 public 页面。
+// React 旁路入口：统一放在 /react 下，不替换或混淆旧的 *.html 页面。
 app.get(reactAppRoutes, (req, res) => {
   res.sendFile(reactDistIndexPath);
 });

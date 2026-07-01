@@ -183,7 +183,7 @@ server.js 从约 2100 行降到约 1990 行。后续模块按需继续提取到 
 
 ### React 重写旁路接入
 
-React 重写版构建产物放在 `dist/`，当前只作为旁路入口接入，不替换 `public/` 下的旧生产页面。服务端托管 `dist/assets` 到 `/assets`，并让 `/flow`、`/overview`、`/thailand`、`/sentry`、`/tv` 等无扩展路径返回 `dist/index.html`。旧的 `/index.html`、`/index-flow.html`、`/app-overview.html`、`/admin.html` 等 `.html` 页面继续由 `public/` 提供；`/admin` 和 `/login` 仍优先返回旧页面，等 React 旁路跑通后再考虑替换入口。
+React 重写版构建产物放在 `dist/`，当前只作为旁路入口接入，不替换 `public/` 下的旧生产页面。服务端统一把 React 版放在 `/react` 命名空间下：`/react/flow`、`/react/overview`、`/react/thailand`、`/react/sentry`、`/react/tv`、`/react/admin` 等路径返回 `dist/index.html`，静态资源从 `/react/assets` 读取。旧的 `/index.html`、`/index-flow.html`、`/app-overview.html`、`/admin.html`、`/login.html` 等 `.html` 页面继续由 `public/` 提供；不要再把 React 页面挂到根路径 `/flow` 或 `/overview`，避免两版入口混淆。
 
 ### 认证和权限
 
